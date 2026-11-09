@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>krtc-sfu</title>
+<style>
+  :root { --bg: #f6f7f9; --fg: #1d2129; --muted: #6b7280; --card: #fff; --line: #e3e6eb; --accent: #2f6fde; --speak: #1fa463; --tile: #dfe3ea; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15171c; --fg: #e8eaee; --muted: #9aa1ad; --card: #1e2128; --line: #2c3039; --accent: #6b9bff; --speak: #34c27a; --tile: #262a33; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  input[type=text], select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; margin-top: 4px; }
+  button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  #status { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .tile { position: relative; aspect-ratio: 16 / 9; background: var(--tile); border-radius: 8px; overflow: hidden; outline: 3px solid transparent; transition: outline-color .15s; }
+  .tile.speaking { outline-color: var(--speak); }
+  .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .label { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; justify-content: space-between; gap: 8px;
+    font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>krtc-sfu — комната</h1>
+  <form id="join" class="card">
+    <label>Комната <input type="text" id="room" value="test" required></label>
+    <label>Имя <input type="text" id="name" required></label>
+    <label>Видео
+      <select id="video">
+        <option value="test" selected>Тестовая анимация</option>
+        <option value="camera">Камера</option>
+        <option value="none">Без видео</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="fake" checked> Тестовый звук вместо микрофона</label>
+    <label><input type="checkbox" id="play" checked> Воспроизводить звук собеседников</label>
+    <button type="submit">Войти</button>
+  </form>
+  <section id="call" class="card" hidden>
+    <p id="status">Подключение…</p>
+    <div id="grid"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+$('name').value = 'user-' + Math.floor(Math.random() * 1000);
+// ?mute=1 — don't play remote audio (several tabs on one machine); ?video=test|camera|none
+const params = new URLSearchParams(location.search);
+if (params.get('mute') === '1') $('play').checked = false;
+if (params.get('video')) $('video').value = params.get('video');
+
+const state = { ws: null, pc: null, myId: null, audio: null, video: null, peers: new Map(), midToPeer: new Map() };
+window.krtc = state; // for automated checks
+
+function fakeAudio() {
+  // A quiet beeping tone (half a second on, half off) so the SFU's speaking detection toggles.
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator();
+  osc.frequency.value = 330 + Math.floor(Math.random() * 400);
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  const dest = ctx.createMediaStreamDestination();
+  osc.connect(gain).connect(dest);
+  osc.start();
+  setInterval(() => { gain.gain.value = gain.gain.value > 0 ? 0 : 0.15; }, 500);
+  return dest.stream.getAudioTracks()[0];
+}
+
+function fakeVideo(label) {
+  const canvas = Object.assign(document.createElement('canvas'), { width: 640, height: 360 });
+  const g = canvas.getContext('2d');
+  const hue = Math.floor(Math.random() * 360);
+  let t = 0;
+  setInterval(() => {
+    t++;
+    g.fillStyle = `hsl(${hue} 45% 30%)`;
+    g.fillRect(0, 0, 640, 360);
+    g.fillStyle = `hsl(${(hue + 180) % 360} 70% 60%)`;
+    g.beginPath();
+    g.arc(320 + 220 * Math.cos(t / 15), 180 + 110 * Math.sin(t / 10), 40, 0, 2 * Math.PI);
+    g.fill();
+    g.fillStyle = '#fff';
+    g.font = '28px system-ui';
+    g.fillText(`${label}  ${new Date().toLocaleTimeString()}`, 24, 48);
+  }, 1000 / 15);
+  return canvas.captureStream(15).getVideoTracks()[0];
+}
+
+function tile(id, name) {
+  let el = $('tile-' + id);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'tile';
+    el.id = 'tile-' + id;
+    el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><span class="who"></span><span class="meta"></span></div>';
+    $('grid').append(el);
+  }
+  el.querySelector('.who').textContent = name;
+  return el;
+}
+
+function setSpeaking(id, speaking) {
+  const p = state.peers.get(id);
+  if (p) p.speaking = speaking;
+  $('tile-' + id)?.classList.toggle('speaking', speaking);
+}
+
+async function onOffer(msg) {
+  const pc = state.pc;
+  state.midToPeer = new Map(Object.entries(msg.mids)); // before SRD: ontrack fires during it
+  await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+  for (const [mid, track] of [['0', state.audio], ['1', state.video]]) {
+    const t = pc.getTransceivers().find((x) => x.mid === mid);
+    if (t && track && t.sender.track !== track) {
+      t.direction = 'sendonly';
+      await t.sender.replaceTrack(track);
+    }
+  }
+  await pc.setLocalDescription(await pc.createAnswer());
+  state.ws.send(JSON.stringify({ type: 'answer', version: msg.version, sdp: pc.localDescription.sdp }));
+}
+
+async function summary() {
+  const out = { sent: { audioBytes: 0, videoFrames: 0, width: 0 }, peers: {} };
+  const stats = await state.pc.getStats();
+  stats.forEach((s) => {
+    if (s.type === 'outbound-rtp' && s.kind === 'audio') out.sent.audioBytes += s.bytesSent;
+    if (s.type === 'outbound-rtp' && s.kind === 'video') { out.sent.videoFrames += s.framesEncoded ?? 0; out.sent.width = s.frameWidth ?? 0; }
+    if (s.type !== 'inbound-rtp') return;
+    const peer = state.midToPeer.get(s.mid);
+    if (!peer) return;
+    const p = (out.peers[peer] ||= {});
+    if (s.kind === 'audio') Object.assign(p, { audioPackets: s.packetsReceived, audioLost: s.packetsLost, level: s.audioLevel ?? 0 });
+    if (s.kind === 'video') Object.assign(p, {
+      videoPackets: s.packetsReceived, videoLost: s.packetsLost, framesDecoded: s.framesDecoded ?? 0,
+      width: s.frameWidth ?? 0, height: s.frameHeight ?? 0, nacks: s.nackCount ?? 0, plis: s.pliCount ?? 0,
+      keyFrames: s.keyFramesDecoded ?? 0, codec: stats.get(s.codecId)?.mimeType,
+    });
+  });
+  return out;
+}
+state.summary = summary;
+
+$('join').onsubmit = async (e) => {
+  e.preventDefault();
+  $('join').hidden = true;
+  $('call').hidden = false;
+  const name = $('name').value;
+  state.audio = $('fake').checked ? fakeAudio() : (await navigator.mediaDevices.getUserMedia({ audio: true })).getAudioTracks()[0];
+  const mode = $('video').value;
+  if (mode === 'test') state.video = fakeVideo(name);
+  if (mode === 'camera') state.video = (await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })).getVideoTracks()[0];
+
+  const pc = (state.pc = new RTCPeerConnection());
+  pc.ontrack = (ev) => {
+    const peer = state.midToPeer.get(ev.transceiver.mid);
+    if (ev.track.kind === 'video') {
+      const v = tile(peer, state.peers.get(peer)?.name ?? peer).querySelector('video');
+      v.srcObject = new MediaStream([ev.track]);
+    } else {
+      const audio = new Audio();
+      audio.autoplay = true;
+      audio.muted = !$('play').checked;
+      audio.srcObject = new MediaStream([ev.track]);
+    }
+  };
+  pc.onconnectionstatechange = () => { $('status').textContent = 'Соединение: ' + pc.connectionState; };
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const q = new URLSearchParams({ room: $('room').value, name });
+  const ws = (state.ws = new WebSocket(`${proto}://${location.host}/ws?${q}`));
+  ws.onclose = () => { $('status').textContent = 'Отключено'; };
+  ws.onmessage = async (m) => {
+    const msg = JSON.parse(m.data);
+    switch (msg.type) {
+      case 'welcome': {
+        state.myId = msg.id;
+        const me = tile(msg.id, name + ' (вы)');
+        if (state.video) me.querySelector('video').srcObject = new MediaStream([state.video]);
+        msg.peers.forEach((p) => { state.peers.set(p.id, p); tile(p.id, p.name); });
+        break;
+      }
+      case 'peer-joined': state.peers.set(msg.id, msg); tile(msg.id, msg.name); break;
+      case 'peer-left': state.peers.delete(msg.id); $('tile-' + msg.id)?.remove(); break;
+      case 'speaking': setSpeaking(msg.id, msg.speaking); break;
+      case 'offer': await onOffer(msg); break;
+    }
+  };
+
+  setInterval(async () => {
+    if (!state.pc) return;
+    const s = await summary();
+    for (const [id, v] of Object.entries(s.peers)) {
+      const meta = document.querySelector('#tile-' + id + ' .meta');
+      if (meta) meta.textContent = v.width ? `${v.width}×${v.height} · ${v.codec?.split('/')[1] ?? ''} · потеряно ${v.videoLost}` : `аудио · потеряно ${v.audioLost ?? 0}`;
+    }
+    const mine = document.querySelector('#tile-' + state.myId + ' .meta');
+    if (mine) mine.textContent = s.sent.width ? `${s.sent.width}p отправляется` : '';
+  }, 1000);
+};
+</script>
+</body>
+</html>

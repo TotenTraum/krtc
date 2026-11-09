@@ -1,0 +1,248 @@
+package = krtc.sfu.openssl
+headers = openssl/evp.h openssl/ssl.h openssl/err.h openssl/rand.h openssl/x509.h openssl/core_names.h
+headerFilter = openssl/**
+compilerOpts = -DOPENSSL_SUPPRESS_DEPRECATED
+
+---
+
+/*
+ * Thin C helpers over OpenSSL 3 for the krtc SFU on Kotlin/Native.
+ * They wrap macros cinterop cannot see and keep EVP call sequences in one place.
+ */
+
+#include <stdlib.h>
+#include <string.h>
+#include <openssl/evp.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#include <openssl/x509.h>
+#include <openssl/core_names.h>
+
+/* ---------------- AES / HMAC ---------------- */
+
+static inline EVP_CIPHER_CTX *krtc_aes_ctr_new(const unsigned char *key, int keyLen) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    const EVP_CIPHER *c = keyLen == 32 ? EVP_aes_256_ctr() : EVP_aes_128_ctr();
+    if (!ctx || EVP_EncryptInit_ex(ctx, c, NULL, key, NULL) != 1) { EVP_CIPHER_CTX_free(ctx); return NULL; }
+    return ctx;
+}
+
+static inline int krtc_aes_ctr(EVP_CIPHER_CTX *ctx, const unsigned char *iv, const unsigned char *in, int len, unsigned char *out) {
+    int outl = 0, fin = 0;
+    if (EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, iv) != 1) return -1;
+    if (EVP_EncryptUpdate(ctx, out, &outl, in, len) != 1) return -1;
+    if (EVP_EncryptFinal_ex(ctx, out + outl, &fin) != 1) return -1;
+    return outl + fin;
+}
+
+static inline EVP_CIPHER_CTX *krtc_aes_gcm_new(const unsigned char *key, int keyLen, int encrypt) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    const EVP_CIPHER *c = keyLen == 32 ? EVP_aes_256_gcm() : EVP_aes_128_gcm();
+    if (!ctx || EVP_CipherInit_ex(ctx, c, NULL, key, NULL, encrypt) != 1) { EVP_CIPHER_CTX_free(ctx); return NULL; }
+    return ctx;
+}
+
+/* Writes ciphertext || 16-byte tag; returns bytes written or -1. */
+static inline int krtc_aes_gcm_encrypt(EVP_CIPHER_CTX *ctx, const unsigned char *iv, const unsigned char *aad, int aadLen,
+                                       const unsigned char *in, int len, unsigned char *out) {
+    int outl = 0, fin = 0;
+    if (EVP_EncryptInit_ex(ctx, NULL, NULL, NULL, iv) != 1) return -1;
+    if (aadLen > 0 && EVP_EncryptUpdate(ctx, NULL, &outl, aad, aadLen) != 1) return -1;
+    if (EVP_EncryptUpdate(ctx, out, &outl, in, len) != 1) return -1;
+    if (EVP_EncryptFinal_ex(ctx, out + outl, &fin) != 1) return -1;
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, out + outl + fin) != 1) return -1;
+    return outl + fin + 16;
+}
+
+/* `len` includes the tag. Returns plaintext length or -1 when authentication fails. */
+static inline int krtc_aes_gcm_decrypt(EVP_CIPHER_CTX *ctx, const unsigned char *iv, const unsigned char *aad, int aadLen,
+                                       const unsigned char *in, int len, unsigned char *out) {
+    int outl = 0, fin = 0;
+    unsigned char tag[16];
+    if (len < 16) return -1;
+    memcpy(tag, in + len - 16, 16);
+    if (EVP_DecryptInit_ex(ctx, NULL, NULL, NULL, iv) != 1) return -1;
+    if (aadLen > 0 && EVP_DecryptUpdate(ctx, NULL, &outl, aad, aadLen) != 1) return -1;
+    if (EVP_DecryptUpdate(ctx, out, &outl, in, len - 16) != 1) return -1;
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag) != 1) return -1;
+    if (EVP_DecryptFinal_ex(ctx, out + outl, &fin) <= 0) return -1;
+    return outl + fin;
+}
+
+static inline EVP_MAC_CTX *krtc_hmac_sha1_new(const unsigned char *key, int keyLen) {
+    EVP_MAC *mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    if (!mac) return NULL;
+    EVP_MAC_CTX *ctx = EVP_MAC_CTX_new(mac);
+    EVP_MAC_free(mac);
+    OSSL_PARAM params[2];
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, "SHA1", 0);
+    params[1] = OSSL_PARAM_construct_end();
+    if (!ctx || EVP_MAC_init(ctx, key, keyLen, params) != 1) { EVP_MAC_CTX_free(ctx); return NULL; }
+    return ctx;
+}
+
+static inline int krtc_hmac_update(EVP_MAC_CTX *ctx, const unsigned char *data, int len) {
+    return EVP_MAC_update(ctx, data, len);
+}
+
+/* Writes 20 bytes and re-initializes with the same key for the next message. */
+static inline int krtc_hmac_final(EVP_MAC_CTX *ctx, unsigned char *out) {
+    size_t outl = 0;
+    if (EVP_MAC_final(ctx, out, &outl, 20) != 1) return -1;
+    return EVP_MAC_init(ctx, NULL, 0, NULL) == 1 ? (int) outl : -1;
+}
+
+static inline int krtc_sha256(const unsigned char *data, int len, unsigned char *out) {
+    unsigned int outl = 0;
+    return EVP_Digest(data, len, out, &outl, EVP_sha256(), NULL) == 1 ? (int) outl : -1;
+}
+
+/* ---------------- Identity: ECDSA P-256 key + self-signed certificate ---------------- */
+
+static inline EVP_PKEY *krtc_ec_p256_key(void) {
+    return EVP_PKEY_Q_keygen(NULL, NULL, "EC", "P-256");
+}
+
+static inline X509 *krtc_self_signed(EVP_PKEY *key, const char *cn) {
+    X509 *x = X509_new();
+    if (!x) return NULL;
+    unsigned char serial[8];
+    RAND_bytes(serial, sizeof serial);
+    serial[0] &= 0x7f;
+    BIGNUM *bn = BN_bin2bn(serial, sizeof serial, NULL);
+    BN_to_ASN1_INTEGER(bn, X509_get_serialNumber(x));
+    BN_free(bn);
+    X509_set_version(x, 2);
+    X509_gmtime_adj(X509_getm_notBefore(x), -86400L);
+    X509_gmtime_adj(X509_getm_notAfter(x), 30L * 86400L);
+    X509_NAME *name = X509_get_subject_name(x);
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *) cn, -1, -1, 0);
+    X509_set_issuer_name(x, name);
+    X509_set_pubkey(x, key);
+    if (X509_sign(x, key, EVP_sha256()) <= 0) { X509_free(x); return NULL; }
+    return x;
+}
+
+static inline int krtc_cert_sha256(X509 *x, unsigned char *out) {
+    unsigned int len = 0;
+    return X509_digest(x, EVP_sha256(), out, &len) == 1 ? (int) len : -1;
+}
+
+/* ---------------- DTLS-SRTP server ---------------- */
+
+static int krtc_accept_any_cert(int ok, X509_STORE_CTX *ctx) {
+    (void) ok; (void) ctx;
+    return 1; /* self-signed WebRTC certificates; the SDP fingerprint is checked after the handshake */
+}
+
+static inline SSL_CTX *krtc_dtls_ctx(X509 *cert, EVP_PKEY *key) {
+    SSL_CTX *ctx = SSL_CTX_new(DTLS_server_method());
+    if (!ctx) return NULL;
+    if (SSL_CTX_use_certificate(ctx, cert) != 1 || SSL_CTX_use_PrivateKey(ctx, key) != 1) goto fail;
+    SSL_CTX_set_min_proto_version(ctx, DTLS1_2_VERSION);
+    if (SSL_CTX_set_cipher_list(ctx, "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA") != 1) goto fail;
+    SSL_CTX_set1_groups_list(ctx, "P-256:X25519");
+    /* Note: returns 0 on success. */
+    if (SSL_CTX_set_tlsext_use_srtp(ctx, "SRTP_AEAD_AES_128_GCM:SRTP_AES128_CM_SHA1_80") != 0) goto fail;
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, krtc_accept_any_cert);
+    SSL_CTX_set_read_ahead(ctx, 1);
+    return ctx;
+fail:
+    SSL_CTX_free(ctx);
+    return NULL;
+}
+
+/* Outgoing records go through a BIO whose write callback sends each record as its own datagram. */
+typedef void (*krtc_send_fn)(void *user, const unsigned char *data, int len);
+typedef struct { krtc_send_fn fn; void *user; } krtc_out;
+
+static int krtc_out_write(BIO *b, const char *data, int len) {
+    krtc_out *o = (krtc_out *) BIO_get_data(b);
+    if (o && o->fn) o->fn(o->user, (const unsigned char *) data, len);
+    return len;
+}
+
+static long krtc_out_ctrl(BIO *b, int cmd, long num, void *ptr) {
+    (void) b; (void) num; (void) ptr;
+    switch (cmd) {
+    case BIO_CTRL_FLUSH: return 1;
+    case BIO_CTRL_DGRAM_QUERY_MTU: return 1200;
+    case BIO_CTRL_DGRAM_GET_FALLBACK_MTU: return 1200;
+    case BIO_CTRL_DGRAM_GET_MTU_OVERHEAD: return 0;
+    default: return 0;
+    }
+}
+
+static int krtc_out_destroy(BIO *b) {
+    free(BIO_get_data(b));
+    BIO_set_data(b, NULL);
+    return 1;
+}
+
+static BIO_METHOD *krtc_out_method(void) {
+    static BIO_METHOD *m = NULL;
+    if (!m) {
+        m = BIO_meth_new(BIO_get_new_index() | BIO_TYPE_SOURCE_SINK, "krtc-out");
+        BIO_meth_set_write(m, krtc_out_write);
+        BIO_meth_set_ctrl(m, krtc_out_ctrl);
+        BIO_meth_set_destroy(m, krtc_out_destroy);
+    }
+    return m;
+}
+
+/* Creates a server-side DTLS session; incoming records are written to *rbio. */
+static inline SSL *krtc_dtls_new(SSL_CTX *ctx, krtc_send_fn fn, void *user, BIO **rbio) {
+    SSL *ssl = SSL_new(ctx);
+    if (!ssl) return NULL;
+    BIO *in = BIO_new(BIO_s_mem());
+    BIO_set_mem_eof_return(in, -1);
+    BIO *out = BIO_new(krtc_out_method());
+    krtc_out *o = (krtc_out *) malloc(sizeof(krtc_out));
+    o->fn = fn;
+    o->user = user;
+    BIO_set_data(out, o);
+    BIO_set_init(out, 1);
+    SSL_set_bio(ssl, in, out);
+    SSL_set_options(ssl, SSL_OP_NO_QUERY_MTU);
+    DTLS_set_link_mtu(ssl, 1200);
+    SSL_set_accept_state(ssl);
+    *rbio = in;
+    return ssl;
+}
+
+/* Milliseconds until the retransmission timer fires, or -1 if none is running. */
+static inline long krtc_dtls_timeout_ms(SSL *ssl) {
+    struct timeval tv;
+    if (DTLSv1_get_timeout(ssl, &tv) != 1) return -1;
+    return tv.tv_sec * 1000L + tv.tv_usec / 1000L;
+}
+
+static inline int krtc_dtls_handle_timeout(SSL *ssl) {
+    return (int) DTLSv1_handle_timeout(ssl);
+}
+
+static inline int krtc_peer_sha256(SSL *ssl, unsigned char *out) {
+    X509 *peer = SSL_get1_peer_certificate(ssl);
+    if (!peer) return -1;
+    int n = krtc_cert_sha256(peer, out);
+    X509_free(peer);
+    return n;
+}
+
+static inline int krtc_srtp_profile_id(SSL *ssl) {
+    SRTP_PROTECTION_PROFILE *p = SSL_get_selected_srtp_profile(ssl);
+    return p ? (int) p->id : -1;
+}
+
+static inline int krtc_export_srtp(SSL *ssl, unsigned char *out, int len) {
+    static const char label[] = "EXTRACTOR-dtls_srtp";
+    return SSL_export_keying_material(ssl, out, len, label, sizeof label - 1, NULL, 0, 0);
+}
+
+static inline void krtc_last_error(char *buf, int len) {
+    unsigned long e = ERR_get_error();
+    if (e == 0) { buf[0] = 0; return; }
+    ERR_error_string_n(e, buf, len);
+    ERR_clear_error();
+}

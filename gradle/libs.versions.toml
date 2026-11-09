@@ -7,6 +7,7 @@ bouncycastle = "1.86"
 bctls = "1.86.2"
 serialization = "1.12.0"
 slf4j = "2.0.17"
+atomicfu = "0.33.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -18,6 +19,8 @@ ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.re
 bouncycastle-tls = { module = "org.bouncycastle:bctls-jdk18on", version.ref = "bctls" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
+ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
 [plugins]

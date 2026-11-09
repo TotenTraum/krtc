@@ -212,3 +212,50 @@ class SdpTest {
         assertNull(sd.media[1].attribute("ice-ufrag"))
     }
 }
+
+class RtcpTest {
+    @Test
+    fun compoundWithFeedback() {
+        val compound = krtc.protocol.rtp.Rtcp.concat(
+            krtc.protocol.rtp.Rtcp.receiverReport(1),
+            krtc.protocol.rtp.Rtcp.pli(1, 0xAABBCCDDL),
+            krtc.protocol.rtp.Rtcp.remb(1, 2_500_000, listOf(42L, 43L)),
+            krtc.protocol.rtp.Rtcp.fir(1, 77, 3),
+        )
+        val seen = mutableListOf<String>()
+        krtc.protocol.rtp.Rtcp.forEach(compound, 0, compound.size) { type, fmt, at, size ->
+            when {
+                type == krtc.protocol.rtp.Rtcp.RR -> seen += "RR"
+                type == krtc.protocol.rtp.Rtcp.PSFB && fmt == krtc.protocol.rtp.Rtcp.FMT_PLI ->
+                    seen += "PLI:" + krtc.protocol.rtp.Rtcp.mediaSsrc(compound, at).toString(16)
+                type == krtc.protocol.rtp.Rtcp.PSFB && fmt == krtc.protocol.rtp.Rtcp.FMT_AFB ->
+                    seen += "REMB:" + krtc.protocol.rtp.Rtcp.rembBitrate(compound, at, size)
+                type == krtc.protocol.rtp.Rtcp.PSFB && fmt == krtc.protocol.rtp.Rtcp.FMT_FIR ->
+                    seen += "FIR:" + krtc.protocol.rtp.Rtcp.firTargets(compound, at, size)
+            }
+        }
+        // REMB keeps an 18-bit mantissa: 2_500_000 = 0x2625A0 = 0x2625A shl 4, so it round-trips exactly
+        assertEquals(listOf("RR", "PLI:aabbccdd", "REMB:2500000", "FIR:[77]"), seen)
+    }
+
+    @Test
+    fun nackBitmask() {
+        // NACK for media 5: PID 100 with BLP bits 0 and 2 → 100, 101, 103; second FCI PID 65535 → wraps
+        val nack = hexToBytes("81 cd 00 04 00 00 00 01 00 00 00 05 00 64 00 05 ff ff 00 01")
+        val seqs = mutableListOf<Int>()
+        krtc.protocol.rtp.Rtcp.forEach(nack, 0, nack.size) { type, fmt, at, size ->
+            if (type == krtc.protocol.rtp.Rtcp.RTPFB && fmt == krtc.protocol.rtp.Rtcp.FMT_NACK) {
+                assertEquals(5L, krtc.protocol.rtp.Rtcp.mediaSsrc(nack, at))
+                seqs += krtc.protocol.rtp.Rtcp.nackSequences(nack, at, size)
+            }
+        }
+        assertEquals(listOf(100, 101, 103, 65535, 0), seqs)
+    }
+
+    @Test
+    fun senderReportRewrite() {
+        val sr = hexToBytes("80 c8 00 06 00 00 00 09 11 22 33 44 55 66 77 88 00 00 10 00 00 00 00 05 00 00 01 00")
+        val out = krtc.protocol.rtp.Rtcp.rewriteSenderReport(sr, 0, 0x1234, 0x2000)
+        assertEquals("80c8000600001234112233445566778800002000000000050000" + "0100", out.toHex())
+    }
+}

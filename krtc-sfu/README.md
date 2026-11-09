@@ -1,38 +1,59 @@
 # krtc-sfu
 
-Сервер голосовых комнат (SFU) на Kotlin/JVM: браузеры подключаются по WebRTC, сервер пересылает Opus без декодирования.
-Архитектура и решения — [ADR-0010](../docs/adr/0010-sfu-before-1.0.md).
+Сервер комнат (SFU) на Kotlin Multiplatform. Браузеры подключаются по WebRTC, сервер пересылает аудио (Opus) и видео (VP8/H.264) без декодирования.
+Решения: [ADR-0010](../docs/adr/0010-sfu-before-1.0.md) (архитектура SFU), [ADR-0011](../docs/adr/0011-sfu-kotlin-multiplatform.md) (KMP: общее ядро, JVM и Kotlin/Native).
 
 ## Запуск
 
+Kotlin/Native (macOS, нужен `brew install openssl@3`):
+
 ```bash
-./gradlew :krtc-sfu:run --args="--http-port 8080 --udp-port 50000 --announce 127.0.0.1"
+./gradlew :krtc-sfu:linkReleaseExecutableMacosArm64
 ```
 
-Откройте `http://localhost:8080/` в двух вкладках и войдите в одну комнату. Галочка «Тестовый сигнал» шлёт тон вместо микрофона.
+```bash
+krtc-sfu/build/bin/macosArm64/releaseExecutable/krtc-sfu.kexe --http-port 8080 --udp-port 50000 --announce 127.0.0.1
+```
+
+JVM:
+
+```bash
+./gradlew :krtc-sfu:runJvm -PsfuArgs="--http-port 8080 --udp-port 50000 --announce 127.0.0.1"
+```
+
+Откройте `http://localhost:8080/` в двух вкладках и войдите в одну комнату. Видео можно выбрать: тестовая анимация, камера или без видео. Чтобы вкладки не играли звук друг друга, добавьте к адресу `?mute=1`.
 
 | Параметр | Переменная | По умолчанию | Что это |
 |---|---|---|---|
-| `--http-port` | `KRTC_HTTP_PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics` |
+| `--http-port` | `KRTC_HTTP_PORT` или `PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics` |
 | `--udp-port` | `KRTC_UDP_PORT` | 50000 | Единственный UDP-порт для всех медиа |
 | `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адрес в ICE-кандидате: публичный IP сервера |
 | `--shards` | `KRTC_SHARDS` | число ядер | Рабочие потоки и UDP-сокеты |
+| `--simulate-loss` | `KRTC_SIMULATE_LOSS` | 0 | Только для тестов: % отбрасываемых исходящих видеопакетов |
 
 Для доступа не с localhost браузеру нужен HTTPS (getUserMedia). Сервер ставится за обратный прокси с TLS.
 
 ## Как устроено
 
 ```
-браузер ──WebSocket /ws──► SignalingServer ──► Sfu: offer/answer, комнаты
+браузер ──WebSocket /ws──► signaling (Ktor CIO) ──► Sfu: offer/answer, комнаты      [commonMain]
    │
-   └──UDP :50000 (STUN │ DTLS │ SRTP) ──► UdpServer (SO_REUSEPORT, сокет на шард)
-                                              │ RFC 7983 по первому байту
-                     STUN ─► ICE-lite (Sfu.handleStun)
-                     DTLS ─► DtlsEndpoint (BouncyCastle, виртуальный поток) ─► ключи SRTP
-                     SRTP ─► Shard комнаты ─► Room.forward:
-                               расшифровать 1 раз → для каждого слушателя:
-                               переписать SSRC/seq/ts → зашифровать → sendto
+   └──UDP :50000 (STUN │ DTLS │ SRTP/SRTCP) ──► UdpServer: сокет на шард, SO_REUSEPORT  [jvm: NIO │ native: POSIX]
+                    STUN ─► ICE-lite
+                    DTLS ─► DtlsEndpoint ─► ключи SRTP/SRTCP                         [jvm: BouncyCastle │ native: OpenSSL]
+                    SRTP ─► шард комнаты ─► Room.forward:
+                              расшифровать 1 раз → для каждого получателя:
+                              переписать SSRC/seq/ts → зашифровать → sendto
+                    SRTCP ─► NACK → повтор из кэша (RTX)
+                             PLI/FIR → PLI отправителю
+                             SR → переслать получателям
+                    сервер → отправителю: REMB раз в секунду, PLI при новом зрителе
 ```
+
+Раскладка SDP у каждого участника (сервер всегда отправляет offer):
+- `0` — его микрофон;
+- `1` — его камера;
+- `2+2i` и `3+2i` — аудио и видео i-го собеседника, или `inactive`: слот свободен или собеседник без видео. Свободные слоты переиспользуются.
 
 ## Протокол сигнализации
 
@@ -48,33 +69,35 @@
 
 Клиент на `offer`:
 1. Вызывает `setRemoteDescription`.
-2. У трансивера с `mid` `0` ставит `direction = 'sendonly'` и `replaceTrack(микрофон)`.
+2. У трансиверов `0` (микрофон) и `1` (камера) ставит `direction = 'sendonly'` и `replaceTrack(...)`.
 3. Отвечает `answer`.
 
-Пример — [index.html](src/main/resources/web/index.html).
+Пример — [index.html](src/commonMain/web/index.html).
 
 ## Метрики
 
 `GET /metrics`:
 - `participants`, `rooms`;
-- `rtpIn` / `rtpOut`, `bytesIn` / `bytesOut`;
-- `srtpFailures`, `stunRejected`, `dtlsFailed`, `unknownSource`;
-- `shardQueueDepth` — очередь каждого шарда, растёт при перегрузке.
+- `rtpIn`/`rtpOut`, `bytesIn`/`bytesOut`, `rtcpIn`/`rtcpOut`;
+- `srtpFailures`, `droppedOverload`;
+- `keyframeRequests`, `nacksAnswered`;
+- `stunRequests`, `stunRejected`, `dtlsConnected`, `dtlsFailed`, `unknownSource`;
+- `shardQueueDepth`.
 
 ## Тесты и бенчмарк
 
 ```bash
-./gradlew :krtc-protocol:jvmTest :krtc-sfu:test
+./gradlew :krtc-protocol:jvmTest :krtc-sfu:jvmTest :krtc-sfu:macosArm64Test
 ```
 
 ```bash
 ./gradlew :krtc-sfu:benchmark
 ```
 
-Бенчмарк гоняет горячий путь `Room.forward` (1 говорящий → 50 слушателей) без браузеров. Он показывает отдельно стоимость криптографии и криптографии вместе с `sendto`, плюс масштабирование по шардам. Результаты и оговорки — в ADR-0010.
-
 ## Ограничения текущей версии
 
-- Только аудио (Opus). Видео и simulcast — следующий этап.
-- RTCP не пересылается: SR для синхронизации, NACK, PLI и TWCC пока не поддерживаются.
-- Нет TURN/TCP и авторизации в сигнализации.
+- Нет simulcast/SVC: каждый получает поток отправителя как есть. Это следующий шаг.
+- Нет оценки полосы по получателям (TWCC) — отправителю задаётся фиксированный REMB 1,5 Мбит/с.
+- Сервер не запрашивает повторы у отправителя: потери на участке от отправителя до сервера не восстанавливаются, только от сервера до получателя.
+- Только IPv4, нет TURN/TCP и авторизации в сигнализации.
+- Linux-бинари собираются на Linux-хосте с OpenSSL 3.
