@@ -23,7 +23,7 @@ krtc-compose      видеорендереры для Compose Multiplatform
 krtc-test-utils   loopback-пары, сетевые эмуляторы, фейковые устройства, хелперы WPT
 krtc-conformance  порт тестов WPT (spec/wpt-map.json как план)
 samples/          Android, iOS, desktop, web
-krtc-sfu          (после 1.0) серверное ядро на krtc-protocol, см. ADR-0009
+krtc-sfu          серверное ядро на krtc-protocol (голосовой SFU уже есть, см. ADR-0010)
 ```
 
 **Зависимости** (стрелка — «зависит от»):

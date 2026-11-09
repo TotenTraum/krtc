@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 }
 
 include(":krtc-idl")
+include(":krtc-protocol")
+include(":krtc-sfu")
