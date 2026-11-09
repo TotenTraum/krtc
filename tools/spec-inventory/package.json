@@ -1,0 +1,19 @@
+{
+  "name": "krtc-spec-inventory",
+  "private": true,
+  "type": "module",
+  "description": "Builds the WebRTC spec inventory, coverage matrix and Kotlin API skeleton from @webref/idl",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "generate:kotlin": "node generate-kotlin.mjs",
+    "wpt:fetch": "node fetch-wpt.mjs",
+    "wpt:map": "node map-wpt.mjs",
+    "all": "node generate.mjs && node map-wpt.mjs && node generate.mjs && node generate-kotlin.mjs"
+  },
+  "dependencies": {
+    "@webref/events": "1.27.1",
+    "@webref/idl": "3.86.0",
+    "webidl2": "24.5.0",
+    "yaml": "2.9.1"
+  }
+}

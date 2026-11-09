@@ -1,0 +1,8525 @@
+# krtc spec coverage matrix — hand-edited, merged by tools/spec-inventory.
+#
+# items.<id>.status: default + per-platform overrides.
+#   platforms: android, ios, macos, jvm, js, wasmJs, linux, mingw
+#   statuses:  planned | partial | full | na
+# items.<id>.tests: ids/paths of tests proving the item (krtc-conformance, ported WPT, interop).
+# items.<id>.notes: free text (e.g. why something is "na" on a platform).
+# kind/tier are rewritten from the IDL and scope.mjs on every run; everything else is yours.
+# removed: entries whose IDL item disappeared upstream — review and delete by hand.
+webref: 3.86.0
+items:
+  webrtc:RTCConfiguration:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.iceServers:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.iceTransportPolicy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.bundlePolicy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.rtcpMuxPolicy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.certificates:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCConfiguration.iceCandidatePoolSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServer:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServer.urls:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServer.username:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServer.credential:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportPolicy:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportPolicy."relay":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportPolicy."all":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCBundlePolicy:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCBundlePolicy."balanced":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCBundlePolicy."max-compat":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCBundlePolicy."max-bundle":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtcpMuxPolicy:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtcpMuxPolicy."require":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCOfferAnswerOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCOfferOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCOfferOptions.iceRestart:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCAnswerOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."stable":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."have-local-offer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."have-remote-offer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."have-local-pranswer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."have-remote-pranswer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSignalingState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGatheringState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGatheringState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGatheringState."gathering":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGatheringState."complete":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."failed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."disconnected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."connecting":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionState."connected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."failed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."disconnected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."checking":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."completed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceConnectionState."connected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.createOffer():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.createAnswer():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.setLocalDescription():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.localDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.currentLocalDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.pendingLocalDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.setRemoteDescription():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.remoteDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.currentRemoteDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.pendingRemoteDescription:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.addIceCandidate():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.signalingState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.iceGatheringState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.iceConnectionState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.connectionState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.canTrickleIceCandidates:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.restartIce():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.getConfiguration():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.setConfiguration():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.close():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onnegotiationneeded:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onicecandidate:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onicecandidateerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onsignalingstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.oniceconnectionstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onicegatheringstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.onconnectionstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionErrorCallback:
+    kind: callback
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescriptionCallback:
+    kind: callback
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCOfferOptions.offerToReceiveAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCOfferOptions.offerToReceiveVideo:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSdpType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSdpType."offer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSdpType."pranswer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSdpType."answer":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSdpType."rollback":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescription:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescription.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescription.type:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescription.sdp:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescription.toJSON():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescriptionInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescriptionInit.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSessionDescriptionInit.sdp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalSessionDescriptionInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalSessionDescriptionInit.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalSessionDescriptionInit.sdp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.candidate:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.sdpMid:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.sdpMLineIndex:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.foundation:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.component:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.priority:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.address:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.protocol:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.port:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.type:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.tcpType:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.relatedAddress:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.relatedPort:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.usernameFragment:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.relayProtocol:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.url:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidate.toJSON():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateInit.candidate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateInit.sdpMid:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateInit.sdpMLineIndex:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateInit.usernameFragment:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalIceCandidateInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalIceCandidateInit.relayProtocol:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCLocalIceCandidateInit.url:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceProtocol:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceProtocol."udp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceProtocol."tcp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTcpCandidateType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTcpCandidateType."active":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTcpCandidateType."passive":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTcpCandidateType."so":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateType."host":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateType."srflx":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateType."prflx":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidateType."relay":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServerTransportProtocol:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServerTransportProtocol."udp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServerTransportProtocol."tcp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceServerTransportProtocol."tls":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEvent.candidate:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEvent.url:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEventInit.candidate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceEventInit.url:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.address:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.port:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.url:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.errorCode:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEvent.errorText:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit.address:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit.port:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit.url:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit.errorCode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnectionIceErrorEventInit.errorText:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.generateCertificate():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCCertificateExpiration:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCCertificateExpiration.expires:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCCertificate:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCCertificate.expires:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCCertificate.getFingerprints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.getSenders():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.getReceivers():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.getTransceivers():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.addTrack():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.removeTrack():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.addTransceiver():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.ontrack:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverInit.direction:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverInit.streams:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverInit.sendEncodings:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection."sendrecv":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection."sendonly":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection."recvonly":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection."inactive":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiverDirection."stopped":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.transport:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.getCapabilities():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.setParameters():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.getParameters():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.replaceTrack():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.setStreams():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.getStats():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpParameters.headerExtensions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpParameters.rtcp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpParameters.codecs:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSendParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSendParameters.transactionId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSendParameters.encodings:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiveParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodingParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodingParameters.rid:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters.active:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters.codec:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters.maxBitrate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters.maxFramerate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpEncodingParameters.scaleResolutionDownBy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtcpParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtcpParameters.cname:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtcpParameters.reducedSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionParameters.uri:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionParameters.id:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionParameters.encrypted:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodec:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodec.mimeType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodec.clockRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodec.channels:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodec.sdpFmtpLine:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodecParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCodecParameters.payloadType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCapabilities:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCapabilities.codecs:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpCapabilities.headerExtensions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionCapability:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpHeaderExtensionCapability.uri:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSetParameterOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.transport:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.getCapabilities():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.getParameters():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.getContributingSources():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.getSynchronizationSources():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.getStats():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpReceiver.jitterBufferTarget:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpContributingSource:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpContributingSource.timestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpContributingSource.source:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpContributingSource.audioLevel:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpContributingSource.rtpTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSynchronizationSource:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.mid:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.sender:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.receiver:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.direction:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.currentDirection:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.stop():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpTransceiver.setCodecPreferences():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport.iceTransport:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport.state:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport.getRemoteCertificates():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport.onstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransport.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState."connecting":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState."connected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsTransportState."failed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsFingerprint:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsFingerprint.algorithm:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDtlsFingerprint.value:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.role:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.component:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.state:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.gatheringState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.getLocalCandidates():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.getRemoteCandidates():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.getSelectedCandidatePair():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.getLocalParameters():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.getRemoteParameters():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.onstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.ongatheringstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransport.onselectedcandidatepairchange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceParameters.usernameFragment:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceParameters.password:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidatePair:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidatePair.local:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceCandidatePair.remote:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGathererState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGathererState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGathererState."gathering":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceGathererState."complete":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."failed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."disconnected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."new":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."checking":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."completed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceTransportState."connected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceRole:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceRole."unknown":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceRole."controlling":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceRole."controlled":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceComponent:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceComponent."rtp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCIceComponent."rtcp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent.receiver:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent.streams:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEvent.transceiver:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEventInit.receiver:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEventInit.track:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEventInit.streams:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCTrackEventInit.transceiver:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.sctp:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.createDataChannel():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.ondatachannel:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport.transport:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport.state:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport.maxMessageSize:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport.maxChannels:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransport.onstatechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransportState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransportState."connecting":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransportState."connected":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCSctpTransportState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.label:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.ordered:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.maxPacketLifeTime:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.maxRetransmits:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.protocol:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.negotiated:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.id:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.readyState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.bufferedAmount:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.bufferedAmountLowThreshold:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onopen:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onbufferedamountlow:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onclosing:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onclose:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.close():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.onmessage:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.binaryType:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannel.send():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.ordered:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.maxPacketLifeTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.maxRetransmits:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.protocol:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.negotiated:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelInit.id:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelState."connecting":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelState."open":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelState."closing":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelState."closed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelEvent.channel:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDataChannelEventInit.channel:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCRtpSender.dtmf:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFSender:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFSender.insertDTMF():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFSender.ontonechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFSender.canInsertDTMF:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFSender.toneBuffer:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFToneChangeEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFToneChangeEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFToneChangeEvent.tone:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFToneChangeEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCDTMFToneChangeEventInit.tone:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCPeerConnection.getStats():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStatsReport:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStatsReport.[maplike]:
+    kind: maplike
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStats.timestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStats.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCStats.id:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.errorDetail:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.sdpLineNumber:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.sctpCauseCode:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.receivedAlert:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCError.sentAlert:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit.errorDetail:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit.sdpLineNumber:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit.sctpCauseCode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit.receivedAlert:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorInit.sentAlert:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."data-channel-failure":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."dtls-failure":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."fingerprint-failure":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."sctp-failure":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."sdp-syntax-error":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."hardware-encoder-not-available":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorDetailType."hardware-encoder-error":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorEvent.error:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc:RTCErrorEventInit.error:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."codec":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."inbound-rtp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."outbound-rtp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."remote-inbound-rtp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."remote-outbound-rtp":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."media-source":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."media-playout":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."peer-connection":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."data-channel":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."transport":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."candidate-pair":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."local-candidate":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."remote-candidate":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsType."certificate":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRtpStreamStats.ssrc:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRtpStreamStats.kind:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRtpStreamStats.transportId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRtpStreamStats.codecId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.payloadType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.transportId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.mimeType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.clockRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.channels:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCodecStats.sdpFmtpLine:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsReceivedWithEct1:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsReceivedWithCe:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsReportedAsLost:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsReportedAsLostButRecovered:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.packetsLost:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCReceivedRtpStreamStats.jitter:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.trackIdentifier:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.mid:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.remoteId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesDecoded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.keyFramesDecoded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesRendered:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesDropped:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.frameWidth:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.frameHeight:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesPerSecond:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.qpSum:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalDecodeTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalInterFrameDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalSquaredInterFrameDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.pauseCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalPausesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.freezeCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalFreezesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.lastPacketReceivedTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.headerBytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.packetsDiscarded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.fecBytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.fecPacketsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.fecPacketsDiscarded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.bytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.nackCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.firCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.pliCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalProcessingDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.estimatedPlayoutTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.jitterBufferDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.jitterBufferTargetDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.jitterBufferEmittedCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.jitterBufferMinimumDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalSamplesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.concealedSamples:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.silentConcealedSamples:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.concealmentEvents:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.insertedSamplesForDeceleration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.removedSamplesForAcceleration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.audioLevel:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalAudioEnergy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalSamplesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.decoderImplementation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.playoutId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.powerEfficientDecoder:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.framesAssembledFromMultiplePackets:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalAssemblyTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.retransmittedPacketsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.retransmittedBytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.rtxSsrc:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.fecSsrc:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalCorruptionProbability:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.totalSquaredCorruptionProbability:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCInboundRtpStreamStats.corruptionMeasurements:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.localId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.roundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.totalRoundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.fractionLost:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.roundTripTimeMeasurements:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteInboundRtpStreamStats.packetsWithBleachedEct1Marking:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCSentRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCSentRtpStreamStats.packetsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCSentRtpStreamStats.bytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.mid:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.mediaSourceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.remoteId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.rid:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.encodingIndex:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.headerBytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.retransmittedPacketsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.retransmittedBytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.rtxSsrc:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.targetBitrate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.frameWidth:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.frameHeight:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.framesPerSecond:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.framesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.hugeFramesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.framesEncoded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.keyFramesEncoded:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.qpSum:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.psnrSum:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.psnrMeasurements:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.totalEncodeTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.totalPacketSendDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.qualityLimitationReason:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.qualityLimitationDurations:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.qualityLimitationResolutionChanges:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.nackCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.firCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.pliCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.encoderImplementation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.powerEfficientEncoder:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.active:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.scalabilityMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCOutboundRtpStreamStats.packetsSentWithEct1:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCQualityLimitationReason:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCQualityLimitationReason."none":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCQualityLimitationReason."cpu":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCQualityLimitationReason."bandwidth":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCQualityLimitationReason."other":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.localId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.remoteTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.reportsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.roundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.totalRoundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCRemoteOutboundRtpStreamStats.roundTripTimeMeasurements:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCMediaSourceStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCMediaSourceStats.trackIdentifier:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCMediaSourceStats.kind:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats.audioLevel:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats.totalAudioEnergy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats.totalSamplesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats.echoReturnLoss:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioSourceStats.echoReturnLossEnhancement:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCVideoSourceStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCVideoSourceStats.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCVideoSourceStats.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCVideoSourceStats.frames:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCVideoSourceStats.framesPerSecond:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.kind:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.synthesizedSamplesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.synthesizedSamplesEvents:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.totalSamplesDuration:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.totalPlayoutDelay:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCAudioPlayoutStats.totalSamplesCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCPeerConnectionStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCPeerConnectionStats.dataChannelsOpened:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCPeerConnectionStats.dataChannelsClosed:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.label:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.protocol:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.dataChannelIdentifier:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.state:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.messagesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.bytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.messagesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDataChannelStats.bytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.packetsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.packetsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.bytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.bytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.iceRole:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.iceLocalUsernameFragment:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.dtlsState:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.iceState:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.selectedCandidatePairId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.localCertificateId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.remoteCertificateId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.tlsVersion:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.dtlsCipher:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.dtlsRole:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.srtpCipher:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.selectedCandidatePairChanges:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.ccfbMessagesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCTransportStats.ccfbMessagesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDtlsRole:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDtlsRole."client":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDtlsRole."server":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCDtlsRole."unknown":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.transportId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.address:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.port:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.protocol:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.candidateType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.priority:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.url:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.relayProtocol:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.foundation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.relatedAddress:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.relatedPort:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.usernameFragment:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidateStats.tcpType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.transportId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.localCandidateId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.remoteCandidateId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.state:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.nominated:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.packetsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.packetsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.bytesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.bytesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.lastPacketSentTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.lastPacketReceivedTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.totalRoundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.currentRoundTripTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.availableOutgoingBitrate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.availableIncomingBitrate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.requestsReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.requestsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.responsesReceived:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.responsesSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.consentRequestsSent:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.packetsDiscardedOnSend:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCIceCandidatePairStats.bytesDiscardedOnSend:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState."frozen":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState."waiting":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState."in-progress":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState."failed":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCStatsIceCandidatePairState."succeeded":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCertificateStats:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCertificateStats.fingerprint:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCertificateStats.fingerprintAlgorithm:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCertificateStats.base64Certificate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-stats:RTCCertificateStats.issuerCertificateId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-svc:RTCRtpEncodingParameters.scalabilityMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSenderTransform:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpReceiverTransform:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSender.transform:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpReceiver.transform:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_128_CTR_HMAC_SHA256_80":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_128_CTR_HMAC_SHA256_64":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_128_CTR_HMAC_SHA256_32":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_128_GCM_SHA256_128":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_256_GCM_SHA512_128":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_256_CTR_HMAC_SHA512_80":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_256_CTR_HMAC_SHA512_64":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameCipherSuite."AES_256_CTR_HMAC_SHA512_32":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformOptions.cipherSuite:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameType."per-frame":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameType."per-packet":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameEncryptorOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameEncryptorOptions.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SmallCryptoKeyID:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:CryptoKeyID:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorManager:
+    kind: mixin
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorManager.setEncryptionKey():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorManager:
+    kind: mixin
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorManager.addDecryptionKey():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorManager.removeDecryptionKey():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorManager.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameEncryptor:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameEncryptor.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameEncryptor includes SFrameEncryptorManager:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameDecryptor:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameDecryptor.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpSFrameDecryptor includes SFrameDecryptorManager:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorStream:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorStream.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorStream includes GenericTransformStream:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameEncryptorStream includes SFrameEncryptorManager:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorStream:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorStream.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorStream includes GenericTransformStream:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameDecryptorStream includes SFrameDecryptorManager:
+    kind: includes
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventType."authentication":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventType."keyID":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventType."syntax":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEvent.errorType:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEvent.keyID:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEvent.frame:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventInit.errorType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventInit.frame:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:SFrameTransformErrorEventInit.keyID:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.synchronizationSource:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.payloadType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.contributingSources:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.rtpTimestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.receiveTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.captureTime:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.senderCaptureTimeOffset:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedFrameMetadata.mimeType:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.frameId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.dependencies:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.spatialIndex:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.temporalIndex:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameMetadata.timestamp:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrameOptions.metadata:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrame:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrame.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrame.type:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrame.data:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedVideoFrame.getMetadata():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrameMetadata:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrameMetadata.sequenceNumber:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrameMetadata.audioLevel:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrameOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrameOptions.metadata:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrame:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrame.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrame.data:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCEncodedAudioFrame.getMetadata():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformType."sframe":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:WorkerAndParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:WorkerAndParameters.worker:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:WorkerAndParameters.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:WorkerOrWorkerAndParameters:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransform:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransform.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.readable:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.generateKeyFrame():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.sendKeyFrameRequest():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.writable:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.onkeyframerequest:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCRtpScriptTransformer.options:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCTransformEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:RTCTransformEvent.transformer:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:DedicatedWorkerGlobalScope.onrtctransform:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:KeyFrameRequestEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:KeyFrameRequestEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-encoded-transform:KeyFrameRequestEvent.rid:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCPriorityType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCPriorityType."very-low":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCPriorityType."low":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCPriorityType."medium":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCPriorityType."high":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCRtpEncodingParameters.priority:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCRtpEncodingParameters.networkPriority:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCDataChannel.priority:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-priority:RTCDataChannelInit.priority:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceParameters.iceLite:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceGatherOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceGatherOptions.gatherPolicy:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceGatherOptions.iceServers:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.gather():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.start():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.stop():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.addRemoteCandidate():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  webrtc-ice:RTCIceTransport.onicecandidate:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.id:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.getAudioTracks():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.getVideoTracks():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.getTracks():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.getTrackById():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.addTrack():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.removeTrack():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.clone():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.active:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.onaddtrack:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStream.onremovetrack:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.kind:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.id:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.label:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.enabled:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.muted:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.onmute:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.onunmute:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.readyState:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.onended:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.clone():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.stop():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.getCapabilities():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.getConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.getSettings():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrack.applyConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackState:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackState."live":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackState."ended":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.aspectRatio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.frameRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.facingMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.resizeMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.sampleRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.sampleSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.echoCancellation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.autoGainControl:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.noiseSuppression:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.latency:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.channelCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.deviceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.groupId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSupportedConstraints.backgroundBlur:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.aspectRatio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.frameRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.facingMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.resizeMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.sampleRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.sampleSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.echoCancellation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.autoGainControl:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.noiseSuppression:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.latency:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.channelCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.deviceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.groupId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackCapabilities.backgroundBlur:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraints:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraints.advanced:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.aspectRatio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.frameRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.facingMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.resizeMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.sampleRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.sampleSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.echoCancellation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.autoGainControl:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.noiseSuppression:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.latency:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.channelCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.deviceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.groupId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackConstraintSet.backgroundBlur:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.width:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.height:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.aspectRatio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.frameRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.facingMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.resizeMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.sampleRate:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.sampleSize:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.echoCancellation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.autoGainControl:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.noiseSuppression:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.latency:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.channelCount:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.deviceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.groupId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaTrackSettings.backgroundBlur:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoFacingModeEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoFacingModeEnum."user":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoFacingModeEnum."environment":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoFacingModeEnum."left":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoFacingModeEnum."right":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoResizeModeEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoResizeModeEnum."none":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:VideoResizeModeEnum."crop-and-scale":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:EchoCancellationModeEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:EchoCancellationModeEnum."all":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:EchoCancellationModeEnum."remote-only":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackEvent.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamTrackEventInit.track:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:OverconstrainedError:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:OverconstrainedError.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:OverconstrainedError.constraint:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:Navigator.mediaDevices:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDevices:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDevices.ondevicechange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDevices.enumerateDevices():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo.deviceId:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo.kind:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo.label:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo.groupId:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceInfo.toJSON():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceKind:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceKind."audioinput":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceKind."audiooutput":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDeviceKind."videoinput":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:InputDeviceInfo:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:InputDeviceInfo.getCapabilities():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEvent:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEvent.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEvent.devices:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEvent.userInsertedDevices:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEventInit:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DeviceChangeEventInit.devices:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDevices.getSupportedConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaDevices.getUserMedia():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamConstraints:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamConstraints.video:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:MediaStreamConstraints.audio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DoubleRange:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DoubleRange.max:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:DoubleRange.min:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDoubleRange:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDoubleRange.exact:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDoubleRange.ideal:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ULongRange:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ULongRange.max:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ULongRange.min:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainULongRange:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainULongRange.exact:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainULongRange.ideal:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanParameters.exact:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanParameters.ideal:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDOMStringParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDOMStringParameters.exact:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDOMStringParameters.ideal:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanOrDOMStringParameters:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanOrDOMStringParameters.exact:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanOrDOMStringParameters.ideal:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainULong:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDouble:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBoolean:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainDOMString:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:ConstrainBooleanOrDOMString:
+    kind: typedef
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:CameraDevicePermissionDescriptor:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-streams:CameraDevicePermissionDescriptor.panTiltZoom:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaDevices.defaultSemantics:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamConstraints.semantics:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:GetUserMediaSemantics:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:GetUserMediaSemantics."browser-chooses":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:GetUserMediaSemantics."user-chooses":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrack.stats:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.latency:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.averageLatency:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.minimumLatency:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.maximumLatency:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.resetLatency():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackAudioStats.toJSON():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackVideoStats:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackVideoStats.deliveredFrames:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackVideoStats.discardedFrames:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackVideoStats.totalFrames:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrackVideoStats.toJSON():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.powerEfficient:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.powerEfficient:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.powerEfficient:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.powerEfficientPixelFormat:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.powerEfficientPixelFormat:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.powerEfficientPixelFormat:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.gestureReactions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.gestureReactions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.gestureReactions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.gestureReactions:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.faceFraming:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.faceFraming:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.faceFraming:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.faceFraming:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.eyeGazeCorrection:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.eyeGazeCorrection:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.eyeGazeCorrection:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.eyeGazeCorrection:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.voiceIsolation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.voiceIsolation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.voiceIsolation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.voiceIsolation:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaStreamTrack.onconfigurationchange:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:VideoFrameMetadata.segments:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.type:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.id:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.partOf:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.probability:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.centerPoint:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:Segment.boundingBox:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType."human-face":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType."left-eye":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType."right-eye":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType."eye":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:SegmentType."mouth":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.humanFaceDetectionMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.humanFaceDetectionMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.humanFaceDetectionMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.humanFaceDetectionMode:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HumanFaceDetectionModeEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HumanFaceDetectionModeEnum."none":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HumanFaceDetectionModeEnum."bounding-box":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HumanFaceDetectionModeEnum."bounding-box-with-landmark-center-point":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:VideoFrameMetadata.backgroundBlur:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:BackgroundBlur:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaEffectInfo:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaEffectInfo.enabled:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSupportedConstraints.backgroundSegmentationMask:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackConstraintSet.backgroundSegmentationMask:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackSettings.backgroundSegmentationMask:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:MediaTrackCapabilities.backgroundSegmentationMask:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:VideoFrameMetadata.backgroundSegmentationMask:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.error:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.setConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.ontrack:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLCameraElement.oncancel:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.track:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.error:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.setConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.ontrack:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMicrophoneElement.oncancel:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMediaStreamConstraints:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMediaStreamConstraints.video:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLMediaStreamConstraints.audio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.stream:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.error:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.setConstraints():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.onstream:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.onerror:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-extensions:HTMLUserMediaElement.oncancel:
+    kind: event-handler
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaDevices.getDisplayMedia():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureStartFocusBehavior:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureStartFocusBehavior."focus-capturing-application":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureStartFocusBehavior."focus-captured-surface":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureStartFocusBehavior."no-focus-change":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureController:
+    kind: interface
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureController.constructor():
+    kind: constructor
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CaptureController.setFocusBehavior():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SelfCapturePreferenceEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SelfCapturePreferenceEnum."include":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SelfCapturePreferenceEnum."exclude":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SystemAudioPreferenceEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SystemAudioPreferenceEnum."include":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SystemAudioPreferenceEnum."exclude":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:WindowAudioPreferenceEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:WindowAudioPreferenceEnum."system":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:WindowAudioPreferenceEnum."window":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:WindowAudioPreferenceEnum."exclude":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SurfaceSwitchingPreferenceEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SurfaceSwitchingPreferenceEnum."include":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:SurfaceSwitchingPreferenceEnum."exclude":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MonitorTypeSurfacesEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MonitorTypeSurfacesEnum."include":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MonitorTypeSurfacesEnum."exclude":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:AudioSelectionPreferenceEnum:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:AudioSelectionPreferenceEnum."preferred":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.video:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.audio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.controller:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.selfBrowserSurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.systemAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.windowAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.surfaceSwitching:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.monitorTypeSurfaces:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayMediaStreamOptions.audioSelection:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSupportedConstraints.displaySurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSupportedConstraints.logicalSurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSupportedConstraints.cursor:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSupportedConstraints.restrictOwnAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSupportedConstraints.suppressLocalAudioPlayback:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackConstraintSet.displaySurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackConstraintSet.logicalSurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackConstraintSet.cursor:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackConstraintSet.restrictOwnAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackConstraintSet.suppressLocalAudioPlayback:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.displaySurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.logicalSurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.cursor:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.restrictOwnAudio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.suppressLocalAudioPlayback:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackSettings.screenPixelRatio:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackCapabilities.displaySurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackCapabilities.logicalSurface:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:MediaTrackCapabilities.cursor:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayCaptureSurfaceType:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayCaptureSurfaceType."monitor":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayCaptureSurfaceType."window":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:DisplayCaptureSurfaceType."browser":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CursorCaptureConstraint:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CursorCaptureConstraint."never":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CursorCaptureConstraint."always":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  screen-capture:CursorCaptureConstraint."motion":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  audio-output:HTMLMediaElement.sinkId:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  audio-output:HTMLMediaElement.setSinkId():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  audio-output:MediaDevices.selectAudioOutput():
+    kind: operation
+    tier: core
+    status:
+      default: planned
+    tests: []
+  audio-output:AudioOutputOptions:
+    kind: dictionary
+    tier: core
+    status:
+      default: planned
+    tests: []
+  audio-output:AudioOutputOptions.deviceId:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:MediaStreamTrack.contentHint:
+    kind: attribute
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCDegradationPreference:
+    kind: enum
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCDegradationPreference."maintain-framerate":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCDegradationPreference."maintain-resolution":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCDegradationPreference."balanced":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCDegradationPreference."maintain-framerate-and-resolution":
+    kind: enum-value
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mst-content-hint:RTCRtpSendParameters.degradationPreference:
+    kind: field
+    tier: core
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackHandle:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackHandle.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessor:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessor.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessor.readable:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessor.discardedFrames:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessor.totalFrames:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackOrHandle:
+    kind: typedef
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessorInit:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessorInit.track:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:MediaStreamTrackProcessorInit.maxBufferSize:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:VideoTrackGenerator:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:VideoTrackGenerator.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:VideoTrackGenerator.writable:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:VideoTrackGenerator.muted:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-transform:VideoTrackGenerator.track:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-region:CropTarget:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-region:CropTarget.fromElement():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-region:BrowserCaptureMediaStreamTrack:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-region:BrowserCaptureMediaStreamTrack.cropTo():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-region:BrowserCaptureMediaStreamTrack.clone():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-viewport:MediaDevices.getViewportMedia():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.getSupportedZoomLevels():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.zoomLevel:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.increaseZoomLevel():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.decreaseZoomLevel():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.resetZoomLevel():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.onzoomlevelchange:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-surface-control:CaptureController.forwardWheel():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:MediaDevices.setSupportedCaptureActions():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:MediaDevices.oncaptureaction:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureAction:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureAction."next":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureAction."previous":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureAction."first":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureAction."last":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureActionEvent:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureActionEvent.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureActionEvent.action:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureActionEventInit:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:CaptureActionEventInit.action:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:MediaStreamTrack.getSupportedCaptureActions():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediacapture-handle-actions:MediaStreamTrack.sendCaptureAction():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandleConfig:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandleConfig.exposeOrigin:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandleConfig.handle:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandleConfig.permittedOrigins:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:MediaDevices.setCaptureHandleConfig():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandle:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandle.origin:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:CaptureHandle.handle:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:MediaStreamTrack.getCaptureHandle():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  capture-handle-identity:MediaStreamTrack.oncapturehandlechange:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  prefer-current-tab:MediaStreamConstraints.preferCurrentTab:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.takePhoto():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.getPhotoCapabilities():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.getPhotoSettings():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.grabFrame():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ImageCapture.track:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoCapabilities:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoCapabilities.redEyeReduction:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoCapabilities.imageHeight:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoCapabilities.imageWidth:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoCapabilities.fillLightMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoSettings:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoSettings.fillLightMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoSettings.imageHeight:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoSettings.imageWidth:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:PhotoSettings.redEyeReduction:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaSettingsRange:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaSettingsRange.max:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaSettingsRange.min:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaSettingsRange.step:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:RedEyeReduction:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:RedEyeReduction."never":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:RedEyeReduction."always":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:RedEyeReduction."controllable":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:FillLightMode:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:FillLightMode."auto":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:FillLightMode."off":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:FillLightMode."flash":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.whiteBalanceMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.exposureMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.focusMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.pointsOfInterest:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.exposureCompensation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.exposureTime:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.colorTemperature:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.iso:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.brightness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.contrast:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.pan:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.saturation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.sharpness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.focusDistance:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.tilt:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.zoom:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSupportedConstraints.torch:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.whiteBalanceMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.exposureMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.focusMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.exposureCompensation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.exposureTime:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.colorTemperature:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.iso:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.brightness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.contrast:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.saturation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.sharpness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.focusDistance:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.pan:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.tilt:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.zoom:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackCapabilities.torch:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.whiteBalanceMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.exposureMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.focusMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.pointsOfInterest:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.exposureCompensation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.exposureTime:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.colorTemperature:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.iso:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.brightness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.contrast:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.saturation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.sharpness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.focusDistance:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.pan:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.tilt:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.zoom:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackConstraintSet.torch:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.whiteBalanceMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.exposureMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.focusMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.pointsOfInterest:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.exposureCompensation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.exposureTime:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.colorTemperature:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.iso:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.brightness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.contrast:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.saturation:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.sharpness:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.focusDistance:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.pan:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.tilt:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.zoom:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MediaTrackSettings.torch:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ConstrainPoint2DParameters:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ConstrainPoint2DParameters.exact:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ConstrainPoint2DParameters.ideal:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:ConstrainPoint2D:
+    kind: typedef
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MeteringMode:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MeteringMode."none":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MeteringMode."manual":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MeteringMode."single-shot":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:MeteringMode."continuous":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:Point2D:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:Point2D.x:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  image-capture:Point2D.y:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.stream:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.mimeType:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.state:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.onstart:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.onstop:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.ondataavailable:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.onpause:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.onresume:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.onerror:
+    kind: event-handler
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.videoBitsPerSecond:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.audioBitsPerSecond:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.audioBitrateMode:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.start():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.stop():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.pause():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.resume():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.requestData():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorder.isTypeSupported():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.mimeType:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.audioBitsPerSecond:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.videoBitsPerSecond:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.bitsPerSecond:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.audioBitrateMode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.videoKeyFrameIntervalDuration:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:MediaRecorderOptions.videoKeyFrameIntervalCount:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BitrateMode:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BitrateMode."constant":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BitrateMode."variable":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:RecordingState:
+    kind: enum
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:RecordingState."inactive":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:RecordingState."recording":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:RecordingState."paused":
+    kind: enum-value
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEvent:
+    kind: interface
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEvent.constructor():
+    kind: constructor
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEvent.data:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEvent.timecode:
+    kind: attribute
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEventInit:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEventInit.data:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  mediastream-recording:BlobEventInit.timecode:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-diagnostic-logging:RTCPeerConnection.startDiagnosticLogging():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-diagnostic-logging:RTCPeerConnection.stopDiagnosticLogging():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-diagnostic-logging:RTCPeerConnection.cancelDiagnosticLogging():
+    kind: operation
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-diagnostic-logging:RTCDiagnosticLoggingOptions:
+    kind: dictionary
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-diagnostic-logging:RTCDiagnosticLoggingOptions.metadata:
+    kind: field
+    tier: extended
+    status:
+      default: planned
+    tests: []
+  webrtc-identity:RTCIdentityProviderGlobalScope:
+    kind: interface
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderGlobalScope.rtcIdentityProvider:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderRegistrar:
+    kind: interface
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderRegistrar.register():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProvider:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProvider.generateAssertion:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProvider.validateAssertion:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:GenerateAssertionCallback:
+    kind: callback
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:ValidateAssertionCallback:
+    kind: callback
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertionResult:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertionResult.idp:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertionResult.assertion:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderDetails:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderDetails.domain:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderDetails.protocol:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityValidationResult:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityValidationResult.identity:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityValidationResult.contents:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCPeerConnection.setIdentityProvider():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCPeerConnection.getIdentityAssertion():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCPeerConnection.peerIdentity:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCPeerConnection.idpLoginUrl:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCPeerConnection.idpErrorInfo:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCConfiguration.peerIdentity:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderOptions:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderOptions.protocol:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderOptions.usernameHint:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityProviderOptions.peerIdentity:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertion:
+    kind: interface
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertion.constructor():
+    kind: constructor
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertion.idp:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCIdentityAssertion.name:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCError.httpRequestStatusCode:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorInit.httpRequestStatusCode:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp:
+    kind: enum
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-bad-script-failure":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-execution-failure":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-load-failure":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-need-login":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-timeout":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-tls-failure":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-token-expired":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:RTCErrorDetailTypeIdp."idp-token-invalid":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:MediaStreamConstraints.peerIdentity:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:MediaStreamTrack.isolated:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  webrtc-identity:MediaStreamTrack.onisolationchange:
+    kind: event-handler
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-fromelement:HTMLMediaElement.captureStream():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-fromelement:HTMLCanvasElement.captureStream():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-fromelement:CanvasCaptureMediaStreamTrack:
+    kind: interface
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-fromelement:CanvasCaptureMediaStreamTrack.canvas:
+    kind: attribute
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-fromelement:CanvasCaptureMediaStreamTrack.requestFrame():
+    kind: operation
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResult:
+    kind: enum
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResult."granted":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResult."denied":
+    kind: enum-value
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResultConfiguration:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResultConfiguration.getUserMedia:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCapturePromptResultConfiguration.getDisplayMedia:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCaptureDeviceConfiguration:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCaptureDeviceConfiguration.label:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCaptureDeviceConfiguration.deviceId:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCaptureDeviceConfiguration.groupId:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCameraConfiguration:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCameraConfiguration.defaultFrameRate:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockCameraConfiguration.facingMode:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockMicrophoneConfiguration:
+    kind: dictionary
+    tier: excluded
+    status:
+      default: na
+    tests: []
+  mediacapture-automation:MockMicrophoneConfiguration.defaultSampleRate:
+    kind: field
+    tier: excluded
+    status:
+      default: na
+    tests: []
