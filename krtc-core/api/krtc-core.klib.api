@@ -1,0 +1,179 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-core>
+final enum class krtc.core/RTCPeerConnectionState : kotlin/Enum<krtc.core/RTCPeerConnectionState> { // krtc.core/RTCPeerConnectionState|null[0]
+    enum entry CLOSED // krtc.core/RTCPeerConnectionState.CLOSED|null[0]
+    enum entry CONNECTED // krtc.core/RTCPeerConnectionState.CONNECTED|null[0]
+    enum entry CONNECTING // krtc.core/RTCPeerConnectionState.CONNECTING|null[0]
+    enum entry DISCONNECTED // krtc.core/RTCPeerConnectionState.DISCONNECTED|null[0]
+    enum entry FAILED // krtc.core/RTCPeerConnectionState.FAILED|null[0]
+    enum entry NEW // krtc.core/RTCPeerConnectionState.NEW|null[0]
+
+    final val entries // krtc.core/RTCPeerConnectionState.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.core/RTCPeerConnectionState> // krtc.core/RTCPeerConnectionState.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // krtc.core/RTCPeerConnectionState.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.core/RTCPeerConnectionState.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.core/RTCPeerConnectionState // krtc.core/RTCPeerConnectionState.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.core/RTCPeerConnectionState> // krtc.core/RTCPeerConnectionState.values|values#static(){}[0]
+}
+
+final enum class krtc.core/RTCRtpTransceiverDirection : kotlin/Enum<krtc.core/RTCRtpTransceiverDirection> { // krtc.core/RTCRtpTransceiverDirection|null[0]
+    enum entry INACTIVE // krtc.core/RTCRtpTransceiverDirection.INACTIVE|null[0]
+    enum entry RECVONLY // krtc.core/RTCRtpTransceiverDirection.RECVONLY|null[0]
+    enum entry SENDONLY // krtc.core/RTCRtpTransceiverDirection.SENDONLY|null[0]
+    enum entry SENDRECV // krtc.core/RTCRtpTransceiverDirection.SENDRECV|null[0]
+    enum entry STOPPED // krtc.core/RTCRtpTransceiverDirection.STOPPED|null[0]
+
+    final val entries // krtc.core/RTCRtpTransceiverDirection.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.core/RTCRtpTransceiverDirection> // krtc.core/RTCRtpTransceiverDirection.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // krtc.core/RTCRtpTransceiverDirection.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.core/RTCRtpTransceiverDirection.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.core/RTCRtpTransceiverDirection // krtc.core/RTCRtpTransceiverDirection.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.core/RTCRtpTransceiverDirection> // krtc.core/RTCRtpTransceiverDirection.values|values#static(){}[0]
+}
+
+final enum class krtc.core/RTCSdpType : kotlin/Enum<krtc.core/RTCSdpType> { // krtc.core/RTCSdpType|null[0]
+    enum entry ANSWER // krtc.core/RTCSdpType.ANSWER|null[0]
+    enum entry OFFER // krtc.core/RTCSdpType.OFFER|null[0]
+    enum entry PRANSWER // krtc.core/RTCSdpType.PRANSWER|null[0]
+    enum entry ROLLBACK // krtc.core/RTCSdpType.ROLLBACK|null[0]
+
+    final val entries // krtc.core/RTCSdpType.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.core/RTCSdpType> // krtc.core/RTCSdpType.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // krtc.core/RTCSdpType.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.core/RTCSdpType.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.core/RTCSdpType // krtc.core/RTCSdpType.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.core/RTCSdpType> // krtc.core/RTCSdpType.values|values#static(){}[0]
+}
+
+abstract fun interface krtc.core/PeerConnectionFactory { // krtc.core/PeerConnectionFactory|null[0]
+    abstract fun createPeerConnection(krtc.core/RTCConfiguration): krtc.core/RTCPeerConnection // krtc.core/PeerConnectionFactory.createPeerConnection|createPeerConnection(krtc.core.RTCConfiguration){}[0]
+}
+
+abstract interface krtc.core/MediaStreamTrack { // krtc.core/MediaStreamTrack|null[0]
+    abstract val id // krtc.core/MediaStreamTrack.id|{}id[0]
+        abstract fun <get-id>(): kotlin/String // krtc.core/MediaStreamTrack.id.<get-id>|<get-id>(){}[0]
+    abstract val kind // krtc.core/MediaStreamTrack.kind|{}kind[0]
+        abstract fun <get-kind>(): kotlin/String // krtc.core/MediaStreamTrack.kind.<get-kind>|<get-kind>(){}[0]
+
+    abstract var enabled // krtc.core/MediaStreamTrack.enabled|{}enabled[0]
+        abstract fun <get-enabled>(): kotlin/Boolean // krtc.core/MediaStreamTrack.enabled.<get-enabled>|<get-enabled>(){}[0]
+        abstract fun <set-enabled>(kotlin/Boolean) // krtc.core/MediaStreamTrack.enabled.<set-enabled>|<set-enabled>(kotlin.Boolean){}[0]
+
+    abstract fun stop() // krtc.core/MediaStreamTrack.stop|stop(){}[0]
+}
+
+abstract interface krtc.core/RTCPeerConnection : kotlin/AutoCloseable { // krtc.core/RTCPeerConnection|null[0]
+    abstract val connectionState // krtc.core/RTCPeerConnection.connectionState|{}connectionState[0]
+        abstract fun <get-connectionState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCPeerConnectionState> // krtc.core/RTCPeerConnection.connectionState.<get-connectionState>|<get-connectionState>(){}[0]
+    abstract val localDescription // krtc.core/RTCPeerConnection.localDescription|{}localDescription[0]
+        abstract fun <get-localDescription>(): krtc.core/RTCSessionDescription? // krtc.core/RTCPeerConnection.localDescription.<get-localDescription>|<get-localDescription>(){}[0]
+    abstract val ontrack // krtc.core/RTCPeerConnection.ontrack|{}ontrack[0]
+        abstract fun <get-ontrack>(): kotlinx.coroutines.flow/Flow<krtc.core/RTCTrackEvent> // krtc.core/RTCPeerConnection.ontrack.<get-ontrack>|<get-ontrack>(){}[0]
+    abstract val remoteDescription // krtc.core/RTCPeerConnection.remoteDescription|{}remoteDescription[0]
+        abstract fun <get-remoteDescription>(): krtc.core/RTCSessionDescription? // krtc.core/RTCPeerConnection.remoteDescription.<get-remoteDescription>|<get-remoteDescription>(){}[0]
+
+    abstract fun close() // krtc.core/RTCPeerConnection.close|close(){}[0]
+    abstract fun getTransceivers(): kotlin.collections/List<krtc.core/RTCRtpTransceiver> // krtc.core/RTCPeerConnection.getTransceivers|getTransceivers(){}[0]
+    abstract suspend fun createAnswer(): krtc.core/RTCSessionDescription // krtc.core/RTCPeerConnection.createAnswer|createAnswer(){}[0]
+    abstract suspend fun setLocalDescription(krtc.core/RTCSessionDescription) // krtc.core/RTCPeerConnection.setLocalDescription|setLocalDescription(krtc.core.RTCSessionDescription){}[0]
+    abstract suspend fun setRemoteDescription(krtc.core/RTCSessionDescription) // krtc.core/RTCPeerConnection.setRemoteDescription|setRemoteDescription(krtc.core.RTCSessionDescription){}[0]
+}
+
+abstract interface krtc.core/RTCRtpReceiver { // krtc.core/RTCRtpReceiver|null[0]
+    abstract val track // krtc.core/RTCRtpReceiver.track|{}track[0]
+        abstract fun <get-track>(): krtc.core/MediaStreamTrack // krtc.core/RTCRtpReceiver.track.<get-track>|<get-track>(){}[0]
+}
+
+abstract interface krtc.core/RTCRtpSender { // krtc.core/RTCRtpSender|null[0]
+    abstract val track // krtc.core/RTCRtpSender.track|{}track[0]
+        abstract fun <get-track>(): krtc.core/MediaStreamTrack? // krtc.core/RTCRtpSender.track.<get-track>|<get-track>(){}[0]
+
+    abstract suspend fun replaceTrack(krtc.core/MediaStreamTrack?) // krtc.core/RTCRtpSender.replaceTrack|replaceTrack(krtc.core.MediaStreamTrack?){}[0]
+}
+
+abstract interface krtc.core/RTCRtpTransceiver { // krtc.core/RTCRtpTransceiver|null[0]
+    abstract val mid // krtc.core/RTCRtpTransceiver.mid|{}mid[0]
+        abstract fun <get-mid>(): kotlin/String? // krtc.core/RTCRtpTransceiver.mid.<get-mid>|<get-mid>(){}[0]
+    abstract val receiver // krtc.core/RTCRtpTransceiver.receiver|{}receiver[0]
+        abstract fun <get-receiver>(): krtc.core/RTCRtpReceiver // krtc.core/RTCRtpTransceiver.receiver.<get-receiver>|<get-receiver>(){}[0]
+    abstract val sender // krtc.core/RTCRtpTransceiver.sender|{}sender[0]
+        abstract fun <get-sender>(): krtc.core/RTCRtpSender // krtc.core/RTCRtpTransceiver.sender.<get-sender>|<get-sender>(){}[0]
+
+    abstract var direction // krtc.core/RTCRtpTransceiver.direction|{}direction[0]
+        abstract fun <get-direction>(): krtc.core/RTCRtpTransceiverDirection // krtc.core/RTCRtpTransceiver.direction.<get-direction>|<get-direction>(){}[0]
+        abstract fun <set-direction>(krtc.core/RTCRtpTransceiverDirection) // krtc.core/RTCRtpTransceiver.direction.<set-direction>|<set-direction>(krtc.core.RTCRtpTransceiverDirection){}[0]
+}
+
+final class krtc.core/RTCConfiguration { // krtc.core/RTCConfiguration|null[0]
+    constructor <init>(kotlin.collections/List<krtc.core/RTCIceServer> = ...) // krtc.core/RTCConfiguration.<init>|<init>(kotlin.collections.List<krtc.core.RTCIceServer>){}[0]
+
+    final val iceServers // krtc.core/RTCConfiguration.iceServers|{}iceServers[0]
+        final fun <get-iceServers>(): kotlin.collections/List<krtc.core/RTCIceServer> // krtc.core/RTCConfiguration.iceServers.<get-iceServers>|<get-iceServers>(){}[0]
+
+    final fun component1(): kotlin.collections/List<krtc.core/RTCIceServer> // krtc.core/RTCConfiguration.component1|component1(){}[0]
+    final fun copy(kotlin.collections/List<krtc.core/RTCIceServer> = ...): krtc.core/RTCConfiguration // krtc.core/RTCConfiguration.copy|copy(kotlin.collections.List<krtc.core.RTCIceServer>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCConfiguration.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCConfiguration.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCConfiguration.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCIceServer { // krtc.core/RTCIceServer|null[0]
+    constructor <init>(kotlin.collections/List<kotlin/String>, kotlin/String? = ..., kotlin/String? = ...) // krtc.core/RTCIceServer.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?){}[0]
+
+    final val credential // krtc.core/RTCIceServer.credential|{}credential[0]
+        final fun <get-credential>(): kotlin/String? // krtc.core/RTCIceServer.credential.<get-credential>|<get-credential>(){}[0]
+    final val urls // krtc.core/RTCIceServer.urls|{}urls[0]
+        final fun <get-urls>(): kotlin.collections/List<kotlin/String> // krtc.core/RTCIceServer.urls.<get-urls>|<get-urls>(){}[0]
+    final val username // krtc.core/RTCIceServer.username|{}username[0]
+        final fun <get-username>(): kotlin/String? // krtc.core/RTCIceServer.username.<get-username>|<get-username>(){}[0]
+
+    final fun component1(): kotlin.collections/List<kotlin/String> // krtc.core/RTCIceServer.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // krtc.core/RTCIceServer.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // krtc.core/RTCIceServer.component3|component3(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ..., kotlin/String? = ...): krtc.core/RTCIceServer // krtc.core/RTCIceServer.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.String?;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCIceServer.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCIceServer.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCIceServer.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCSessionDescription { // krtc.core/RTCSessionDescription|null[0]
+    constructor <init>(krtc.core/RTCSdpType, kotlin/String) // krtc.core/RTCSessionDescription.<init>|<init>(krtc.core.RTCSdpType;kotlin.String){}[0]
+
+    final val sdp // krtc.core/RTCSessionDescription.sdp|{}sdp[0]
+        final fun <get-sdp>(): kotlin/String // krtc.core/RTCSessionDescription.sdp.<get-sdp>|<get-sdp>(){}[0]
+    final val type // krtc.core/RTCSessionDescription.type|{}type[0]
+        final fun <get-type>(): krtc.core/RTCSdpType // krtc.core/RTCSessionDescription.type.<get-type>|<get-type>(){}[0]
+
+    final fun component1(): krtc.core/RTCSdpType // krtc.core/RTCSessionDescription.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.core/RTCSessionDescription.component2|component2(){}[0]
+    final fun copy(krtc.core/RTCSdpType = ..., kotlin/String = ...): krtc.core/RTCSessionDescription // krtc.core/RTCSessionDescription.copy|copy(krtc.core.RTCSdpType;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCSessionDescription.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCSessionDescription.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCSessionDescription.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCTrackEvent { // krtc.core/RTCTrackEvent|null[0]
+    constructor <init>(krtc.core/RTCRtpReceiver, krtc.core/MediaStreamTrack, krtc.core/RTCRtpTransceiver) // krtc.core/RTCTrackEvent.<init>|<init>(krtc.core.RTCRtpReceiver;krtc.core.MediaStreamTrack;krtc.core.RTCRtpTransceiver){}[0]
+
+    final val receiver // krtc.core/RTCTrackEvent.receiver|{}receiver[0]
+        final fun <get-receiver>(): krtc.core/RTCRtpReceiver // krtc.core/RTCTrackEvent.receiver.<get-receiver>|<get-receiver>(){}[0]
+    final val track // krtc.core/RTCTrackEvent.track|{}track[0]
+        final fun <get-track>(): krtc.core/MediaStreamTrack // krtc.core/RTCTrackEvent.track.<get-track>|<get-track>(){}[0]
+    final val transceiver // krtc.core/RTCTrackEvent.transceiver|{}transceiver[0]
+        final fun <get-transceiver>(): krtc.core/RTCRtpTransceiver // krtc.core/RTCTrackEvent.transceiver.<get-transceiver>|<get-transceiver>(){}[0]
+}
+
+final object krtc.core/Krtc { // krtc.core/Krtc|null[0]
+    final var factory // krtc.core/Krtc.factory|{}factory[0]
+        final fun <get-factory>(): krtc.core/PeerConnectionFactory // krtc.core/Krtc.factory.<get-factory>|<get-factory>(){}[0]
+        final fun <set-factory>(krtc.core/PeerConnectionFactory) // krtc.core/Krtc.factory.<set-factory>|<set-factory>(krtc.core.PeerConnectionFactory){}[0]
+}

@@ -1,106 +1,100 @@
 # krtc-sfu
 
-Сервер комнат (SFU) на Kotlin Multiplatform. Браузеры подключаются по WebRTC, сервер пересылает аудио (Opus) и видео (VP8/H.264) без декодирования.
-Решения: [ADR-0010](../docs/adr/0010-sfu-before-1.0.md) (архитектура SFU), [ADR-0011](../docs/adr/0011-sfu-kotlin-multiplatform.md) (KMP: общее ядро, JVM и Kotlin/Native).
+Встраиваемый SFU для серверов на Kotlin Multiplatform (JVM, macOS, Linux). Аудио (Opus), видео (VP8/H.264), simulcast, NACK/RTX, PLI/FIR, «говорит». Без HTTP-сервера: транспорт сигнализации, авторизация и пользователи остаются у твоего сервера.
+Архитектура: [ADR-0010](../docs/adr/0010-sfu-before-1.0.md), [ADR-0011](../docs/adr/0011-sfu-kotlin-multiplatform.md), [ADR-0013](../docs/adr/0013-embeddable-sfu.md). Готовое приложение — [krtc-sfu-server](../krtc-sfu-server/README.md).
 
-## Запуск
+## Подключение
 
-Kotlin/Native (macOS, нужен `brew install openssl@3`):
-
-```bash
-./gradlew :krtc-sfu:linkReleaseExecutableMacosArm64
+```kotlin
+// build.gradle.kts хоста
+kotlin {
+    sourceSets.commonMain.dependencies {
+        implementation("krtc:krtc-sfu:0.1.0-SNAPSHOT")       // ядро
+        implementation("krtc:krtc-sfu-ktor:0.1.0-SNAPSHOT")  // если сигнализация через Ktor
+    }
+}
 ```
 
-```bash
-krtc-sfu/build/bin/macosArm64/releaseExecutable/krtc-sfu.kexe --http-port 8080 --udp-port 50000 --announce 127.0.0.1
+Локально: `./gradlew publishToMavenLocal` в репозитории krtc и `mavenLocal()` в репозиториях хоста. Group `krtc` — временный.
+
+На Kotlin/Native флаги OpenSSL прописывать не нужно, они едут в klib:
+- macOS: OpenSSL 3 из Homebrew линкуется статически;
+- Linux: нужны системные `libssl` и `libcrypto` 3.x.
+
+## Встраивание
+
+```kotlin
+val sfu = Sfu(
+    SfuConfig(
+        udpPort = 50000,                         // один UDP-порт на все медиа
+        announcedAddress = "203.0.113.10",       // публичный IP для ICE-кандидата
+        joinPolicy = JoinPolicy { request ->     // твоя авторизация
+            val user = auth.verify(request.credentials) ?: return@JoinPolicy JoinDecision.Deny("unauthorized")
+            if (!user.canJoin(request.room)) JoinDecision.Deny("forbidden")
+            else JoinDecision.Allow(participantId = user.id, displayName = user.name)
+        },
+    ),
+)
+
+// События — в твою логику и аналитику
+scope.launch {
+    sfu.events.collect { event ->
+        when (event) {
+            is SfuEvent.ParticipantJoined -> analytics.joined(event.room, event.participantId)
+            is SfuEvent.SpeakingChanged -> presence.speaking(event.participantId, event.speaking)
+            else -> Unit
+        }
+    }
+}
 ```
 
-JVM:
+**Сигнализация через Ktor:**
 
-```bash
-./gradlew :krtc-sfu:runJvm -PsfuArgs="--http-port 8080 --udp-port 50000 --announce 127.0.0.1"
+```kotlin
+install(WebSockets)
+routing {
+    authenticate { krtcSfu(sfu, "/rtc") }   // или krtcSfu(sfu, "/rtc") { call -> JoinRequest(...) }
+}
 ```
 
-Откройте `http://localhost:8080/` в двух вкладках и войдите в одну комнату. Видео можно выбрать: тестовая анимация, камера или без видео. Кнопки q/h/f на плитке собеседника переключают слой simulcast. Чтобы вкладки не играли звук друг друга, добавьте к адресу `?mute=1`.
+По умолчанию маршрут берёт `room` и `name` из query, а токен — из `Authorization: Bearer` или `?token=` и передаёт его в `JoinRequest.credentials`.
 
-| Параметр | Переменная | По умолчанию | Что это |
-|---|---|---|---|
-| `--http-port` | `KRTC_HTTP_PORT` или `PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics` |
-| `--udp-port` | `KRTC_UDP_PORT` | 50000 | Единственный UDP-порт для всех медиа |
-| `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адрес в ICE-кандидате: публичный IP сервера |
-| `--shards` | `KRTC_SHARDS` | число ядер | Рабочие потоки и UDP-сокеты |
-| `--simulate-loss` | `KRTC_SIMULATE_LOSS` | 0 | Только для тестов: % отбрасываемых исходящих видеопакетов |
+**Сигнализация через свой транспорт** (gRPC, шина, другой WebSocket):
 
-Для доступа не с localhost браузеру нужен HTTPS (getUserMedia). Сервер ставится за обратный прокси с TLS.
-
-## Как устроено
-
-```
-браузер ──WebSocket /ws──► signaling (Ktor CIO) ──► Sfu: offer/answer, комнаты      [commonMain]
-   │
-   └──UDP :50000 (STUN │ DTLS │ SRTP/SRTCP) ──► UdpServer: сокет на шард, SO_REUSEPORT  [jvm: NIO │ native: POSIX]
-                    STUN ─► ICE-lite
-                    DTLS ─► DtlsEndpoint ─► ключи SRTP/SRTCP                         [jvm: BouncyCastle │ native: OpenSSL]
-                    SRTP ─► шард комнаты ─► Room.forward:
-                              расшифровать 1 раз → для каждого получателя:
-                              переписать SSRC/seq/ts → зашифровать → sendto
-                    видео: слой simulcast по rid → у каждого получателя свой слой,
-                           переключение на ключевом кадре, своя нумерация seq/ts/PictureID
-                    SRTCP ─► NACK → повтор из кэша слоя (RTX)
-                             PLI/FIR → PLI отправителю
-                             SR → переслать получателям
-                    сервер → отправителю: REMB раз в секунду, PLI при новом зрителе
+```kotlin
+val sink = object : SignalSink {
+    override fun send(message: ServerMessage) { myConnection.trySend(SignalingProtocol.encode(message)) }
+    override fun close(reason: String) { myConnection.close(reason) }
+}
+val participant = sfu.join(JoinRequest(room, name, credentials = token), sink)   // JoinDeniedException при отказе
+myConnection.onText { text -> sfu.onMessage(participant, text) }
+myConnection.onClose { sfu.leave(participant) }
 ```
 
-Раскладка SDP у каждого участника (сервер всегда отправляет offer):
-- `0` — его микрофон;
-- `1` — его камера; сервер просит simulcast `a=simulcast:recv q;h;f`, и браузер сам отправляет три слоя (¼, ½ и полное разрешение);
-- `2+2i` и `3+2i` — аудио и видео i-го собеседника, или `inactive`: слот свободен или собеседник без видео. Свободные слоты переиспользуются.
+**Управление и мониторинг:**
 
-## Протокол сигнализации
+```kotlin
+sfu.kick(userId, "banned")                     // клиенту уходит bye, сессия закрывается
+sfu.setMuted(userId, audio = true)             // сервер перестаёт пересылать его звук
+sfu.rooms(); sfu.room("team"); sfu.participant(userId)
+sfu.metrics()                                  // SfuMetrics: пакеты, байты, ошибки SRTP, DTLS, очереди шардов
+sfu.close()                                    // bye всем, освобождение порта и потоков
+```
 
-`ws://host/ws?room=<комната>&name=<имя>`, JSON-сообщения:
+## Протокол
 
-| Направление | Сообщение |
-|---|---|
-| сервер → клиент | `{"type":"welcome","id","room","peers":[{"id","name"}]}` |
-| сервер → клиент | `{"type":"offer","version","sdp","mids":{"<mid>":"<id участника>"}}` |
-| клиент → сервер | `{"type":"answer","version","sdp"}` |
-| клиент → сервер | `{"type":"layer","peer","layer":"q"\|"h"\|"f"}` — желаемый слой simulcast для видео участника |
-| сервер → клиент | `{"type":"peer-joined","id","name"}`, `{"type":"peer-left","id"}` |
-| сервер → клиент | `{"type":"speaking","id","speaking":true\|false}` |
+Сообщения — в модуле `krtc-signaling` (`ServerMessage`, `ClientMessage`, `SignalingProtocol`). Его же использует клиент `krtc-client`. Описание формата — в [README приложения](../krtc-sfu-server/README.md#протокол-сигнализации).
 
-Клиент на `offer`:
-1. Вызывает `setRemoteDescription`.
-2. У трансиверов `0` (микрофон) и `1` (камера) ставит `direction = 'sendonly'` и `replaceTrack(...)`.
-3. Отвечает `answer`.
+## Совместимость API
 
-Пример — [index.html](src/commonMain/web/index.html).
-
-## Метрики
-
-`GET /metrics`:
-- `participants`, `rooms`;
-- `rtpIn`/`rtpOut`, `bytesIn`/`bytesOut`, `rtcpIn`/`rtcpOut`;
-- `srtpFailures`, `droppedOverload`;
-- `keyframeRequests`, `nacksAnswered`;
-- `stunRequests`, `stunRejected`, `dtlsConnected`, `dtlsFailed`, `unknownSource`;
-- `shardQueueDepth`.
+Публичное API зафиксировано дампами в `api/` и проверяется задачей `./gradlew :krtc-sfu:checkKotlinAbi`. Намеренные изменения фиксируются через `updateKotlinAbi`.
 
 ## Тесты и бенчмарк
 
 ```bash
-./gradlew :krtc-protocol:jvmTest :krtc-sfu:jvmTest :krtc-sfu:macosArm64Test
+./gradlew :krtc-sfu:jvmTest :krtc-sfu:macosArm64Test
 ```
 
 ```bash
 ./gradlew :krtc-sfu:benchmark
 ```
-
-## Ограничения текущей версии
-
-- SVC (VP9/AV1 с пространственными слоями) не поддерживается, только simulcast.
-- Нет оценки полосы по получателям (TWCC) — отправителю задаётся фиксированный REMB 1,5 Мбит/с.
-- Сервер не запрашивает повторы у отправителя: потери на участке от отправителя до сервера не восстанавливаются, только от сервера до получателя.
-- Только IPv4, нет TURN/TCP и авторизации в сигнализации.
-- Linux-бинари собираются на Linux-хосте с OpenSSL 3.

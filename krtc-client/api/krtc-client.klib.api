@@ -1,0 +1,98 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-client>
+final enum class krtc.client/VideoQuality : kotlin/Enum<krtc.client/VideoQuality> { // krtc.client/VideoQuality|null[0]
+    enum entry HIGH // krtc.client/VideoQuality.HIGH|null[0]
+    enum entry LOW // krtc.client/VideoQuality.LOW|null[0]
+    enum entry MEDIUM // krtc.client/VideoQuality.MEDIUM|null[0]
+
+    final val entries // krtc.client/VideoQuality.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.client/VideoQuality> // krtc.client/VideoQuality.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val rid // krtc.client/VideoQuality.rid|{}rid[0]
+        final fun <get-rid>(): kotlin/String // krtc.client/VideoQuality.rid.<get-rid>|<get-rid>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.client/VideoQuality // krtc.client/VideoQuality.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.client/VideoQuality> // krtc.client/VideoQuality.values|values#static(){}[0]
+}
+
+final class krtc.client/RemoteParticipant { // krtc.client/RemoteParticipant|null[0]
+    final val audio // krtc.client/RemoteParticipant.audio|{}audio[0]
+        final fun <get-audio>(): kotlinx.coroutines.flow/StateFlow<krtc.core/MediaStreamTrack?> // krtc.client/RemoteParticipant.audio.<get-audio>|<get-audio>(){}[0]
+    final val id // krtc.client/RemoteParticipant.id|{}id[0]
+        final fun <get-id>(): kotlin/String // krtc.client/RemoteParticipant.id.<get-id>|<get-id>(){}[0]
+    final val name // krtc.client/RemoteParticipant.name|{}name[0]
+        final fun <get-name>(): kotlin/String // krtc.client/RemoteParticipant.name.<get-name>|<get-name>(){}[0]
+    final val speaking // krtc.client/RemoteParticipant.speaking|{}speaking[0]
+        final fun <get-speaking>(): kotlinx.coroutines.flow/StateFlow<kotlin/Boolean> // krtc.client/RemoteParticipant.speaking.<get-speaking>|<get-speaking>(){}[0]
+    final val video // krtc.client/RemoteParticipant.video|{}video[0]
+        final fun <get-video>(): kotlinx.coroutines.flow/StateFlow<krtc.core/MediaStreamTrack?> // krtc.client/RemoteParticipant.video.<get-video>|<get-video>(){}[0]
+
+    final fun toString(): kotlin/String // krtc.client/RemoteParticipant.toString|toString(){}[0]
+}
+
+final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
+    constructor <init>(kotlin/String, krtc.core/PeerConnectionFactory = ..., krtc.core/RTCConfiguration = ..., io.ktor.client/HttpClient = ..., kotlinx.coroutines/CoroutineScope? = ...) // krtc.client/RoomClient.<init>|<init>(kotlin.String;krtc.core.PeerConnectionFactory;krtc.core.RTCConfiguration;io.ktor.client.HttpClient;kotlinx.coroutines.CoroutineScope?){}[0]
+
+    final val connectionState // krtc.client/RoomClient.connectionState|{}connectionState[0]
+        final fun <get-connectionState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCPeerConnectionState>? // krtc.client/RoomClient.connectionState.<get-connectionState>|<get-connectionState>(){}[0]
+    final val participants // krtc.client/RoomClient.participants|{}participants[0]
+        final fun <get-participants>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<krtc.client/RemoteParticipant>> // krtc.client/RoomClient.participants.<get-participants>|<get-participants>(){}[0]
+    final val selfSpeaking // krtc.client/RoomClient.selfSpeaking|{}selfSpeaking[0]
+        final fun <get-selfSpeaking>(): kotlinx.coroutines.flow/StateFlow<kotlin/Boolean> // krtc.client/RoomClient.selfSpeaking.<get-selfSpeaking>|<get-selfSpeaking>(){}[0]
+    final val state // krtc.client/RoomClient.state|{}state[0]
+        final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<krtc.client/RoomState> // krtc.client/RoomClient.state.<get-state>|<get-state>(){}[0]
+
+    final fun leave() // krtc.client/RoomClient.leave|leave(){}[0]
+    final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun setCamera(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setCamera|setCamera(krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun setMicrophone(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setMicrophone|setMicrophone(krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun setVideoQuality(kotlin/String, krtc.client/VideoQuality) // krtc.client/RoomClient.setVideoQuality|setVideoQuality(kotlin.String;krtc.client.VideoQuality){}[0]
+}
+
+sealed class krtc.client/RoomState { // krtc.client/RoomState|null[0]
+    final class Connected : krtc.client/RoomState { // krtc.client/RoomState.Connected|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // krtc.client/RoomState.Connected.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val room // krtc.client/RoomState.Connected.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.client/RoomState.Connected.room.<get-room>|<get-room>(){}[0]
+        final val selfId // krtc.client/RoomState.Connected.selfId|{}selfId[0]
+            final fun <get-selfId>(): kotlin/String // krtc.client/RoomState.Connected.selfId.<get-selfId>|<get-selfId>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.client/RoomState.Connected.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.client/RoomState.Connected.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): krtc.client/RoomState.Connected // krtc.client/RoomState.Connected.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Connected.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.client/RoomState.Connected.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.client/RoomState.Connected.toString|toString(){}[0]
+    }
+
+    final class Disconnected : krtc.client/RoomState { // krtc.client/RoomState.Disconnected|null[0]
+        constructor <init>(kotlin/String?) // krtc.client/RoomState.Disconnected.<init>|<init>(kotlin.String?){}[0]
+
+        final val reason // krtc.client/RoomState.Disconnected.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String? // krtc.client/RoomState.Disconnected.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/String? // krtc.client/RoomState.Disconnected.component1|component1(){}[0]
+        final fun copy(kotlin/String? = ...): krtc.client/RoomState.Disconnected // krtc.client/RoomState.Disconnected.copy|copy(kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Disconnected.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.client/RoomState.Disconnected.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.client/RoomState.Disconnected.toString|toString(){}[0]
+    }
+
+    final object Connecting : krtc.client/RoomState { // krtc.client/RoomState.Connecting|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Connecting.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.client/RoomState.Connecting.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.client/RoomState.Connecting.toString|toString(){}[0]
+    }
+
+    final object Idle : krtc.client/RoomState { // krtc.client/RoomState.Idle|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Idle.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.client/RoomState.Idle.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.client/RoomState.Idle.toString|toString(){}[0]
+    }
+}

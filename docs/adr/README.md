@@ -22,6 +22,7 @@
 | [0010](0010-sfu-before-1.0.md) | SFU `krtc-sfu` раньше 1.0: архитектура голосового сервера | Принято |
 | [0011](0011-sfu-kotlin-multiplatform.md) | `krtc-sfu` на Kotlin Multiplatform: общее ядро, JVM и Kotlin/Native | Принято |
 | [0012](0012-kmp-client.md) | KMP-клиент: `krtc-core` на интерфейсах и `krtc-client` для Android, iOS, macOS, Linux, Windows, JVM, веба | Предложено |
+| [0013](0013-embeddable-sfu.md) | SFU как встраиваемая KMP-библиотека: `krtc-sfu`, `krtc-sfu-ktor`, `krtc-signaling` | Принято |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

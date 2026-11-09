@@ -2,6 +2,9 @@ package = krtc.sfu.openssl
 headers = openssl/evp.h openssl/ssl.h openssl/err.h openssl/rand.h openssl/x509.h openssl/core_names.h
 headerFilter = openssl/**
 compilerOpts = -DOPENSSL_SUPPRESS_DEPRECATED
+# Propagated to every binary that uses the klib. macOS gets OpenSSL statically from the klib itself.
+linkerOpts.linux_x64 = -lssl -lcrypto
+linkerOpts.linux_arm64 = -lssl -lcrypto
 
 ---
 
@@ -12,12 +15,34 @@ compilerOpts = -DOPENSSL_SUPPRESS_DEPRECATED
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/x509.h>
 #include <openssl/core_names.h>
+
+/* ---------------- Sockets: fields whose widths differ between macOS and Linux ---------------- */
+
+/* Fills a sockaddr_in (zeroed) with an IPv4 address already in network byte order and a host-order port. */
+static inline void krtc_sockaddr_ipv4(void *out, uint32_t addrNetworkOrder, int port) {
+    struct sockaddr_in *a = (struct sockaddr_in *) out;
+    memset(a, 0, sizeof *a);
+    a->sin_family = AF_INET;
+    a->sin_port = htons((uint16_t) port);
+    a->sin_addr.s_addr = addrNetworkOrder;
+}
+
+static inline int krtc_set_recv_timeout_ms(int fd, int ms) {
+    struct timeval tv;
+    tv.tv_sec = ms / 1000;
+    tv.tv_usec = (ms % 1000) * 1000;
+    return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+}
 
 /* ---------------- AES / HMAC ---------------- */
 

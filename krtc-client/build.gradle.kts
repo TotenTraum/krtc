@@ -4,7 +4,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // Room SDK for krtc-sfu on top of krtc-core (ADR-0012): signaling, negotiation, participants, quality.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.kmp.library)
 }
 
@@ -31,13 +30,13 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":krtc-core"))
+            api(project(":krtc-signaling"))
             implementation(project(":krtc-protocol"))
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
-            implementation(libs.kotlinx.serialization.json)
         }
         // Each platform's native HTTP/WebSocket stack, so wss:// uses the system TLS.
-        androidMain.dependencies { implementation(libs.ktor.client.okhttp) }
+        androidMain.dependencies { implementation(libs.ktor.client.cio) } // OkHttp 5 would require compileSdk 37
         jvmMain.dependencies { implementation(libs.ktor.client.cio) }
         appleMain.dependencies { implementation(libs.ktor.client.darwin) }
         linuxMain.dependencies { implementation(libs.ktor.client.curl) }
@@ -49,7 +48,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
         jvmTest.dependencies {
-            implementation(project(":krtc-sfu"))
+            implementation(project(":krtc-sfu-ktor"))
             implementation(libs.ktor.server.cio)
         }
     }

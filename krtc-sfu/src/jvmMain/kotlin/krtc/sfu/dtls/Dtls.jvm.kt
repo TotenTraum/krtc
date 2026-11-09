@@ -37,17 +37,17 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /** Self-signed ECDSA P-256 identity shared by all DTLS sessions of one SFU process. */
-public actual class DtlsIdentity private constructor(
+internal actual class DtlsIdentity private constructor(
     internal val privateKey: PrivateKey,
     internal val certificateDer: ByteArray,
 ) {
     internal val crypto: JcaTlsCrypto = JcaTlsCryptoProvider().create(SecureRandom())
 
     /** `sha-256 AB:CD:...` value for the SDP `a=fingerprint` attribute. */
-    public actual val fingerprint: String = "sha-256 " + sha256Fingerprint(certificateDer)
+    internal actual val fingerprint: String = "sha-256 " + sha256Fingerprint(certificateDer)
 
-    public actual companion object {
-        public actual fun generate(): DtlsIdentity {
+    internal actual companion object {
+        internal actual fun generate(): DtlsIdentity {
             val kpg = KeyPairGenerator.getInstance("EC")
             kpg.initialize(ECGenParameterSpec("secp256r1"))
             val kp = kpg.generateKeyPair()
@@ -69,7 +69,7 @@ public actual class DtlsIdentity private constructor(
  * (we offer `a=setup:passive`). Packets are fed in with [deliver]; outgoing records go to [sender].
  * The handshake runs on a virtual thread so thousands of sessions cost no platform threads.
  */
-public actual class DtlsEndpoint actual constructor(
+internal actual class DtlsEndpoint actual constructor(
     private val identity: DtlsIdentity,
     /** Remote certificate fingerprint from the SDP answer, uppercase hex with colons. */
     private val expectedFingerprint: String,
@@ -84,16 +84,16 @@ public actual class DtlsEndpoint actual constructor(
     private var closed = false
     private var thread: Thread? = null
 
-    public actual fun start() {
+    internal actual fun start() {
         thread = Thread.ofVirtual().name("dtls").start { run() }
     }
 
     /** Called from the UDP thread with a DTLS record (RFC 7983 range 20..63). */
-    public actual fun deliver(data: ByteArray) {
+    internal actual fun deliver(data: ByteArray) {
         if (!closed) inbox.offer(data)
     }
 
-    public actual fun close() {
+    internal actual fun close() {
         closed = true
         thread?.interrupt()
     }

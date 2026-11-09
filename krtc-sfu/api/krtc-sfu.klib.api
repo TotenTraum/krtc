@@ -1,0 +1,403 @@
+// Klib ABI Dump
+// Targets: [linuxArm64, linuxX64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-sfu>
+abstract fun interface krtc.sfu/JoinPolicy { // krtc.sfu/JoinPolicy|null[0]
+    abstract suspend fun decide(krtc.sfu/JoinRequest): krtc.sfu/JoinDecision // krtc.sfu/JoinPolicy.decide|decide(krtc.sfu.JoinRequest){}[0]
+
+    final object Companion { // krtc.sfu/JoinPolicy.Companion|null[0]
+        final val AllowAll // krtc.sfu/JoinPolicy.Companion.AllowAll|{}AllowAll[0]
+            final fun <get-AllowAll>(): krtc.sfu/JoinPolicy // krtc.sfu/JoinPolicy.Companion.AllowAll.<get-AllowAll>|<get-AllowAll>(){}[0]
+    }
+}
+
+abstract interface krtc.sfu/SfuParticipant { // krtc.sfu/SfuParticipant|null[0]
+    abstract val id // krtc.sfu/SfuParticipant.id|{}id[0]
+        abstract fun <get-id>(): kotlin/String // krtc.sfu/SfuParticipant.id.<get-id>|<get-id>(){}[0]
+    abstract val name // krtc.sfu/SfuParticipant.name|{}name[0]
+        abstract fun <get-name>(): kotlin/String // krtc.sfu/SfuParticipant.name.<get-name>|<get-name>(){}[0]
+    abstract val roomName // krtc.sfu/SfuParticipant.roomName|{}roomName[0]
+        abstract fun <get-roomName>(): kotlin/String // krtc.sfu/SfuParticipant.roomName.<get-roomName>|<get-roomName>(){}[0]
+}
+
+abstract interface krtc.sfu/SignalSink { // krtc.sfu/SignalSink|null[0]
+    abstract fun close(kotlin/String) // krtc.sfu/SignalSink.close|close(kotlin.String){}[0]
+    abstract fun send(krtc.signaling/ServerMessage) // krtc.sfu/SignalSink.send|send(krtc.signaling.ServerMessage){}[0]
+}
+
+final class krtc.sfu/JoinDeniedException : kotlin/Exception { // krtc.sfu/JoinDeniedException|null[0]
+    constructor <init>(kotlin/String) // krtc.sfu/JoinDeniedException.<init>|<init>(kotlin.String){}[0]
+
+    final val reason // krtc.sfu/JoinDeniedException.reason|{}reason[0]
+        final fun <get-reason>(): kotlin/String // krtc.sfu/JoinDeniedException.reason.<get-reason>|<get-reason>(){}[0]
+}
+
+final class krtc.sfu/JoinRequest { // krtc.sfu/JoinRequest|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // krtc.sfu/JoinRequest.<init>|<init>(kotlin.String;kotlin.String;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+
+    final val attributes // krtc.sfu/JoinRequest.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.sfu/JoinRequest.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val credentials // krtc.sfu/JoinRequest.credentials|{}credentials[0]
+        final fun <get-credentials>(): kotlin/String? // krtc.sfu/JoinRequest.credentials.<get-credentials>|<get-credentials>(){}[0]
+    final val displayName // krtc.sfu/JoinRequest.displayName|{}displayName[0]
+        final fun <get-displayName>(): kotlin/String // krtc.sfu/JoinRequest.displayName.<get-displayName>|<get-displayName>(){}[0]
+    final val room // krtc.sfu/JoinRequest.room|{}room[0]
+        final fun <get-room>(): kotlin/String // krtc.sfu/JoinRequest.room.<get-room>|<get-room>(){}[0]
+
+    final fun component1(): kotlin/String // krtc.sfu/JoinRequest.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.sfu/JoinRequest.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // krtc.sfu/JoinRequest.component3|component3(){}[0]
+    final fun component4(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.sfu/JoinRequest.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): krtc.sfu/JoinRequest // krtc.sfu/JoinRequest.copy|copy(kotlin.String;kotlin.String;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/JoinRequest.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.sfu/JoinRequest.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.sfu/JoinRequest.toString|toString(){}[0]
+}
+
+final class krtc.sfu/ParticipantInfo { // krtc.sfu/ParticipantInfo|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/Boolean, kotlin/Boolean, kotlin/Boolean) // krtc.sfu/ParticipantInfo.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
+
+    final val audioMuted // krtc.sfu/ParticipantInfo.audioMuted|{}audioMuted[0]
+        final fun <get-audioMuted>(): kotlin/Boolean // krtc.sfu/ParticipantInfo.audioMuted.<get-audioMuted>|<get-audioMuted>(){}[0]
+    final val id // krtc.sfu/ParticipantInfo.id|{}id[0]
+        final fun <get-id>(): kotlin/String // krtc.sfu/ParticipantInfo.id.<get-id>|<get-id>(){}[0]
+    final val mediaConnected // krtc.sfu/ParticipantInfo.mediaConnected|{}mediaConnected[0]
+        final fun <get-mediaConnected>(): kotlin/Boolean // krtc.sfu/ParticipantInfo.mediaConnected.<get-mediaConnected>|<get-mediaConnected>(){}[0]
+    final val name // krtc.sfu/ParticipantInfo.name|{}name[0]
+        final fun <get-name>(): kotlin/String // krtc.sfu/ParticipantInfo.name.<get-name>|<get-name>(){}[0]
+    final val publishesVideo // krtc.sfu/ParticipantInfo.publishesVideo|{}publishesVideo[0]
+        final fun <get-publishesVideo>(): kotlin/Boolean // krtc.sfu/ParticipantInfo.publishesVideo.<get-publishesVideo>|<get-publishesVideo>(){}[0]
+    final val room // krtc.sfu/ParticipantInfo.room|{}room[0]
+        final fun <get-room>(): kotlin/String // krtc.sfu/ParticipantInfo.room.<get-room>|<get-room>(){}[0]
+    final val speaking // krtc.sfu/ParticipantInfo.speaking|{}speaking[0]
+        final fun <get-speaking>(): kotlin/Boolean // krtc.sfu/ParticipantInfo.speaking.<get-speaking>|<get-speaking>(){}[0]
+    final val videoMuted // krtc.sfu/ParticipantInfo.videoMuted|{}videoMuted[0]
+        final fun <get-videoMuted>(): kotlin/Boolean // krtc.sfu/ParticipantInfo.videoMuted.<get-videoMuted>|<get-videoMuted>(){}[0]
+
+    final fun component1(): kotlin/String // krtc.sfu/ParticipantInfo.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.sfu/ParticipantInfo.component2|component2(){}[0]
+    final fun component3(): kotlin/String // krtc.sfu/ParticipantInfo.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // krtc.sfu/ParticipantInfo.component4|component4(){}[0]
+    final fun component5(): kotlin/Boolean // krtc.sfu/ParticipantInfo.component5|component5(){}[0]
+    final fun component6(): kotlin/Boolean // krtc.sfu/ParticipantInfo.component6|component6(){}[0]
+    final fun component7(): kotlin/Boolean // krtc.sfu/ParticipantInfo.component7|component7(){}[0]
+    final fun component8(): kotlin/Boolean // krtc.sfu/ParticipantInfo.component8|component8(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.sfu/ParticipantInfo // krtc.sfu/ParticipantInfo.copy|copy(kotlin.String;kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/ParticipantInfo.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.sfu/ParticipantInfo.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.sfu/ParticipantInfo.toString|toString(){}[0]
+}
+
+final class krtc.sfu/RoomInfo { // krtc.sfu/RoomInfo|null[0]
+    constructor <init>(kotlin/String, kotlin.collections/List<krtc.sfu/ParticipantInfo>) // krtc.sfu/RoomInfo.<init>|<init>(kotlin.String;kotlin.collections.List<krtc.sfu.ParticipantInfo>){}[0]
+
+    final val name // krtc.sfu/RoomInfo.name|{}name[0]
+        final fun <get-name>(): kotlin/String // krtc.sfu/RoomInfo.name.<get-name>|<get-name>(){}[0]
+    final val participants // krtc.sfu/RoomInfo.participants|{}participants[0]
+        final fun <get-participants>(): kotlin.collections/List<krtc.sfu/ParticipantInfo> // krtc.sfu/RoomInfo.participants.<get-participants>|<get-participants>(){}[0]
+
+    final fun component1(): kotlin/String // krtc.sfu/RoomInfo.component1|component1(){}[0]
+    final fun component2(): kotlin.collections/List<krtc.sfu/ParticipantInfo> // krtc.sfu/RoomInfo.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin.collections/List<krtc.sfu/ParticipantInfo> = ...): krtc.sfu/RoomInfo // krtc.sfu/RoomInfo.copy|copy(kotlin.String;kotlin.collections.List<krtc.sfu.ParticipantInfo>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/RoomInfo.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.sfu/RoomInfo.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.sfu/RoomInfo.toString|toString(){}[0]
+}
+
+final class krtc.sfu/Sfu : kotlin/AutoCloseable { // krtc.sfu/Sfu|null[0]
+    constructor <init>(krtc.sfu/SfuConfig = ...) // krtc.sfu/Sfu.<init>|<init>(krtc.sfu.SfuConfig){}[0]
+
+    final val config // krtc.sfu/Sfu.config|{}config[0]
+        final fun <get-config>(): krtc.sfu/SfuConfig // krtc.sfu/Sfu.config.<get-config>|<get-config>(){}[0]
+    final val events // krtc.sfu/Sfu.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/SharedFlow<krtc.sfu/SfuEvent> // krtc.sfu/Sfu.events.<get-events>|<get-events>(){}[0]
+    final val udpPort // krtc.sfu/Sfu.udpPort|{}udpPort[0]
+        final fun <get-udpPort>(): kotlin/Int // krtc.sfu/Sfu.udpPort.<get-udpPort>|<get-udpPort>(){}[0]
+
+    final fun close() // krtc.sfu/Sfu.close|close(){}[0]
+    final fun kick(kotlin/String, kotlin/String = ...): kotlin/Boolean // krtc.sfu/Sfu.kick|kick(kotlin.String;kotlin.String){}[0]
+    final fun leave(krtc.sfu/SfuParticipant, kotlin/String = ...) // krtc.sfu/Sfu.leave|leave(krtc.sfu.SfuParticipant;kotlin.String){}[0]
+    final fun metrics(): krtc.sfu/SfuMetrics // krtc.sfu/Sfu.metrics|metrics(){}[0]
+    final fun onMessage(krtc.sfu/SfuParticipant, kotlin/String) // krtc.sfu/Sfu.onMessage|onMessage(krtc.sfu.SfuParticipant;kotlin.String){}[0]
+    final fun onMessage(krtc.sfu/SfuParticipant, krtc.signaling/ClientMessage) // krtc.sfu/Sfu.onMessage|onMessage(krtc.sfu.SfuParticipant;krtc.signaling.ClientMessage){}[0]
+    final fun participant(kotlin/String): krtc.sfu/ParticipantInfo? // krtc.sfu/Sfu.participant|participant(kotlin.String){}[0]
+    final fun room(kotlin/String): krtc.sfu/RoomInfo? // krtc.sfu/Sfu.room|room(kotlin.String){}[0]
+    final fun rooms(): kotlin.collections/List<krtc.sfu/RoomInfo> // krtc.sfu/Sfu.rooms|rooms(){}[0]
+    final fun setMuted(kotlin/String, kotlin/Boolean? = ..., kotlin/Boolean? = ...): kotlin/Boolean // krtc.sfu/Sfu.setMuted|setMuted(kotlin.String;kotlin.Boolean?;kotlin.Boolean?){}[0]
+    final suspend fun join(krtc.sfu/JoinRequest, krtc.sfu/SignalSink): krtc.sfu/SfuParticipant // krtc.sfu/Sfu.join|join(krtc.sfu.JoinRequest;krtc.sfu.SignalSink){}[0]
+}
+
+final class krtc.sfu/SfuConfig { // krtc.sfu/SfuConfig|null[0]
+    constructor <init>(kotlin/Int = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Int = ..., krtc.sfu/JoinPolicy = ..., kotlin/Int = ..., kotlin/Int = ...) // krtc.sfu/SfuConfig.<init>|<init>(kotlin.Int;kotlin.String;kotlin.String;kotlin.Int;krtc.sfu.JoinPolicy;kotlin.Int;kotlin.Int){}[0]
+
+    final val announcedAddress // krtc.sfu/SfuConfig.announcedAddress|{}announcedAddress[0]
+        final fun <get-announcedAddress>(): kotlin/String // krtc.sfu/SfuConfig.announcedAddress.<get-announcedAddress>|<get-announcedAddress>(){}[0]
+    final val bindAddress // krtc.sfu/SfuConfig.bindAddress|{}bindAddress[0]
+        final fun <get-bindAddress>(): kotlin/String // krtc.sfu/SfuConfig.bindAddress.<get-bindAddress>|<get-bindAddress>(){}[0]
+    final val eventBufferSize // krtc.sfu/SfuConfig.eventBufferSize|{}eventBufferSize[0]
+        final fun <get-eventBufferSize>(): kotlin/Int // krtc.sfu/SfuConfig.eventBufferSize.<get-eventBufferSize>|<get-eventBufferSize>(){}[0]
+    final val joinPolicy // krtc.sfu/SfuConfig.joinPolicy|{}joinPolicy[0]
+        final fun <get-joinPolicy>(): krtc.sfu/JoinPolicy // krtc.sfu/SfuConfig.joinPolicy.<get-joinPolicy>|<get-joinPolicy>(){}[0]
+    final val shards // krtc.sfu/SfuConfig.shards|{}shards[0]
+        final fun <get-shards>(): kotlin/Int // krtc.sfu/SfuConfig.shards.<get-shards>|<get-shards>(){}[0]
+    final val simulatedLossPercent // krtc.sfu/SfuConfig.simulatedLossPercent|{}simulatedLossPercent[0]
+        final fun <get-simulatedLossPercent>(): kotlin/Int // krtc.sfu/SfuConfig.simulatedLossPercent.<get-simulatedLossPercent>|<get-simulatedLossPercent>(){}[0]
+    final val udpPort // krtc.sfu/SfuConfig.udpPort|{}udpPort[0]
+        final fun <get-udpPort>(): kotlin/Int // krtc.sfu/SfuConfig.udpPort.<get-udpPort>|<get-udpPort>(){}[0]
+
+    final fun component1(): kotlin/Int // krtc.sfu/SfuConfig.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.sfu/SfuConfig.component2|component2(){}[0]
+    final fun component3(): kotlin/String // krtc.sfu/SfuConfig.component3|component3(){}[0]
+    final fun component4(): kotlin/Int // krtc.sfu/SfuConfig.component4|component4(){}[0]
+    final fun component5(): krtc.sfu/JoinPolicy // krtc.sfu/SfuConfig.component5|component5(){}[0]
+    final fun component6(): kotlin/Int // krtc.sfu/SfuConfig.component6|component6(){}[0]
+    final fun component7(): kotlin/Int // krtc.sfu/SfuConfig.component7|component7(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/String = ..., kotlin/String = ..., kotlin/Int = ..., krtc.sfu/JoinPolicy = ..., kotlin/Int = ..., kotlin/Int = ...): krtc.sfu/SfuConfig // krtc.sfu/SfuConfig.copy|copy(kotlin.Int;kotlin.String;kotlin.String;kotlin.Int;krtc.sfu.JoinPolicy;kotlin.Int;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuConfig.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.sfu/SfuConfig.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.sfu/SfuConfig.toString|toString(){}[0]
+}
+
+final class krtc.sfu/SfuMetrics { // krtc.sfu/SfuMetrics|null[0]
+    constructor <init>(kotlin/Int, kotlin/Int, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin/Long, kotlin.collections/List<kotlin/Int>) // krtc.sfu/SfuMetrics.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.collections.List<kotlin.Int>){}[0]
+
+    final val bytesIn // krtc.sfu/SfuMetrics.bytesIn|{}bytesIn[0]
+        final fun <get-bytesIn>(): kotlin/Long // krtc.sfu/SfuMetrics.bytesIn.<get-bytesIn>|<get-bytesIn>(){}[0]
+    final val bytesOut // krtc.sfu/SfuMetrics.bytesOut|{}bytesOut[0]
+        final fun <get-bytesOut>(): kotlin/Long // krtc.sfu/SfuMetrics.bytesOut.<get-bytesOut>|<get-bytesOut>(){}[0]
+    final val droppedOverload // krtc.sfu/SfuMetrics.droppedOverload|{}droppedOverload[0]
+        final fun <get-droppedOverload>(): kotlin/Long // krtc.sfu/SfuMetrics.droppedOverload.<get-droppedOverload>|<get-droppedOverload>(){}[0]
+    final val dtlsConnected // krtc.sfu/SfuMetrics.dtlsConnected|{}dtlsConnected[0]
+        final fun <get-dtlsConnected>(): kotlin/Long // krtc.sfu/SfuMetrics.dtlsConnected.<get-dtlsConnected>|<get-dtlsConnected>(){}[0]
+    final val dtlsFailed // krtc.sfu/SfuMetrics.dtlsFailed|{}dtlsFailed[0]
+        final fun <get-dtlsFailed>(): kotlin/Long // krtc.sfu/SfuMetrics.dtlsFailed.<get-dtlsFailed>|<get-dtlsFailed>(){}[0]
+    final val keyframeRequests // krtc.sfu/SfuMetrics.keyframeRequests|{}keyframeRequests[0]
+        final fun <get-keyframeRequests>(): kotlin/Long // krtc.sfu/SfuMetrics.keyframeRequests.<get-keyframeRequests>|<get-keyframeRequests>(){}[0]
+    final val nacksAnswered // krtc.sfu/SfuMetrics.nacksAnswered|{}nacksAnswered[0]
+        final fun <get-nacksAnswered>(): kotlin/Long // krtc.sfu/SfuMetrics.nacksAnswered.<get-nacksAnswered>|<get-nacksAnswered>(){}[0]
+    final val participants // krtc.sfu/SfuMetrics.participants|{}participants[0]
+        final fun <get-participants>(): kotlin/Int // krtc.sfu/SfuMetrics.participants.<get-participants>|<get-participants>(){}[0]
+    final val rooms // krtc.sfu/SfuMetrics.rooms|{}rooms[0]
+        final fun <get-rooms>(): kotlin/Int // krtc.sfu/SfuMetrics.rooms.<get-rooms>|<get-rooms>(){}[0]
+    final val rtcpIn // krtc.sfu/SfuMetrics.rtcpIn|{}rtcpIn[0]
+        final fun <get-rtcpIn>(): kotlin/Long // krtc.sfu/SfuMetrics.rtcpIn.<get-rtcpIn>|<get-rtcpIn>(){}[0]
+    final val rtcpOut // krtc.sfu/SfuMetrics.rtcpOut|{}rtcpOut[0]
+        final fun <get-rtcpOut>(): kotlin/Long // krtc.sfu/SfuMetrics.rtcpOut.<get-rtcpOut>|<get-rtcpOut>(){}[0]
+    final val rtpIn // krtc.sfu/SfuMetrics.rtpIn|{}rtpIn[0]
+        final fun <get-rtpIn>(): kotlin/Long // krtc.sfu/SfuMetrics.rtpIn.<get-rtpIn>|<get-rtpIn>(){}[0]
+    final val rtpOut // krtc.sfu/SfuMetrics.rtpOut|{}rtpOut[0]
+        final fun <get-rtpOut>(): kotlin/Long // krtc.sfu/SfuMetrics.rtpOut.<get-rtpOut>|<get-rtpOut>(){}[0]
+    final val shardQueueDepth // krtc.sfu/SfuMetrics.shardQueueDepth|{}shardQueueDepth[0]
+        final fun <get-shardQueueDepth>(): kotlin.collections/List<kotlin/Int> // krtc.sfu/SfuMetrics.shardQueueDepth.<get-shardQueueDepth>|<get-shardQueueDepth>(){}[0]
+    final val srtpFailures // krtc.sfu/SfuMetrics.srtpFailures|{}srtpFailures[0]
+        final fun <get-srtpFailures>(): kotlin/Long // krtc.sfu/SfuMetrics.srtpFailures.<get-srtpFailures>|<get-srtpFailures>(){}[0]
+    final val stunRejected // krtc.sfu/SfuMetrics.stunRejected|{}stunRejected[0]
+        final fun <get-stunRejected>(): kotlin/Long // krtc.sfu/SfuMetrics.stunRejected.<get-stunRejected>|<get-stunRejected>(){}[0]
+    final val stunRequests // krtc.sfu/SfuMetrics.stunRequests|{}stunRequests[0]
+        final fun <get-stunRequests>(): kotlin/Long // krtc.sfu/SfuMetrics.stunRequests.<get-stunRequests>|<get-stunRequests>(){}[0]
+    final val unknownSource // krtc.sfu/SfuMetrics.unknownSource|{}unknownSource[0]
+        final fun <get-unknownSource>(): kotlin/Long // krtc.sfu/SfuMetrics.unknownSource.<get-unknownSource>|<get-unknownSource>(){}[0]
+
+    final fun component1(): kotlin/Int // krtc.sfu/SfuMetrics.component1|component1(){}[0]
+    final fun component10(): kotlin/Long // krtc.sfu/SfuMetrics.component10|component10(){}[0]
+    final fun component11(): kotlin/Long // krtc.sfu/SfuMetrics.component11|component11(){}[0]
+    final fun component12(): kotlin/Long // krtc.sfu/SfuMetrics.component12|component12(){}[0]
+    final fun component13(): kotlin/Long // krtc.sfu/SfuMetrics.component13|component13(){}[0]
+    final fun component14(): kotlin/Long // krtc.sfu/SfuMetrics.component14|component14(){}[0]
+    final fun component15(): kotlin/Long // krtc.sfu/SfuMetrics.component15|component15(){}[0]
+    final fun component16(): kotlin/Long // krtc.sfu/SfuMetrics.component16|component16(){}[0]
+    final fun component17(): kotlin/Long // krtc.sfu/SfuMetrics.component17|component17(){}[0]
+    final fun component18(): kotlin.collections/List<kotlin/Int> // krtc.sfu/SfuMetrics.component18|component18(){}[0]
+    final fun component2(): kotlin/Int // krtc.sfu/SfuMetrics.component2|component2(){}[0]
+    final fun component3(): kotlin/Long // krtc.sfu/SfuMetrics.component3|component3(){}[0]
+    final fun component4(): kotlin/Long // krtc.sfu/SfuMetrics.component4|component4(){}[0]
+    final fun component5(): kotlin/Long // krtc.sfu/SfuMetrics.component5|component5(){}[0]
+    final fun component6(): kotlin/Long // krtc.sfu/SfuMetrics.component6|component6(){}[0]
+    final fun component7(): kotlin/Long // krtc.sfu/SfuMetrics.component7|component7(){}[0]
+    final fun component8(): kotlin/Long // krtc.sfu/SfuMetrics.component8|component8(){}[0]
+    final fun component9(): kotlin/Long // krtc.sfu/SfuMetrics.component9|component9(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin.collections/List<kotlin/Int> = ...): krtc.sfu/SfuMetrics // krtc.sfu/SfuMetrics.copy|copy(kotlin.Int;kotlin.Int;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.collections.List<kotlin.Int>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuMetrics.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.sfu/SfuMetrics.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.sfu/SfuMetrics.toString|toString(){}[0]
+}
+
+sealed class krtc.sfu/JoinDecision { // krtc.sfu/JoinDecision|null[0]
+    final class Allow : krtc.sfu/JoinDecision { // krtc.sfu/JoinDecision.Allow|null[0]
+        constructor <init>(kotlin/String? = ..., kotlin/String? = ...) // krtc.sfu/JoinDecision.Allow.<init>|<init>(kotlin.String?;kotlin.String?){}[0]
+
+        final val displayName // krtc.sfu/JoinDecision.Allow.displayName|{}displayName[0]
+            final fun <get-displayName>(): kotlin/String? // krtc.sfu/JoinDecision.Allow.displayName.<get-displayName>|<get-displayName>(){}[0]
+        final val participantId // krtc.sfu/JoinDecision.Allow.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String? // krtc.sfu/JoinDecision.Allow.participantId.<get-participantId>|<get-participantId>(){}[0]
+
+        final fun component1(): kotlin/String? // krtc.sfu/JoinDecision.Allow.component1|component1(){}[0]
+        final fun component2(): kotlin/String? // krtc.sfu/JoinDecision.Allow.component2|component2(){}[0]
+        final fun copy(kotlin/String? = ..., kotlin/String? = ...): krtc.sfu/JoinDecision.Allow // krtc.sfu/JoinDecision.Allow.copy|copy(kotlin.String?;kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/JoinDecision.Allow.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/JoinDecision.Allow.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/JoinDecision.Allow.toString|toString(){}[0]
+    }
+
+    final class Deny : krtc.sfu/JoinDecision { // krtc.sfu/JoinDecision.Deny|null[0]
+        constructor <init>(kotlin/String) // krtc.sfu/JoinDecision.Deny.<init>|<init>(kotlin.String){}[0]
+
+        final val reason // krtc.sfu/JoinDecision.Deny.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // krtc.sfu/JoinDecision.Deny.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/JoinDecision.Deny.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.sfu/JoinDecision.Deny // krtc.sfu/JoinDecision.Deny.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/JoinDecision.Deny.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/JoinDecision.Deny.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/JoinDecision.Deny.toString|toString(){}[0]
+    }
+}
+
+sealed class krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent|null[0]
+    abstract val room // krtc.sfu/SfuEvent.room|{}room[0]
+        abstract fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.room.<get-room>|<get-room>(){}[0]
+
+    final class MediaConnected : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.MediaConnected|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String) // krtc.sfu/SfuEvent.MediaConnected.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+        final val participantId // krtc.sfu/SfuEvent.MediaConnected.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val room // krtc.sfu/SfuEvent.MediaConnected.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.room.<get-room>|<get-room>(){}[0]
+        final val srtpProfile // krtc.sfu/SfuEvent.MediaConnected.srtpProfile|{}srtpProfile[0]
+            final fun <get-srtpProfile>(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.srtpProfile.<get-srtpProfile>|<get-srtpProfile>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.component2|component2(){}[0]
+        final fun component3(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): krtc.sfu/SfuEvent.MediaConnected // krtc.sfu/SfuEvent.MediaConnected.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.MediaConnected.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.MediaConnected.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.MediaConnected.toString|toString(){}[0]
+    }
+
+    final class MediaFailed : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.MediaFailed|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String) // krtc.sfu/SfuEvent.MediaFailed.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+        final val error // krtc.sfu/SfuEvent.MediaFailed.error|{}error[0]
+            final fun <get-error>(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.error.<get-error>|<get-error>(){}[0]
+        final val participantId // krtc.sfu/SfuEvent.MediaFailed.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val room // krtc.sfu/SfuEvent.MediaFailed.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.component2|component2(){}[0]
+        final fun component3(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): krtc.sfu/SfuEvent.MediaFailed // krtc.sfu/SfuEvent.MediaFailed.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.MediaFailed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.MediaFailed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.MediaFailed.toString|toString(){}[0]
+    }
+
+    final class ParticipantJoined : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.ParticipantJoined|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String) // krtc.sfu/SfuEvent.ParticipantJoined.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+        final val name // krtc.sfu/SfuEvent.ParticipantJoined.name|{}name[0]
+            final fun <get-name>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.name.<get-name>|<get-name>(){}[0]
+        final val participantId // krtc.sfu/SfuEvent.ParticipantJoined.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val room // krtc.sfu/SfuEvent.ParticipantJoined.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.component2|component2(){}[0]
+        final fun component3(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): krtc.sfu/SfuEvent.ParticipantJoined // krtc.sfu/SfuEvent.ParticipantJoined.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.ParticipantJoined.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.ParticipantJoined.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.ParticipantJoined.toString|toString(){}[0]
+    }
+
+    final class ParticipantLeft : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.ParticipantLeft|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String) // krtc.sfu/SfuEvent.ParticipantLeft.<init>|<init>(kotlin.String;kotlin.String;kotlin.String){}[0]
+
+        final val participantId // krtc.sfu/SfuEvent.ParticipantLeft.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val reason // krtc.sfu/SfuEvent.ParticipantLeft.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.reason.<get-reason>|<get-reason>(){}[0]
+        final val room // krtc.sfu/SfuEvent.ParticipantLeft.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.component2|component2(){}[0]
+        final fun component3(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): krtc.sfu/SfuEvent.ParticipantLeft // krtc.sfu/SfuEvent.ParticipantLeft.copy|copy(kotlin.String;kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.ParticipantLeft.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.ParticipantLeft.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.ParticipantLeft.toString|toString(){}[0]
+    }
+
+    final class RoomClosed : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.RoomClosed|null[0]
+        constructor <init>(kotlin/String) // krtc.sfu/SfuEvent.RoomClosed.<init>|<init>(kotlin.String){}[0]
+
+        final val room // krtc.sfu/SfuEvent.RoomClosed.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.RoomClosed.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.RoomClosed.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.sfu/SfuEvent.RoomClosed // krtc.sfu/SfuEvent.RoomClosed.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.RoomClosed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.RoomClosed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.RoomClosed.toString|toString(){}[0]
+    }
+
+    final class RoomOpened : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.RoomOpened|null[0]
+        constructor <init>(kotlin/String) // krtc.sfu/SfuEvent.RoomOpened.<init>|<init>(kotlin.String){}[0]
+
+        final val room // krtc.sfu/SfuEvent.RoomOpened.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.RoomOpened.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.RoomOpened.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.sfu/SfuEvent.RoomOpened // krtc.sfu/SfuEvent.RoomOpened.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.RoomOpened.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.RoomOpened.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.RoomOpened.toString|toString(){}[0]
+    }
+
+    final class SpeakingChanged : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.SpeakingChanged|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean) // krtc.sfu/SfuEvent.SpeakingChanged.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+
+        final val participantId // krtc.sfu/SfuEvent.SpeakingChanged.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.SpeakingChanged.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val room // krtc.sfu/SfuEvent.SpeakingChanged.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.SpeakingChanged.room.<get-room>|<get-room>(){}[0]
+        final val speaking // krtc.sfu/SfuEvent.SpeakingChanged.speaking|{}speaking[0]
+            final fun <get-speaking>(): kotlin/Boolean // krtc.sfu/SfuEvent.SpeakingChanged.speaking.<get-speaking>|<get-speaking>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.SpeakingChanged.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.SpeakingChanged.component2|component2(){}[0]
+        final fun component3(): kotlin/Boolean // krtc.sfu/SfuEvent.SpeakingChanged.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): krtc.sfu/SfuEvent.SpeakingChanged // krtc.sfu/SfuEvent.SpeakingChanged.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.SpeakingChanged.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.SpeakingChanged.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.SpeakingChanged.toString|toString(){}[0]
+    }
+
+    final class VideoPublishingChanged : krtc.sfu/SfuEvent { // krtc.sfu/SfuEvent.VideoPublishingChanged|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean) // krtc.sfu/SfuEvent.VideoPublishingChanged.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+
+        final val participantId // krtc.sfu/SfuEvent.VideoPublishingChanged.participantId|{}participantId[0]
+            final fun <get-participantId>(): kotlin/String // krtc.sfu/SfuEvent.VideoPublishingChanged.participantId.<get-participantId>|<get-participantId>(){}[0]
+        final val publishing // krtc.sfu/SfuEvent.VideoPublishingChanged.publishing|{}publishing[0]
+            final fun <get-publishing>(): kotlin/Boolean // krtc.sfu/SfuEvent.VideoPublishingChanged.publishing.<get-publishing>|<get-publishing>(){}[0]
+        final val room // krtc.sfu/SfuEvent.VideoPublishingChanged.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.sfu/SfuEvent.VideoPublishingChanged.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.sfu/SfuEvent.VideoPublishingChanged.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.sfu/SfuEvent.VideoPublishingChanged.component2|component2(){}[0]
+        final fun component3(): kotlin/Boolean // krtc.sfu/SfuEvent.VideoPublishingChanged.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): krtc.sfu/SfuEvent.VideoPublishingChanged // krtc.sfu/SfuEvent.VideoPublishingChanged.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.sfu/SfuEvent.VideoPublishingChanged.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.sfu/SfuEvent.VideoPublishingChanged.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.sfu/SfuEvent.VideoPublishingChanged.toString|toString(){}[0]
+    }
+}

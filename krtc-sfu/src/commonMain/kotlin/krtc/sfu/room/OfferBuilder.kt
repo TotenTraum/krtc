@@ -17,12 +17,12 @@ import krtc.protocol.sdp.SessionDescription
  * - per slot i: `2+2i` audio and `3+2i` video of one other participant (sendonly), or `inactive` when
  *   the slot is free (someone left) or that participant sends no video. Free slots are reused.
  */
-public class OfferBuilder(
+internal class OfferBuilder(
     private val announcedAddress: String,
     private val port: Int,
     private val fingerprint: String,
 ) {
-    public fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
+    internal fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
         val sd = SessionDescription()
         sd.lines += SdpLine('v', "0")
         sd.lines += SdpLine('o', "- $sessionId $version IN IP4 0.0.0.0")

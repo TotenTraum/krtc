@@ -3,7 +3,12 @@ package krtc.client
 import io.ktor.server.engine.EmbeddedServer
 import krtc.sfu.Sfu
 import krtc.sfu.SfuConfig
-import krtc.sfu.signaling.startSignaling
+import io.ktor.server.application.install
+import io.ktor.server.cio.CIO
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import krtc.sfu.ktor.krtcSfu
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -27,7 +32,11 @@ class RoomClientSfuTest {
     @BeforeTest
     fun start() {
         sfu = Sfu(SfuConfig(udpPort = 0, shards = 2))
-        server = startSignaling(sfu, 0)
+        // Embedded exactly as a host server would: its own Ktor app with the krtc route.
+        server = embeddedServer(CIO, port = 0) {
+            install(WebSockets)
+            routing { krtcSfu(sfu, "/ws") }
+        }
         server.start(wait = false)
         val port = runBlocking { server.engine.resolvedConnectors().first().port }
         url = "ws://127.0.0.1:$port"
@@ -63,7 +72,7 @@ class RoomClientSfuTest {
             assertNull(bobAtAlice.video.value, "Bob has no camera, so Alice gets no video m-line for him")
 
             // Server-side view agrees: both answered, Bob receives Alice's video.
-            assertEquals(2, sfu.participantCount)
+            assertEquals(2, sfu.metrics().participants)
 
             // Simulcast preference is accepted by the server (no disconnect).
             bob.setVideoQuality(aliceAtBob.id, VideoQuality.LOW)

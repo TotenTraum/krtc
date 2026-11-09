@@ -1,0 +1,8 @@
+public final class krtc/sfu/ktor/KrtcSfuRouteKt {
+	public static final fun getDefaultJoinRequest ()Lkotlin/jvm/functions/Function1;
+	public static final fun krtcSfu (Lio/ktor/server/routing/Route;Lkrtc/sfu/Sfu;Ljava/lang/String;ILkotlin/jvm/functions/Function1;)V
+	public static synthetic fun krtcSfu$default (Lio/ktor/server/routing/Route;Lkrtc/sfu/Sfu;Ljava/lang/String;ILkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
+	public static final fun serve (Lio/ktor/server/websocket/DefaultWebSocketServerSession;Lkrtc/sfu/Sfu;Lkrtc/sfu/JoinRequest;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun serve$default (Lio/ktor/server/websocket/DefaultWebSocketServerSession;Lkrtc/sfu/Sfu;Lkrtc/sfu/JoinRequest;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+

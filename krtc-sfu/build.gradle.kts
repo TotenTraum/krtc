@@ -1,16 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
-// Selective forwarding unit (ADR-0010). Kotlin Multiplatform: the whole SFU lives in commonMain;
-// only crypto primitives, DTLS and UDP sockets are platform-specific:
+// Embeddable SFU library (ADR-0010, ADR-0011, ADR-0013). The whole SFU lives in commonMain; only crypto
+// primitives, DTLS and UDP sockets are platform-specific:
 //   jvm    — JCE (AES-NI), BouncyCastle DTLS, NIO DatagramChannel
 //   native — OpenSSL 3 (EVP, DTLS) via cinterop, POSIX sockets
+// No HTTP server here: signaling transport belongs to the host (or krtc-sfu-ktor).
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
 
-// OpenSSL 3 location for Kotlin/Native. macOS default: Homebrew (linked statically).
-// Linux targets compile against these headers and link the system libssl/libcrypto dynamically.
+// OpenSSL 3 for Kotlin/Native. macOS: Homebrew, packed statically into the klib, so consumers link
+// it without extra flags. Linux: headers from here, system libssl/libcrypto linked dynamically.
 val opensslPrefix: String = (findProperty("openssl.prefix") as String?) ?: "/opt/homebrew/opt/openssl@3"
 
 kotlin {
@@ -19,25 +19,12 @@ kotlin {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_21) }
     }
-
-    val nativeTargets = listOf(macosArm64(), linuxX64(), linuxArm64())
-    nativeTargets.forEach { target: KotlinNativeTarget ->
+    listOf(macosArm64(), linuxX64(), linuxArm64()).forEach { target ->
+        val isMac = target.konanTarget.family.isAppleFamily
         target.compilations.getByName("main").cinterops.create("openssl") {
             defFile(project.file("src/nativeInterop/cinterop/openssl.def"))
             includeDirs("$opensslPrefix/include")
-        }
-        val isMac = target.konanTarget.family.isAppleFamily
-        target.binaries {
-            executable {
-                entryPoint = "krtc.sfu.main"
-                baseName = "krtc-sfu"
-            }
-            all {
-                linkerOpts(
-                    if (isMac) listOf("$opensslPrefix/lib/libssl.a", "$opensslPrefix/lib/libcrypto.a")
-                    else listOf("-lssl", "-lcrypto"),
-                )
-            }
+            if (isMac) extraOpts("-libraryPath", "$opensslPrefix/lib", "-staticLibrary", "libssl.a", "-staticLibrary", "libcrypto.a")
         }
     }
 
@@ -48,57 +35,25 @@ kotlin {
             languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
             languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi")
         }
-        commonMain {
-            kotlin.srcDir(layout.buildDirectory.dir("generated/web"))
-            dependencies {
-                implementation(project(":krtc-protocol"))
-                implementation(libs.kotlinx.coroutines.core)
-                implementation(libs.ktor.server.cio)
-                implementation(libs.ktor.server.websockets)
-                implementation(libs.kotlinx.serialization.json)
-                implementation(libs.atomicfu)
-            }
+        commonMain.dependencies {
+            api(project(":krtc-signaling"))
+            implementation(project(":krtc-protocol"))
+            api(libs.kotlinx.coroutines.core)
+            implementation(libs.ktor.utils)
+            implementation(libs.atomicfu)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
         jvmMain.dependencies {
             implementation(libs.bouncycastle.tls)
             implementation(libs.bouncycastle.pkix)
+        }
+        jvmTest.dependencies {
             runtimeOnly(libs.slf4j.simple)
         }
     }
-}
-
-// The browser test page is compiled into the binary (Kotlin/Native has no classpath resources).
-val generateWeb by tasks.registering {
-    val input = file("src/commonMain/web/index.html")
-    val output = layout.buildDirectory.file("generated/web/krtc/sfu/signaling/WebPage.kt")
-    inputs.file(input)
-    outputs.file(output)
-    doLast {
-        val html = input.readText().replace("$", "\${'$'}")
-        output.get().asFile.apply {
-            parentFile.mkdirs()
-            writeText(
-                "// Generated from src/commonMain/web/index.html by the generateWeb task.\n" +
-                    "package krtc.sfu.signaling\n\ninternal const val INDEX_HTML: String = \"\"\"" + html + "\"\"\"\n",
-            )
-        }
-    }
-}
-tasks.matching { it.name.startsWith("compileKotlin") || it.name == "compileCommonMainKotlinMetadata" || it.name.endsWith("SourcesJar") }
-    .configureEach { dependsOn(generateWeb) }
-
-// ./gradlew :krtc-sfu:runJvm  — run the SFU on the JVM
-tasks.register<JavaExec>("runJvm") {
-    group = "application"
-    val jvm = kotlin.jvm()
-    val main = jvm.compilations.getByName("main")
-    classpath(main.output.allOutputs, main.runtimeDependencyFiles)
-    mainClass.set("krtc.sfu.MainKt")
-    jvmArgs("-XX:+UseZGC", "-Xms256m")
-    args = ((findProperty("sfuArgs") as String?) ?: "").split(" ").filter { it.isNotBlank() }
 }
 
 // ./gradlew :krtc-sfu:benchmark  — forwarding throughput on the JVM

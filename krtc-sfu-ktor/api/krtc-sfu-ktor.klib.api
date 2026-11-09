@@ -1,0 +1,13 @@
+// Klib ABI Dump
+// Targets: [linuxArm64, linuxX64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-sfu-ktor>
+final val krtc.sfu.ktor/DefaultJoinRequest // krtc.sfu.ktor/DefaultJoinRequest|{}DefaultJoinRequest[0]
+    final fun <get-DefaultJoinRequest>(): kotlin/Function1<io.ktor.server.application/ApplicationCall, krtc.sfu/JoinRequest?> // krtc.sfu.ktor/DefaultJoinRequest.<get-DefaultJoinRequest>|<get-DefaultJoinRequest>(){}[0]
+
+final fun (io.ktor.server.routing/Route).krtc.sfu.ktor/krtcSfu(krtc.sfu/Sfu, kotlin/String = ..., kotlin/Int = ..., kotlin/Function1<io.ktor.server.application/ApplicationCall, krtc.sfu/JoinRequest?> = ...) // krtc.sfu.ktor/krtcSfu|krtcSfu@io.ktor.server.routing.Route(krtc.sfu.Sfu;kotlin.String;kotlin.Int;kotlin.Function1<io.ktor.server.application.ApplicationCall,krtc.sfu.JoinRequest?>){}[0]
+final suspend fun (io.ktor.server.websocket/DefaultWebSocketServerSession).krtc.sfu.ktor/serve(krtc.sfu/Sfu, krtc.sfu/JoinRequest?, kotlin/Int = ...) // krtc.sfu.ktor/serve|serve@io.ktor.server.websocket.DefaultWebSocketServerSession(krtc.sfu.Sfu;krtc.sfu.JoinRequest?;kotlin.Int){}[0]

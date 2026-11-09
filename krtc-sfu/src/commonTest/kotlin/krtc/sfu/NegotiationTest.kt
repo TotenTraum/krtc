@@ -2,13 +2,9 @@ package krtc.sfu
 
 import krtc.protocol.sdp.Direction
 import krtc.protocol.sdp.SessionDescription
+import krtc.signaling.ServerMessage
 import krtc.sfu.room.Participant
-import krtc.sfu.room.SignalSink
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
+import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,24 +17,24 @@ class NegotiationTest {
     fun close() = sfu.close()
 
     private class RecordingSink(val camera: Boolean) : SignalSink {
-        val messages = mutableListOf<JsonObject>()
+        val messages = mutableListOf<ServerMessage>()
         val answered = mutableSetOf<Long>()
-        override fun send(message: String) { messages += Json.parseToJsonElement(message).jsonObject }
-        override fun close() {}
-        fun offers() = messages.filter { it["type"]!!.jsonPrimitive.content == "offer" }
+        override fun send(message: ServerMessage) { messages += message }
+        override fun close(reason: String) {}
+        fun offers() = messages.filterIsInstance<ServerMessage.Offer>()
         fun lastOffer() = offers().last()
     }
 
     private val sinks = mutableMapOf<Participant, RecordingSink>()
 
-    private fun join(room: String, name: String, camera: Boolean = false): Participant {
+    private suspend fun join(room: String, name: String, camera: Boolean = false): Participant {
         val sink = RecordingSink(camera)
-        return sfu.join(room, name, sink).also { sinks[it] = sink }
+        return (sfu.join(JoinRequest(room, name), sink) as Participant).also { sinks[it] = sink }
     }
 
     /** Answers like a browser would: mic on mid 0, camera on mid 1 if it has one, receive everything else. */
-    private fun answer(sink: RecordingSink, offer: JsonObject): String {
-        val sd = SessionDescription.parse(offer["sdp"]!!.jsonPrimitive.content)
+    private fun answer(sink: RecordingSink, offer: ServerMessage.Offer): String {
+        val sd = SessionDescription.parse(offer.sdp)
         val lines = mutableListOf("v=0", "o=- 1 1 IN IP4 127.0.0.1", "s=-", "t=0 0", "a=group:BUNDLE " + sd.media.joinToString(" ") { it.mid!! })
         for (m in sd.media) {
             lines += "m=${m.type} 9 UDP/TLS/RTP/SAVPF ${m.formats.joinToString(" ")}"
@@ -62,9 +58,9 @@ class NegotiationTest {
             var answered = false
             for ((p, sink) in sinks) {
                 val offer = sink.offers().lastOrNull() ?: continue
-                val v = offer["version"]!!.jsonPrimitive.long
+                val v = offer.version
                 if (!sink.answered.add(v)) continue
-                sfu.onAnswer(p, v, answer(sink, offer))
+                sfu.onMessage(p, krtc.signaling.ClientMessage.Answer(v, answer(sink, offer)))
                 answered = true
             }
             if (!answered) return
@@ -72,13 +68,12 @@ class NegotiationTest {
     }
 
     private fun directions(p: Participant): List<String> =
-        SessionDescription.parse(sinks[p]!!.lastOffer()["sdp"]!!.jsonPrimitive.content).media.map { "${it.mid}:${it.direction.sdp}" }
+        SessionDescription.parse(sinks[p]!!.lastOffer().sdp).media.map { "${it.mid}:${it.direction.sdp}" }
 
-    private fun mids(p: Participant): Map<String, String> =
-        sinks[p]!!.lastOffer()["mids"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+    private fun mids(p: Participant): Map<String, String> = sinks[p]!!.lastOffer().mids
 
     @Test
-    fun offersFollowMembershipVideoAndReuseSlots() {
+    fun offersFollowMembershipVideoAndReuseSlots() = runTest {
         val a = join("r", "a")
         settle()
         assertEquals(listOf("0:recvonly", "1:recvonly"), directions(a))
@@ -112,7 +107,7 @@ class NegotiationTest {
         assertEquals(d.id, mids(a)["3"])
 
         // offers carry ICE-lite, the passive DTLS role and the SFU's SSRCs (video + RTX in an FID group)
-        val sdp = SessionDescription.parse(sinks[a]!!.lastOffer()["sdp"]!!.jsonPrimitive.content)
+        val sdp = SessionDescription.parse(sinks[a]!!.lastOffer().sdp)
         assertTrue(sdp.hasAttribute("ice-lite"))
         assertEquals("passive", sdp.setup(sdp.media[3]))
         assertEquals(listOf(d.audioOut.ssrc), sdp.media[2].ssrcs)
@@ -122,7 +117,7 @@ class NegotiationTest {
     }
 
     @Test
-    fun offersAreSerializedWhileOneIsOutstanding() {
+    fun offersAreSerializedWhileOneIsOutstanding() = runTest {
         val a = join("q", "a")
         // a has not answered its first offer; two joins must not produce overlapping offers
         join("q", "b")

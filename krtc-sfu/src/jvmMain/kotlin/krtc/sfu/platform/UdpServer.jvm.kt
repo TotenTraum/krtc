@@ -12,7 +12,7 @@ import java.nio.channels.DatagramChannel
  * `DatagramChannel.send` on a per-channel lock, so each shard sends through its own channel.
  * On Linux the kernel also spreads incoming packets across the channels, so each gets a receive thread.
  */
-public actual class UdpServer actual constructor(
+internal actual class UdpServer actual constructor(
     bindHost: String,
     port: Int,
     sockets: Int,
@@ -43,8 +43,8 @@ public actual class UdpServer actual constructor(
         bind(at)
     }
 
-    public actual val localPort: Int get() = (channels[0].localAddress as InetSocketAddress).port
-    public actual val socketCount: Int get() = channels.size
+    internal actual val localPort: Int get() = (channels[0].localAddress as InetSocketAddress).port
+    internal actual val socketCount: Int get() = channels.size
 
     private val threads = channels.mapIndexed { i, ch ->
         Thread.ofPlatform().name("udp-rx-$i").daemon().unstarted { receiveLoop(ch) }
@@ -53,7 +53,7 @@ public actual class UdpServer actual constructor(
     // Direct buffers per sending thread: shards, the UDP threads (STUN) and DTLS threads all send.
     private val sendBuffers = ThreadLocal.withInitial { ByteBuffer.allocateDirect(2048) }
 
-    public actual fun start(): UdpServer = apply { threads.forEach { it.start() } }
+    internal actual fun start(): UdpServer = apply { threads.forEach { it.start() } }
 
     private fun receiveLoop(channel: DatagramChannel) {
         val buf = ByteBuffer.allocateDirect(2048)
@@ -74,7 +74,7 @@ public actual class UdpServer actual constructor(
         }
     }
 
-    public actual fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress) {
+    internal actual fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress) {
         val scratch = sendBuffers.get()
         scratch.clear()
         scratch.put(data, 0, length)
@@ -85,7 +85,7 @@ public actual class UdpServer actual constructor(
         }
     }
 
-    public actual fun close() {
+    internal actual fun close() {
         channels.forEach { it.close() }
     }
 }

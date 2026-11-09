@@ -9,54 +9,54 @@ import kotlin.time.TimeSource
 //   native — OpenSSL 3 EVP via cinterop and POSIX sockets
 
 /** AES-128/256 in counter mode with a full 16-byte IV (SRTP AES-CM and the SRTP KDF). Not thread-safe. */
-public expect class AesCtr(key: ByteArray) {
-    public fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int)
+internal expect class AesCtr(key: ByteArray) {
+    internal fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int)
 }
 
 /** AES-GCM with a 12-byte IV and 16-byte tag (RFC 7714). Not thread-safe. In-place operation is allowed. */
-public expect class AesGcm(key: ByteArray) {
+internal expect class AesGcm(key: ByteArray) {
     /** Writes ciphertext followed by the tag at [outOff]; returns the number of bytes written (length + 16). */
-    public fun encrypt(
+    internal fun encrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int
 
     /** [length] includes the tag. Returns the plaintext length, or -1 if authentication fails. */
-    public fun decrypt(
+    internal fun decrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int
 }
 
 /** HMAC-SHA1 with a fixed key (SRTP authentication). Not thread-safe. */
-public expect class HmacSha1(key: ByteArray) {
-    public fun update(data: ByteArray, offset: Int, length: Int)
+internal expect class HmacSha1(key: ByteArray) {
+    internal fun update(data: ByteArray, offset: Int, length: Int)
 
     /** Writes the 20-byte MAC at [outOff] and resets for the next message. */
-    public fun doFinal(output: ByteArray, outOff: Int)
+    internal fun doFinal(output: ByteArray, outOff: Int)
 }
 
 /** Bytes from the platform's cryptographically secure generator. */
-public expect fun secureRandomBytes(size: Int): ByteArray
+internal expect fun secureRandomBytes(size: Int): ByteArray
 
-public fun secureRandomLong(): Long {
+internal fun secureRandomLong(): Long {
     val b = secureRandomBytes(8)
     var v = 0L
     for (x in b) v = (v shl 8) or (x.toLong() and 0xFF)
     return v
 }
 
-public fun secureRandomInt(bound: Int): Int = ((secureRandomLong() ushr 1) % bound).toInt()
+internal fun secureRandomInt(bound: Int): Int = ((secureRandomLong() ushr 1) % bound).toInt()
 
 private val processStart = TimeSource.Monotonic.markNow()
 
 /** Monotonic milliseconds since process start (for timeouts, never for wall-clock time). */
-public fun nowMillis(): Long = processStart.elapsedNow().inWholeMilliseconds
+internal fun nowMillis(): Long = processStart.elapsedNow().inWholeMilliseconds
 
-public fun logger(name: String): Logger = KtorSimpleLogger(name)
+internal fun logger(name: String): Logger = KtorSimpleLogger(name)
 
 /** A UDP peer: IPv4 (4 bytes) or IPv6 (16 bytes) address and port. Used as a map key. */
-public class PeerAddress(public val ip: ByteArray, public val port: Int) {
+internal class PeerAddress(public val ip: ByteArray, public val port: Int) {
     private val hash = ip.contentHashCode() * 31 + port
 
     override fun equals(other: Any?): Boolean = other is PeerAddress && other.port == port && other.ip.contentEquals(ip)
@@ -70,21 +70,21 @@ public class PeerAddress(public val ip: ByteArray, public val port: Int) {
  * One UDP port for all participants, served by [sockets] SO_REUSEPORT sockets (one send lane per shard).
  * [onPacket] runs on a receive thread with a fresh array (with 16 spare bytes) per datagram.
  */
-public expect class UdpServer(
+internal expect class UdpServer(
     bindHost: String,
     port: Int,
     sockets: Int,
     onPacket: (data: ByteArray, length: Int, from: PeerAddress) -> Unit,
 ) {
-    public val localPort: Int
-    public val socketCount: Int
-    public fun start(): UdpServer
+    internal val localPort: Int
+    internal val socketCount: Int
+    internal fun start(): UdpServer
 
     /** Thread-safe. [lane] picks the socket (a shard index) so shards never contend on one socket. */
-    public fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress)
-    public fun close()
+    internal fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress)
+    internal fun close()
 }
 
-public expect fun availableProcessors(): Int
+internal expect fun availableProcessors(): Int
 
-public expect fun environment(name: String): String?
+internal expect fun environment(name: String): String?

@@ -11,11 +11,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import platform.posix.AF_INET
-import platform.posix.INADDR_ANY
 import platform.posix.SOCK_DGRAM
 import platform.posix.SOL_SOCKET
 import platform.posix.SO_RCVBUF
-import platform.posix.SO_RCVTIMEO
 import platform.posix.SO_REUSEADDR
 import platform.posix.SO_REUSEPORT
 import platform.posix.SO_SNDBUF
@@ -23,7 +21,6 @@ import platform.posix.bind
 import platform.posix.close
 import platform.posix.errno
 import platform.posix.getsockname
-import platform.posix.memset
 import platform.posix.recvfrom
 import platform.posix.sendto
 import platform.posix.setsockopt
@@ -31,7 +28,8 @@ import platform.posix.sockaddr
 import platform.posix.sockaddr_in
 import platform.posix.socket
 import platform.posix.socklen_tVar
-import platform.posix.timeval
+import krtc.sfu.openssl.krtc_set_recv_timeout_ms
+import krtc.sfu.openssl.krtc_sockaddr_ipv4
 import kotlinx.cinterop.IntVar
 import kotlin.concurrent.Volatile
 
@@ -40,7 +38,7 @@ import kotlin.concurrent.Volatile
  * Each socket has a receive thread; on Linux the kernel spreads incoming datagrams across them.
  * IPv4 only for now.
  */
-public actual class UdpServer actual constructor(
+internal actual class UdpServer actual constructor(
     bindHost: String,
     port: Int,
     sockets: Int,
@@ -57,8 +55,8 @@ public actual class UdpServer actual constructor(
         fds = listOf(first) + List(sockets - 1) { open(bindHost, bound, reusePort = true) }
     }
 
-    public actual val localPort: Int = boundPort(fds[0])
-    public actual val socketCount: Int get() = fds.size
+    internal actual val localPort: Int = boundPort(fds[0])
+    internal actual val socketCount: Int get() = fds.size
 
     private fun open(host: String, port: Int, reusePort: Boolean): Int = memScoped {
         val fd = socket(AF_INET, SOCK_DGRAM, 0)
@@ -70,17 +68,10 @@ public actual class UdpServer actual constructor(
         setsockopt(fd, SOL_SOCKET, SO_RCVBUF, bufSize.ptr, sizeOf<IntVar>().convert())
         setsockopt(fd, SOL_SOCKET, SO_SNDBUF, bufSize.ptr, sizeOf<IntVar>().convert())
         // A receive timeout lets the receive threads notice close().
-        val tv = alloc<timeval>().apply { tv_sec = 0.convert(); tv_usec = 500_000.convert() }
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, tv.ptr, sizeOf<timeval>().convert())
+        krtc_set_recv_timeout_ms(fd, 500)
         val addr = alloc<sockaddr_in>()
-        memset(addr.ptr, 0, sizeOf<sockaddr_in>().convert())
-        addr.sin_family = AF_INET.convert()
-        addr.sin_port = hostToNet16(port)
-        if (host == "0.0.0.0" || host.isEmpty()) {
-            addr.sin_addr.s_addr = INADDR_ANY.convert()
-        } else {
-            addr.sin_addr.s_addr = ipv4ToNet(parseIpv4(host)).convert()
-        }
+        val ip = if (host == "0.0.0.0" || host.isEmpty()) 0u else ipv4ToNet(parseIpv4(host))
+        krtc_sockaddr_ipv4(addr.ptr, ip, port)
         check(bind(fd, addr.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) == 0) { "bind($host:$port) failed: errno $errno" }
         fd
     }
@@ -92,7 +83,7 @@ public actual class UdpServer actual constructor(
         netToHost16(addr.sin_port)
     }
 
-    public actual fun start(): UdpServer = apply {
+    internal actual fun start(): UdpServer = apply {
         fds.forEachIndexed { i, fd ->
             CoroutineScope(newSingleThreadContext("udp-rx-$i")).launch { receiveLoop(fd) }
         }
@@ -122,19 +113,16 @@ public actual class UdpServer actual constructor(
         }
     }
 
-    public actual fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress) {
+    internal actual fun send(lane: Int, data: ByteArray, length: Int, to: PeerAddress) {
         if (closed || to.ip.size != 4) return
         memScoped {
             val addr = alloc<sockaddr_in>()
-            memset(addr.ptr, 0, sizeOf<sockaddr_in>().convert())
-            addr.sin_family = AF_INET.convert()
-            addr.sin_port = hostToNet16(to.port)
-            addr.sin_addr.s_addr = ipv4ToNet(to.ip).convert()
+            krtc_sockaddr_ipv4(addr.ptr, ipv4ToNet(to.ip), to.port)
             data.withPointer { sendto(fds[lane % fds.size], it, length.convert(), 0, addr.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) }
         }
     }
 
-    public actual fun close() {
+    internal actual fun close() {
         if (closed) return
         closed = true
         fds.forEach { close(it) }
@@ -151,6 +139,5 @@ public actual class UdpServer actual constructor(
         ((b[2].toUInt() and 0xFFu) shl 16) or ((b[3].toUInt() and 0xFFu) shl 24)
 
     // All supported native targets (x86_64, arm64) are little-endian.
-    private fun hostToNet16(v: Int): UShort = (((v and 0xFF) shl 8) or ((v ushr 8) and 0xFF)).toUShort()
     private fun netToHost16(v: UShort): Int = v.toInt().let { ((it and 0xFF) shl 8) or ((it ushr 8) and 0xFF) }
 }

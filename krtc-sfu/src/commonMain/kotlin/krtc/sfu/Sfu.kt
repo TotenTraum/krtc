@@ -1,18 +1,21 @@
 package krtc.sfu
 
-import kotlin.concurrent.atomics.incrementAndFetch
 import io.ktor.util.collections.ConcurrentMap
 import krtc.protocol.PacketKind
 import krtc.protocol.classifyPacket
+import krtc.protocol.sdp.Direction
 import krtc.protocol.sdp.SessionDescription
 import krtc.protocol.stun.StunConstants
 import krtc.protocol.stun.StunMessage
 import krtc.protocol.stun.StunMessageBuilder
+import krtc.signaling.ClientMessage
+import krtc.signaling.PeerInfo
+import krtc.signaling.ServerMessage
+import krtc.signaling.SignalingProtocol
 import krtc.sfu.dtls.DtlsEndpoint
 import krtc.sfu.dtls.DtlsIdentity
 import krtc.sfu.platform.PeerAddress
 import krtc.sfu.platform.UdpServer
-import krtc.sfu.platform.availableProcessors
 import krtc.sfu.platform.logger
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.platform.secureRandomLong
@@ -21,41 +24,37 @@ import krtc.sfu.room.OfferBuilder
 import krtc.sfu.room.Participant
 import krtc.sfu.room.Room
 import krtc.sfu.room.Shard
-import krtc.sfu.room.SignalSink
 import krtc.sfu.srtp.SrtpSessionKeys
-import krtc.protocol.sdp.Direction
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
-
-public class SfuConfig(
-    public val udpPort: Int = 50000,
-    public val httpPort: Int = 8080,
-    public val bindAddress: String = "0.0.0.0",
-    /** Address put into ICE candidates; must be reachable by clients (public IP behind NAT). */
-    public val announcedAddress: String = "127.0.0.1",
-    public val shards: Int = availableProcessors(),
-    /** Testing only: percentage of downlink video packets to drop, to exercise NACK/RTX recovery. */
-    public val simulatedLossPercent: Int = 0,
-)
+import kotlin.concurrent.atomics.incrementAndFetch
 
 /**
- * The SFU core: rooms, participants, ICE-lite, DTLS-SRTP and offer/answer. Common code for JVM and
- * Kotlin/Native. Transport entry point is [onPacket]; signaling entry points are [join], [onAnswer], [leave].
+ * A selective forwarding unit: rooms, participants, ICE-lite, DTLS-SRTP, RTP/RTCP forwarding with
+ * simulcast. Embeddable in any Kotlin Multiplatform server (JVM or Kotlin/Native); see ADR-0013.
+ *
+ * The host owns signaling transport and identity:
+ * 1. accept a client connection, call [join] with the host's [SignalSink] for that connection;
+ * 2. pass every client message to [onMessage];
+ * 3. call [leave] when the connection closes.
+ *
+ * Media uses one UDP port ([udpPort]) for all participants. Several instances may run in one process
+ * on different ports. [close] stops everything; the instance cannot be reused afterwards.
  */
-public class Sfu(public val config: SfuConfig) : AutoCloseable {
+public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private val log = logger("krtc.sfu.Sfu")
 
-    public val metrics: Metrics = Metrics()
-    public val identity: DtlsIdentity = DtlsIdentity.generate()
+    private val metrics = Metrics()
+    private val identity: DtlsIdentity = DtlsIdentity.generate()
     private val shards = List(config.shards) { Shard(it) }
-    public val udp: UdpServer = UdpServer(config.bindAddress, config.udpPort, config.shards, ::onPacket)
+    private val udp: UdpServer = UdpServer(config.bindAddress, config.udpPort, config.shards, ::onPacket)
     private val offers = OfferBuilder(config.announcedAddress, udp.localPort, identity.fingerprint)
 
     /** Guards membership: [rooms], room member lists and the address table updates. Never held on the media path. */
@@ -65,6 +64,14 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
     private val byUfrag = ConcurrentMap<String, PeerSession>()
     private val byAddress = ConcurrentMap<PeerAddress, PeerSession>()
     private val ids = AtomicLong(0)
+    private val closed = AtomicBoolean(false)
+    private val eventFlow = MutableSharedFlow<SfuEvent>(extraBufferCapacity = config.eventBufferSize, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** The UDP port media actually uses (useful with `udpPort = 0`). */
+    public val udpPort: Int get() = udp.localPort
+
+    /** Room and participant lifecycle, media and speaking events. Never blocks the SFU. */
+    public val events: SharedFlow<SfuEvent> = eventFlow.asSharedFlow()
 
     init {
         for (s in shards) s.every(100) { housekeeping(s) }
@@ -73,68 +80,129 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
         log.info("SFU UDP on ${udp.localPort} (${udp.socketCount} sockets, announced ${config.announcedAddress}), ${shards.size} shards")
     }
 
-    public val participantCount: Int get() = sessions.size
-    public val roomCount: Int get() = synchronized(lock) { rooms.size }
+    // ------------------------------------------------------------------ host API
 
-    public fun metricsJson(): JsonObject = metrics.toJson(participantCount, roomCount, shards)
+    /**
+     * Admits a client per [SfuConfig.joinPolicy] and sends it `welcome` and the first `offer` through [sink].
+     * If the policy assigns an id that is already connected, the older session is replaced.
+     * @throws JoinDeniedException if the policy denies the request
+     */
+    public suspend fun join(request: JoinRequest, sink: SignalSink): SfuParticipant {
+        check(!closed.load()) { "Sfu is closed" }
+        val decision = config.joinPolicy.decide(request)
+        if (decision is JoinDecision.Deny) throw JoinDeniedException(decision.reason)
+        val allow = decision as JoinDecision.Allow
+        allow.participantId?.let { existing -> if (sessions.containsKey(existing)) kick(existing, "replaced by a newer session") }
 
-    // ------------------------------------------------------------------ signaling
-
-    /** Adds a participant to [roomName]; the SFU immediately sends it `welcome` and an `offer`. */
-    public fun join(roomName: String, displayName: String, sink: SignalSink): Participant {
+        val roomName = request.room
+        val name = (allow.displayName ?: request.displayName).take(64)
+        var opened = false
         val (p, session, others) = synchronized(lock) {
             val room = rooms.getOrPut(roomName) {
+                opened = true
                 Room(roomName, shards[roomName.hashCode().mod(shards.size)], udp, ::announceSpeaking, config.simulatedLossPercent)
             }
-            val p = Participant(ids.incrementAndFetch().toString(36), displayName.take(64), room, sink)
+            val id = allow.participantId ?: ids.incrementAndFetch().toString(36)
+            val p = Participant(id, name, room, sink)
             val session = PeerSession(p)
             sessions[p.id] = session
             byUfrag[p.iceUfrag] = session
             Triple(p, session, room.add(p))
         }
-        sink.send(buildJsonObject {
-            put("type", "welcome")
-            put("id", p.id)
-            put("room", roomName)
-            put("peers", buildJsonArray { others.forEach { add(peerJson(it)) } })
-        }.toString())
-        val joined = buildJsonObject { put("type", "peer-joined"); put("id", p.id); put("name", p.name) }.toString()
+        if (opened) eventFlow.tryEmit(SfuEvent.RoomOpened(roomName))
+        sink.send(ServerMessage.Welcome(p.id, roomName, others.map { PeerInfo(it.id, it.name) }))
+        val joined = ServerMessage.PeerJoined(p.id, p.name)
         others.forEach { it.sink.send(joined) }
         session.negotiate()
         others.forEach { sessions[it.id]?.negotiate() }
+        eventFlow.tryEmit(SfuEvent.ParticipantJoined(roomName, p.id, p.name))
         log.info("$p joined room $roomName (${others.size + 1} members)")
         return p
     }
 
-    public fun onAnswer(p: Participant, version: Long, sdp: String) {
-        sessions[p.id]?.onAnswer(version, sdp)
+    /** Handles one message from [participant]'s client. */
+    public fun onMessage(participant: SfuParticipant, message: ClientMessage) {
+        val p = participant as? Participant ?: return
+        when (message) {
+            is ClientMessage.Answer -> sessions[p.id]?.onAnswer(message.version, message.sdp)
+            is ClientMessage.Layer -> {
+                val layer = message.layer.toIntOrNull() ?: MediaPlan.LAYER_RIDS.indexOf(message.layer).takeIf { it >= 0 } ?: return
+                p.room.shard.execute { p.room.setPreferredLayer(p, message.peer, layer) }
+            }
+        }
     }
 
-    /** A subscriber's simulcast preference for one publisher's video (0 = lowest layer). */
-    public fun setPreferredLayer(p: Participant, publisherId: String, layer: Int) {
-        p.room.shard.execute { p.room.setPreferredLayer(p, publisherId, layer) }
+    /** Decodes and handles a JSON message from [participant]'s client; unknown messages are ignored. */
+    public fun onMessage(participant: SfuParticipant, text: String) {
+        SignalingProtocol.decodeClient(text)?.let { onMessage(participant, it) }
     }
 
-    public fun leave(p: Participant) {
+    /** Removes [participant] (its client disconnected). Idempotent. */
+    public fun leave(participant: SfuParticipant, reason: String = "left") {
+        val p = participant as? Participant ?: return
+        var roomClosed = false
         val (session, remaining) = synchronized(lock) {
-            val session = sessions.remove(p.id) ?: return
+            val session = sessions[p.id]?.takeIf { it.participant === p } ?: return
+            sessions.remove(p.id)
             byUfrag.remove(p.iceUfrag)
             p.remote?.let { if (byAddress[it] === session) byAddress.remove(it) }
             val remaining = p.room.remove(p)
-            if (remaining.isEmpty()) rooms.remove(p.room.name)
+            if (remaining.isEmpty()) {
+                rooms.remove(p.room.name)
+                roomClosed = true
+            }
             session to remaining
         }
         session.dtls?.close()
-        val left = buildJsonObject { put("type", "peer-left"); put("id", p.id) }.toString()
+        val left = ServerMessage.PeerLeft(p.id)
         remaining.forEach { it.sink.send(left); sessions[it.id]?.negotiate() }
-        log.info("$p left room ${p.room.name}")
+        eventFlow.tryEmit(SfuEvent.ParticipantLeft(p.room.name, p.id, reason))
+        if (roomClosed) eventFlow.tryEmit(SfuEvent.RoomClosed(p.room.name))
+        log.info("$p left room ${p.room.name}: $reason")
     }
 
-    private fun peerJson(p: Participant) = buildJsonObject { put("id", p.id); put("name", p.name) }
+    /** Ends a participant's session: tells its client (`bye`), closes its sink and removes it. */
+    public fun kick(participantId: String, reason: String = "kicked"): Boolean {
+        val p = sessions[participantId]?.participant ?: return false
+        p.sink.send(ServerMessage.Bye(reason))
+        p.sink.close(reason)
+        leave(p, reason)
+        return true
+    }
+
+    /** Server-side mute: stops (or resumes) forwarding a participant's audio and/or video. */
+    public fun setMuted(participantId: String, audio: Boolean? = null, video: Boolean? = null): Boolean {
+        val p = sessions[participantId]?.participant ?: return false
+        audio?.let { p.audioMuted = it }
+        video?.let { p.videoMuted = it }
+        return true
+    }
+
+    public fun participant(id: String): ParticipantInfo? = sessions[id]?.let(::info)
+
+    public fun room(name: String): RoomInfo? = synchronized(lock) { rooms[name] }?.let { r -> RoomInfo(r.name, r.members.mapNotNull { sessions[it.id]?.let(::info) }) }
+
+    public fun rooms(): List<RoomInfo> = synchronized(lock) { rooms.keys.toList() }.mapNotNull(::room)
+
+    public fun metrics(): SfuMetrics = metrics.snapshot(sessions.size, synchronized(lock) { rooms.size }, shards)
+
+    /** Ends all sessions (`bye` with "server shutdown"), releases the UDP port and worker threads. Idempotent. */
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        sessions.values.map { it.participant.id }.forEach { kick(it, "server shutdown") }
+        udp.close()
+        shards.forEach { it.close() }
+    }
+
+    private fun info(s: PeerSession): ParticipantInfo {
+        val p = s.participant
+        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking)
+    }
 
     private fun announceSpeaking(p: Participant, speaking: Boolean) {
-        val msg = buildJsonObject { put("type", "speaking"); put("id", p.id); put("speaking", speaking) }.toString()
+        val msg = ServerMessage.Speaking(p.id, speaking)
         p.room.members.forEach { it.sink.send(msg) }
+        eventFlow.tryEmit(SfuEvent.SpeakingChanged(p.room.name, p.id, speaking))
     }
 
     // ------------------------------------------------------------------ transport (UDP threads)
@@ -178,7 +246,7 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
         val current = p.remote
         if (current == null || (msg.useCandidate && current != from)) {
             synchronized(lock) {
-                if (!sessions.containsKey(p.id)) return
+                if (sessions[p.id] !== session) return
                 current?.let { if (byAddress[it] === session) byAddress.remove(it) }
                 p.remote = from
                 byAddress[from] = session
@@ -195,16 +263,10 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
             for (p in room.members) {
                 if (p.remote != null && now - p.lastConsentMillis > MediaPlan.CONSENT_TIMEOUT_MILLIS) {
                     log.info("$p consent expired")
-                    p.sink.close()
+                    kick(p.id, "consent expired")
                 }
             }
         }
-    }
-
-    override fun close() {
-        udp.close()
-        shards.forEach { it.close() }
-        sessions.values.forEach { it.dtls?.close() }
     }
 
     // ------------------------------------------------------------------ per-participant negotiation
@@ -220,11 +282,12 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
         private val slots = ArrayList<Participant?>()
 
         @Volatile var dtls: DtlsEndpoint? = null
+        @Volatile var mediaConnected: Boolean = false
         private val earlyDtls = ArrayList<ByteArray>()
 
         /** Sends a new offer reflecting current room membership, or queues one if an offer is outstanding. */
         fun negotiate() = synchronized(negotiation) {
-            if (!sessions.containsKey(participant.id)) return@synchronized
+            if (sessions[participant.id] !== this) return@synchronized
             if (inFlight >= 0) {
                 pending = true
                 return@synchronized
@@ -240,26 +303,22 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
             inFlightSlots = slots.toList()
             inFlightVideo = inFlightSlots.filter { it != null && it.publishesVideo }.map { it!!.id }.toSet()
             val sdp = offers.build(participant, sessionId, version, inFlightSlots).toString()
-            participant.sink.send(buildJsonObject {
-                put("type", "offer")
-                put("version", version)
-                put("sdp", sdp)
-                putJsonObject("mids") {
-                    inFlightSlots.forEachIndexed { i, pub ->
-                        if (pub != null) {
-                            put("${2 + 2 * i}", pub.id)
-                            if (pub.id in inFlightVideo) put("${3 + 2 * i}", pub.id)
-                        }
+            val mids = buildMap {
+                inFlightSlots.forEachIndexed { i, pub ->
+                    if (pub != null) {
+                        put("${2 + 2 * i}", pub.id)
+                        if (pub.id in inFlightVideo) put("${3 + 2 * i}", pub.id)
                     }
                 }
-            }.toString())
+            }
+            participant.sink.send(ServerMessage.Offer(version, sdp, mids))
         }
 
         fun onAnswer(answerVersion: Long, sdp: String) {
             val videoChanged = synchronized(negotiation) {
                 if (answerVersion != inFlight) return
                 val answer = SessionDescription.parse(sdp)
-                if (dtls == null) startDtls(answer)
+                if (dtls == null && !startDtls(answer)) return
                 participant.receiving = inFlightSlots.filterNotNull().map { it.id }.toSet()
                 // New video subscriptions pick a layer and request a key frame on their first packet (Room.forwardVideo).
                 participant.receivingVideo = inFlightVideo
@@ -274,30 +333,40 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
                 }
                 changed
             }
-            // Its video m-line in everyone else's offer changes between sendonly and inactive.
-            if (videoChanged) participant.room.members.filter { it !== participant }.forEach { sessions[it.id]?.negotiate() }
+            if (videoChanged) {
+                // Its video m-line in everyone else's offer changes between sendonly and inactive.
+                participant.room.members.filter { it !== participant }.forEach { sessions[it.id]?.negotiate() }
+                eventFlow.tryEmit(SfuEvent.VideoPublishingChanged(participant.room.name, participant.id, participant.publishesVideo))
+            }
         }
 
-        private fun startDtls(answer: SessionDescription) {
-            val (hash, fp) = answer.fingerprint() ?: return participant.sink.close()
-            if (hash != "sha-256") return participant.sink.close()
+        private fun startDtls(answer: SessionDescription): Boolean {
+            val (hash, fp) = answer.fingerprint() ?: (null to null)
+            if (hash != "sha-256" || fp == null) {
+                kick(participant.id, "answer without a sha-256 DTLS fingerprint")
+                return false
+            }
             val endpoint = DtlsEndpoint(
                 identity, fp,
                 sender = { buf, off, len -> participant.remote?.let { to -> udp.send(0, buf.copyOfRange(off, off + len), len, to) } },
                 onConnected = { keys ->
                     participant.installKeys(SrtpSessionKeys.forDtlsServer(keys.profile, keys.material))
+                    mediaConnected = true
                     metrics.dtlsConnected.incrementAndFetch()
+                    eventFlow.tryEmit(SfuEvent.MediaConnected(participant.room.name, participant.id, keys.profile.name))
                     log.info("$participant DTLS connected, ${keys.profile}")
                 },
                 onFailed = { t ->
                     metrics.dtlsFailed.incrementAndFetch()
+                    eventFlow.tryEmit(SfuEvent.MediaFailed(participant.room.name, participant.id, t.toString()))
                     log.info("$participant DTLS failed: $t")
-                    participant.sink.close()
+                    kick(participant.id, "media connection failed")
                 },
             )
             dtls = endpoint
             endpoint.start()
             flushPendingDtls()
+            return true
         }
 
         fun onDtls(record: ByteArray) {

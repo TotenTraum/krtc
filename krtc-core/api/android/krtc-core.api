@@ -1,0 +1,132 @@
+public final class krtc/core/Krtc {
+	public static final field INSTANCE Lkrtc/core/Krtc;
+	public final fun getFactory ()Lkrtc/core/PeerConnectionFactory;
+	public final fun setFactory (Lkrtc/core/PeerConnectionFactory;)V
+}
+
+public abstract interface class krtc/core/MediaStreamTrack {
+	public abstract fun getEnabled ()Z
+	public abstract fun getId ()Ljava/lang/String;
+	public abstract fun getKind ()Ljava/lang/String;
+	public abstract fun setEnabled (Z)V
+	public abstract fun stop ()V
+}
+
+public abstract interface class krtc/core/PeerConnectionFactory {
+	public abstract fun createPeerConnection (Lkrtc/core/RTCConfiguration;)Lkrtc/core/RTCPeerConnection;
+}
+
+public final class krtc/core/RTCConfiguration {
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Lkrtc/core/RTCConfiguration;
+	public static synthetic fun copy$default (Lkrtc/core/RTCConfiguration;Ljava/util/List;ILjava/lang/Object;)Lkrtc/core/RTCConfiguration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIceServers ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/core/RTCIceServer {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)Lkrtc/core/RTCIceServer;
+	public static synthetic fun copy$default (Lkrtc/core/RTCIceServer;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/core/RTCIceServer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredential ()Ljava/lang/String;
+	public final fun getUrls ()Ljava/util/List;
+	public final fun getUsername ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class krtc/core/RTCPeerConnection : java/lang/AutoCloseable {
+	public abstract fun close ()V
+	public abstract fun createAnswer (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun getConnectionState ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun getLocalDescription ()Lkrtc/core/RTCSessionDescription;
+	public abstract fun getOntrack ()Lkotlinx/coroutines/flow/Flow;
+	public abstract fun getRemoteDescription ()Lkrtc/core/RTCSessionDescription;
+	public abstract fun getTransceivers ()Ljava/util/List;
+	public abstract fun setLocalDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun setRemoteDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class krtc/core/RTCPeerConnectionState : java/lang/Enum {
+	public static final field CLOSED Lkrtc/core/RTCPeerConnectionState;
+	public static final field CONNECTED Lkrtc/core/RTCPeerConnectionState;
+	public static final field CONNECTING Lkrtc/core/RTCPeerConnectionState;
+	public static final field DISCONNECTED Lkrtc/core/RTCPeerConnectionState;
+	public static final field FAILED Lkrtc/core/RTCPeerConnectionState;
+	public static final field NEW Lkrtc/core/RTCPeerConnectionState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/core/RTCPeerConnectionState;
+	public static fun values ()[Lkrtc/core/RTCPeerConnectionState;
+}
+
+public abstract interface class krtc/core/RTCRtpReceiver {
+	public abstract fun getTrack ()Lkrtc/core/MediaStreamTrack;
+}
+
+public abstract interface class krtc/core/RTCRtpSender {
+	public abstract fun getTrack ()Lkrtc/core/MediaStreamTrack;
+	public abstract fun replaceTrack (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class krtc/core/RTCRtpTransceiver {
+	public abstract fun getDirection ()Lkrtc/core/RTCRtpTransceiverDirection;
+	public abstract fun getMid ()Ljava/lang/String;
+	public abstract fun getReceiver ()Lkrtc/core/RTCRtpReceiver;
+	public abstract fun getSender ()Lkrtc/core/RTCRtpSender;
+	public abstract fun setDirection (Lkrtc/core/RTCRtpTransceiverDirection;)V
+}
+
+public final class krtc/core/RTCRtpTransceiverDirection : java/lang/Enum {
+	public static final field INACTIVE Lkrtc/core/RTCRtpTransceiverDirection;
+	public static final field RECVONLY Lkrtc/core/RTCRtpTransceiverDirection;
+	public static final field SENDONLY Lkrtc/core/RTCRtpTransceiverDirection;
+	public static final field SENDRECV Lkrtc/core/RTCRtpTransceiverDirection;
+	public static final field STOPPED Lkrtc/core/RTCRtpTransceiverDirection;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/core/RTCRtpTransceiverDirection;
+	public static fun values ()[Lkrtc/core/RTCRtpTransceiverDirection;
+}
+
+public final class krtc/core/RTCSdpType : java/lang/Enum {
+	public static final field ANSWER Lkrtc/core/RTCSdpType;
+	public static final field OFFER Lkrtc/core/RTCSdpType;
+	public static final field PRANSWER Lkrtc/core/RTCSdpType;
+	public static final field ROLLBACK Lkrtc/core/RTCSdpType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/core/RTCSdpType;
+	public static fun values ()[Lkrtc/core/RTCSdpType;
+}
+
+public final class krtc/core/RTCSessionDescription {
+	public fun <init> (Lkrtc/core/RTCSdpType;Ljava/lang/String;)V
+	public final fun component1 ()Lkrtc/core/RTCSdpType;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lkrtc/core/RTCSdpType;Ljava/lang/String;)Lkrtc/core/RTCSessionDescription;
+	public static synthetic fun copy$default (Lkrtc/core/RTCSessionDescription;Lkrtc/core/RTCSdpType;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/core/RTCSessionDescription;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSdp ()Ljava/lang/String;
+	public final fun getType ()Lkrtc/core/RTCSdpType;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/core/RTCTrackEvent {
+	public fun <init> (Lkrtc/core/RTCRtpReceiver;Lkrtc/core/MediaStreamTrack;Lkrtc/core/RTCRtpTransceiver;)V
+	public final fun getReceiver ()Lkrtc/core/RTCRtpReceiver;
+	public final fun getTrack ()Lkrtc/core/MediaStreamTrack;
+	public final fun getTransceiver ()Lkrtc/core/RTCRtpTransceiver;
+}
+

@@ -17,6 +17,9 @@ import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpTransceiverDirection
 import krtc.core.RTCSdpType
 import krtc.core.RTCSessionDescription
+import krtc.signaling.ClientMessage
+import krtc.signaling.ServerMessage
+import krtc.signaling.SignalingProtocol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -108,11 +111,11 @@ public class RoomClient(
             launch { for (offer in offers) answer(peerConnection, offer) }
             try {
                 for (frame in ws.incoming) {
-                    if (frame is Frame.Text) decodeServerMessage(frame.readText())?.let(::onMessage)
+                    if (frame is Frame.Text) SignalingProtocol.decodeServer(frame.readText())?.let(::onMessage)
                 }
-                stateFlow.value = RoomState.Disconnected("closed by server")
+                if (stateFlow.value !is RoomState.Disconnected) stateFlow.value = RoomState.Disconnected("closed by server")
             } catch (t: Throwable) {
-                stateFlow.value = RoomState.Disconnected(t.message)
+                if (stateFlow.value !is RoomState.Disconnected) stateFlow.value = RoomState.Disconnected(t.message)
             } finally {
                 offers.close()
             }
@@ -134,6 +137,7 @@ public class RoomClient(
                 if (message.id == selfId) selfSpeakingFlow.value = message.speaking
                 else participant(message.id)?.speakingState?.value = message.speaking
             is ServerMessage.Offer -> offers.trySend(message)
+            is ServerMessage.Bye -> stateFlow.value = RoomState.Disconnected(message.reason)
         }
     }
 
@@ -187,20 +191,21 @@ public class RoomClient(
     }
 
     private suspend fun send(message: ClientMessage) {
-        session?.send(Frame.Text(encodeClientMessage(message)))
+        session?.send(Frame.Text(SignalingProtocol.encode(message)))
     }
 
     /** Leaves the room and releases the peer connection. Local tracks stay owned by the caller. */
     public fun leave() {
         val ws = session
-        scope.launch { runCatching { ws?.close() } }.invokeOnCompletion {
-            pc?.close()
-            pc = null
-            session = null
-            participantsFlow.value = emptyList()
-            stateFlow.value = RoomState.Disconnected("left")
-            scope.cancel()
-        }
+        val peer = pc
+        pc = null
+        session = null
+        // Release media and publish the final state before the socket closes, so observers of
+        // `state` never see Disconnected while the peer connection is still open.
+        peer?.close()
+        participantsFlow.value = emptyList()
+        stateFlow.value = RoomState.Disconnected("left")
+        scope.launch { runCatching { ws?.close() } }.invokeOnCompletion { scope.cancel() }
     }
 
     private companion object {

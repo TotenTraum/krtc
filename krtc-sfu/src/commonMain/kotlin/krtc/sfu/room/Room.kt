@@ -20,9 +20,9 @@ import kotlin.concurrent.Volatile
  * A room. Membership changes take a lock and publish an immutable snapshot; the media path reads the
  * snapshot on the room's shard without locking.
  */
-public class Room(
-    public val name: String,
-    public val shard: Shard,
+internal class Room(
+    internal val name: String,
+    internal val shard: Shard,
     private val udp: UdpServer?,
     private val onSpeaking: (Participant, Boolean) -> Unit,
     /** Testing only: drop this percentage of downlink video packets (first transmissions, not RTX). */
@@ -41,13 +41,13 @@ public class Room(
     private val counters get() = shard.counters
     private var lastRemb = 0L
 
-    public fun add(p: Participant): List<Participant> = synchronized(lock) {
+    internal fun add(p: Participant): List<Participant> = synchronized(lock) {
         val before = members
         members = before + p
         before
     }
 
-    public fun remove(p: Participant): List<Participant> = synchronized(lock) {
+    internal fun remove(p: Participant): List<Participant> = synchronized(lock) {
         members = members - p
         members
     }
@@ -56,7 +56,7 @@ public class Room(
      * Media hot path, on the shard thread: authenticate and decrypt once, then rewrite and re-encrypt
      * for every subscriber. Cost is O(subscribers) per packet — the classic SFU fan-out.
      */
-    public fun forward(from: Participant, data: ByteArray, length: Int) {
+    internal fun forward(from: Participant, data: ByteArray, length: Int) {
         val keys = from.keys ?: return
         if (Rtp.isRtcp(data, 0, length)) {
             onRtcp(from, keys, data, length)
@@ -81,6 +81,7 @@ public class Room(
 
     private fun forwardAudio(from: Participant, data: ByteArray, plainLen: Int, h: RtpHeader) {
         from.uplinkAudioSsrc = h.ssrc
+        if (from.audioMuted) return
         trackSpeaking(from, data, h)
         from.audioOut.rewrite(data, h)
         val out = shard.out
@@ -100,6 +101,7 @@ public class Room(
         // Subscribers negotiated their own MID mapping: hide the publisher's MID/RID from them.
         RtpStreamId.rename(data, h, UPLINK_ONLY_EXTENSIONS, MediaPlan.IGNORED_EXT_ID)
         layer.cache.put(h.sequenceNumber, data, plainLen)
+        if (from.videoMuted) return
 
         val payload = h.headerLength
         val payloadLen = h.payloadLength(data, 0, plainLen)
@@ -132,7 +134,7 @@ public class Room(
     }
 
     /** Sets which simulcast layer [subscriber] wants from [publisherId] (0 = lowest). */
-    public fun setPreferredLayer(subscriber: Participant, publisherId: String, layer: Int) {
+    internal fun setPreferredLayer(subscriber: Participant, publisherId: String, layer: Int) {
         val down = subscriber.downlinkFrom(publisherId)
         down.preferred = layer.coerceIn(0, MediaPlan.TOP_LAYER)
         down.target = -1 // re-evaluated on the next packet

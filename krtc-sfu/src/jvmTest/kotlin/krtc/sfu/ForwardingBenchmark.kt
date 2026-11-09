@@ -6,7 +6,6 @@ import krtc.sfu.room.MediaPlan
 import krtc.sfu.room.Participant
 import krtc.sfu.room.Room
 import krtc.sfu.room.Shard
-import krtc.sfu.room.SignalSink
 import krtc.sfu.srtp.SrtcpContext
 import krtc.sfu.srtp.SrtpContext
 import krtc.sfu.srtp.SrtpSessionKeys
@@ -26,8 +25,8 @@ import kotlin.concurrent.thread
  * output packets per second per core / 50.
  */
 private object NoSignal : SignalSink {
-    override fun send(message: String) {}
-    override fun close() {}
+    override fun send(message: krtc.signaling.ServerMessage) {}
+    override fun close(reason: String) {}
 }
 
 private fun keysOf(profile: SrtpProfile, master: ByteArray, salt: ByteArray, rtpIn: SrtpContext? = null, rtpOut: SrtpContext? = null) =

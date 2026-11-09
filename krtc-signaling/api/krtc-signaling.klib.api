@@ -1,0 +1,302 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-signaling>
+final class krtc.signaling/PeerInfo { // krtc.signaling/PeerInfo|null[0]
+    constructor <init>(kotlin/String, kotlin/String) // krtc.signaling/PeerInfo.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+    final val id // krtc.signaling/PeerInfo.id|{}id[0]
+        final fun <get-id>(): kotlin/String // krtc.signaling/PeerInfo.id.<get-id>|<get-id>(){}[0]
+    final val name // krtc.signaling/PeerInfo.name|{}name[0]
+        final fun <get-name>(): kotlin/String // krtc.signaling/PeerInfo.name.<get-name>|<get-name>(){}[0]
+
+    final fun component1(): kotlin/String // krtc.signaling/PeerInfo.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.signaling/PeerInfo.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ...): krtc.signaling/PeerInfo // krtc.signaling/PeerInfo.copy|copy(kotlin.String;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/PeerInfo.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.signaling/PeerInfo.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.signaling/PeerInfo.toString|toString(){}[0]
+
+    final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/PeerInfo> { // krtc.signaling/PeerInfo.$serializer|null[0]
+        final val descriptor // krtc.signaling/PeerInfo.$serializer.descriptor|{}descriptor[0]
+            final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/PeerInfo.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+        final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/PeerInfo.$serializer.childSerializers|childSerializers(){}[0]
+        final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/PeerInfo // krtc.signaling/PeerInfo.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+        final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/PeerInfo) // krtc.signaling/PeerInfo.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.PeerInfo){}[0]
+    }
+
+    final object Companion { // krtc.signaling/PeerInfo.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/PeerInfo> // krtc.signaling/PeerInfo.Companion.serializer|serializer(){}[0]
+    }
+}
+
+sealed class krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage|null[0]
+    final class Answer : krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.Answer|null[0]
+        constructor <init>(kotlin/Long, kotlin/String) // krtc.signaling/ClientMessage.Answer.<init>|<init>(kotlin.Long;kotlin.String){}[0]
+
+        final val sdp // krtc.signaling/ClientMessage.Answer.sdp|{}sdp[0]
+            final fun <get-sdp>(): kotlin/String // krtc.signaling/ClientMessage.Answer.sdp.<get-sdp>|<get-sdp>(){}[0]
+        final val version // krtc.signaling/ClientMessage.Answer.version|{}version[0]
+            final fun <get-version>(): kotlin/Long // krtc.signaling/ClientMessage.Answer.version.<get-version>|<get-version>(){}[0]
+
+        final fun component1(): kotlin/Long // krtc.signaling/ClientMessage.Answer.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.signaling/ClientMessage.Answer.component2|component2(){}[0]
+        final fun copy(kotlin/Long = ..., kotlin/String = ...): krtc.signaling/ClientMessage.Answer // krtc.signaling/ClientMessage.Answer.copy|copy(kotlin.Long;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.Answer.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.Answer.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ClientMessage.Answer.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ClientMessage.Answer> { // krtc.signaling/ClientMessage.Answer.$serializer|null[0]
+            final val descriptor // krtc.signaling/ClientMessage.Answer.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ClientMessage.Answer.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ClientMessage.Answer.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ClientMessage.Answer // krtc.signaling/ClientMessage.Answer.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ClientMessage.Answer) // krtc.signaling/ClientMessage.Answer.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ClientMessage.Answer){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ClientMessage.Answer.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage.Answer> // krtc.signaling/ClientMessage.Answer.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class Layer : krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.Layer|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // krtc.signaling/ClientMessage.Layer.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val layer // krtc.signaling/ClientMessage.Layer.layer|{}layer[0]
+            final fun <get-layer>(): kotlin/String // krtc.signaling/ClientMessage.Layer.layer.<get-layer>|<get-layer>(){}[0]
+        final val peer // krtc.signaling/ClientMessage.Layer.peer|{}peer[0]
+            final fun <get-peer>(): kotlin/String // krtc.signaling/ClientMessage.Layer.peer.<get-peer>|<get-peer>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ClientMessage.Layer.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.signaling/ClientMessage.Layer.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): krtc.signaling/ClientMessage.Layer // krtc.signaling/ClientMessage.Layer.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.Layer.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.Layer.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ClientMessage.Layer.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ClientMessage.Layer> { // krtc.signaling/ClientMessage.Layer.$serializer|null[0]
+            final val descriptor // krtc.signaling/ClientMessage.Layer.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ClientMessage.Layer.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ClientMessage.Layer.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ClientMessage.Layer // krtc.signaling/ClientMessage.Layer.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ClientMessage.Layer) // krtc.signaling/ClientMessage.Layer.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ClientMessage.Layer){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ClientMessage.Layer.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage.Layer> // krtc.signaling/ClientMessage.Layer.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final object Companion : kotlinx.serialization.internal/SerializerFactory { // krtc.signaling/ClientMessage.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage> // krtc.signaling/ClientMessage.Companion.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ClientMessage.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+    }
+}
+
+sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null[0]
+    final class Bye : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.Bye|null[0]
+        constructor <init>(kotlin/String) // krtc.signaling/ServerMessage.Bye.<init>|<init>(kotlin.String){}[0]
+
+        final val reason // krtc.signaling/ServerMessage.Bye.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // krtc.signaling/ServerMessage.Bye.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ServerMessage.Bye.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.signaling/ServerMessage.Bye // krtc.signaling/ServerMessage.Bye.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.Bye.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.Bye.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.Bye.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.Bye> { // krtc.signaling/ServerMessage.Bye.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.Bye.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.Bye.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.Bye.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.Bye // krtc.signaling/ServerMessage.Bye.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.Bye) // krtc.signaling/ServerMessage.Bye.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.Bye){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.Bye.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.Bye> // krtc.signaling/ServerMessage.Bye.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class Offer : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.Offer|null[0]
+        constructor <init>(kotlin/Long, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // krtc.signaling/ServerMessage.Offer.<init>|<init>(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+
+        final val mids // krtc.signaling/ServerMessage.Offer.mids|{}mids[0]
+            final fun <get-mids>(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.signaling/ServerMessage.Offer.mids.<get-mids>|<get-mids>(){}[0]
+        final val sdp // krtc.signaling/ServerMessage.Offer.sdp|{}sdp[0]
+            final fun <get-sdp>(): kotlin/String // krtc.signaling/ServerMessage.Offer.sdp.<get-sdp>|<get-sdp>(){}[0]
+        final val version // krtc.signaling/ServerMessage.Offer.version|{}version[0]
+            final fun <get-version>(): kotlin/Long // krtc.signaling/ServerMessage.Offer.version.<get-version>|<get-version>(){}[0]
+
+        final fun component1(): kotlin/Long // krtc.signaling/ServerMessage.Offer.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.signaling/ServerMessage.Offer.component2|component2(){}[0]
+        final fun component3(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.signaling/ServerMessage.Offer.component3|component3(){}[0]
+        final fun copy(kotlin/Long = ..., kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): krtc.signaling/ServerMessage.Offer // krtc.signaling/ServerMessage.Offer.copy|copy(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.Offer.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.Offer.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.Offer.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.Offer> { // krtc.signaling/ServerMessage.Offer.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.Offer.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.Offer.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.Offer.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.Offer // krtc.signaling/ServerMessage.Offer.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.Offer) // krtc.signaling/ServerMessage.Offer.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.Offer){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.Offer.Companion|null[0]
+            final val $childSerializers // krtc.signaling/ServerMessage.Offer.Companion.$childSerializers|{}$childSerializers[0]
+
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.Offer> // krtc.signaling/ServerMessage.Offer.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class PeerJoined : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.PeerJoined|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // krtc.signaling/ServerMessage.PeerJoined.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val id // krtc.signaling/ServerMessage.PeerJoined.id|{}id[0]
+            final fun <get-id>(): kotlin/String // krtc.signaling/ServerMessage.PeerJoined.id.<get-id>|<get-id>(){}[0]
+        final val name // krtc.signaling/ServerMessage.PeerJoined.name|{}name[0]
+            final fun <get-name>(): kotlin/String // krtc.signaling/ServerMessage.PeerJoined.name.<get-name>|<get-name>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ServerMessage.PeerJoined.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.signaling/ServerMessage.PeerJoined.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): krtc.signaling/ServerMessage.PeerJoined // krtc.signaling/ServerMessage.PeerJoined.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.PeerJoined.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.PeerJoined.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.PeerJoined.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.PeerJoined> { // krtc.signaling/ServerMessage.PeerJoined.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.PeerJoined.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.PeerJoined.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.PeerJoined.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.PeerJoined // krtc.signaling/ServerMessage.PeerJoined.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.PeerJoined) // krtc.signaling/ServerMessage.PeerJoined.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.PeerJoined){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.PeerJoined.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.PeerJoined> // krtc.signaling/ServerMessage.PeerJoined.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class PeerLeft : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.PeerLeft|null[0]
+        constructor <init>(kotlin/String) // krtc.signaling/ServerMessage.PeerLeft.<init>|<init>(kotlin.String){}[0]
+
+        final val id // krtc.signaling/ServerMessage.PeerLeft.id|{}id[0]
+            final fun <get-id>(): kotlin/String // krtc.signaling/ServerMessage.PeerLeft.id.<get-id>|<get-id>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ServerMessage.PeerLeft.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.signaling/ServerMessage.PeerLeft // krtc.signaling/ServerMessage.PeerLeft.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.PeerLeft.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.PeerLeft.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.PeerLeft.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.PeerLeft> { // krtc.signaling/ServerMessage.PeerLeft.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.PeerLeft.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.PeerLeft.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.PeerLeft.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.PeerLeft // krtc.signaling/ServerMessage.PeerLeft.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.PeerLeft) // krtc.signaling/ServerMessage.PeerLeft.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.PeerLeft){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.PeerLeft.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.PeerLeft> // krtc.signaling/ServerMessage.PeerLeft.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class Speaking : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.Speaking|null[0]
+        constructor <init>(kotlin/String, kotlin/Boolean) // krtc.signaling/ServerMessage.Speaking.<init>|<init>(kotlin.String;kotlin.Boolean){}[0]
+
+        final val id // krtc.signaling/ServerMessage.Speaking.id|{}id[0]
+            final fun <get-id>(): kotlin/String // krtc.signaling/ServerMessage.Speaking.id.<get-id>|<get-id>(){}[0]
+        final val speaking // krtc.signaling/ServerMessage.Speaking.speaking|{}speaking[0]
+            final fun <get-speaking>(): kotlin/Boolean // krtc.signaling/ServerMessage.Speaking.speaking.<get-speaking>|<get-speaking>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ServerMessage.Speaking.component1|component1(){}[0]
+        final fun component2(): kotlin/Boolean // krtc.signaling/ServerMessage.Speaking.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Boolean = ...): krtc.signaling/ServerMessage.Speaking // krtc.signaling/ServerMessage.Speaking.copy|copy(kotlin.String;kotlin.Boolean){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.Speaking.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.Speaking.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.Speaking.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.Speaking> { // krtc.signaling/ServerMessage.Speaking.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.Speaking.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.Speaking.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.Speaking.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.Speaking // krtc.signaling/ServerMessage.Speaking.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.Speaking) // krtc.signaling/ServerMessage.Speaking.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.Speaking){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.Speaking.Companion|null[0]
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.Speaking> // krtc.signaling/ServerMessage.Speaking.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final class Welcome : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.Welcome|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin.collections/List<krtc.signaling/PeerInfo>, kotlin/Int = ...) // krtc.signaling/ServerMessage.Welcome.<init>|<init>(kotlin.String;kotlin.String;kotlin.collections.List<krtc.signaling.PeerInfo>;kotlin.Int){}[0]
+
+        final val id // krtc.signaling/ServerMessage.Welcome.id|{}id[0]
+            final fun <get-id>(): kotlin/String // krtc.signaling/ServerMessage.Welcome.id.<get-id>|<get-id>(){}[0]
+        final val peers // krtc.signaling/ServerMessage.Welcome.peers|{}peers[0]
+            final fun <get-peers>(): kotlin.collections/List<krtc.signaling/PeerInfo> // krtc.signaling/ServerMessage.Welcome.peers.<get-peers>|<get-peers>(){}[0]
+        final val protocol // krtc.signaling/ServerMessage.Welcome.protocol|{}protocol[0]
+            final fun <get-protocol>(): kotlin/Int // krtc.signaling/ServerMessage.Welcome.protocol.<get-protocol>|<get-protocol>(){}[0]
+        final val room // krtc.signaling/ServerMessage.Welcome.room|{}room[0]
+            final fun <get-room>(): kotlin/String // krtc.signaling/ServerMessage.Welcome.room.<get-room>|<get-room>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.signaling/ServerMessage.Welcome.component1|component1(){}[0]
+        final fun component2(): kotlin/String // krtc.signaling/ServerMessage.Welcome.component2|component2(){}[0]
+        final fun component3(): kotlin.collections/List<krtc.signaling/PeerInfo> // krtc.signaling/ServerMessage.Welcome.component3|component3(){}[0]
+        final fun component4(): kotlin/Int // krtc.signaling/ServerMessage.Welcome.component4|component4(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin.collections/List<krtc.signaling/PeerInfo> = ..., kotlin/Int = ...): krtc.signaling/ServerMessage.Welcome // krtc.signaling/ServerMessage.Welcome.copy|copy(kotlin.String;kotlin.String;kotlin.collections.List<krtc.signaling.PeerInfo>;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.Welcome.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.Welcome.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ServerMessage.Welcome.toString|toString(){}[0]
+
+        final object $serializer : kotlinx.serialization.internal/GeneratedSerializer<krtc.signaling/ServerMessage.Welcome> { // krtc.signaling/ServerMessage.Welcome.$serializer|null[0]
+            final val descriptor // krtc.signaling/ServerMessage.Welcome.$serializer.descriptor|{}descriptor[0]
+                final fun <get-descriptor>(): kotlinx.serialization.descriptors/SerialDescriptor // krtc.signaling/ServerMessage.Welcome.$serializer.descriptor.<get-descriptor>|<get-descriptor>(){}[0]
+
+            final fun childSerializers(): kotlin/Array<kotlinx.serialization/KSerializer<*>> // krtc.signaling/ServerMessage.Welcome.$serializer.childSerializers|childSerializers(){}[0]
+            final fun deserialize(kotlinx.serialization.encoding/Decoder): krtc.signaling/ServerMessage.Welcome // krtc.signaling/ServerMessage.Welcome.$serializer.deserialize|deserialize(kotlinx.serialization.encoding.Decoder){}[0]
+            final fun serialize(kotlinx.serialization.encoding/Encoder, krtc.signaling/ServerMessage.Welcome) // krtc.signaling/ServerMessage.Welcome.$serializer.serialize|serialize(kotlinx.serialization.encoding.Encoder;krtc.signaling.ServerMessage.Welcome){}[0]
+        }
+
+        final object Companion { // krtc.signaling/ServerMessage.Welcome.Companion|null[0]
+            final val $childSerializers // krtc.signaling/ServerMessage.Welcome.Companion.$childSerializers|{}$childSerializers[0]
+
+            final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage.Welcome> // krtc.signaling/ServerMessage.Welcome.Companion.serializer|serializer(){}[0]
+        }
+    }
+
+    final object Companion : kotlinx.serialization.internal/SerializerFactory { // krtc.signaling/ServerMessage.Companion|null[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ServerMessage> // krtc.signaling/ServerMessage.Companion.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ServerMessage.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+    }
+}
+
+final object krtc.signaling/SignalingProtocol { // krtc.signaling/SignalingProtocol|null[0]
+    final const val VERSION // krtc.signaling/SignalingProtocol.VERSION|{}VERSION[0]
+        final fun <get-VERSION>(): kotlin/Int // krtc.signaling/SignalingProtocol.VERSION.<get-VERSION>|<get-VERSION>(){}[0]
+
+    final val json // krtc.signaling/SignalingProtocol.json|{}json[0]
+        final fun <get-json>(): kotlinx.serialization.json/Json // krtc.signaling/SignalingProtocol.json.<get-json>|<get-json>(){}[0]
+
+    final fun decodeClient(kotlin/String): krtc.signaling/ClientMessage? // krtc.signaling/SignalingProtocol.decodeClient|decodeClient(kotlin.String){}[0]
+    final fun decodeServer(kotlin/String): krtc.signaling/ServerMessage? // krtc.signaling/SignalingProtocol.decodeServer|decodeServer(kotlin.String){}[0]
+    final fun encode(krtc.signaling/ClientMessage): kotlin/String // krtc.signaling/SignalingProtocol.encode|encode(krtc.signaling.ClientMessage){}[0]
+    final fun encode(krtc.signaling/ServerMessage): kotlin/String // krtc.signaling/SignalingProtocol.encode|encode(krtc.signaling.ServerMessage){}[0]
+}

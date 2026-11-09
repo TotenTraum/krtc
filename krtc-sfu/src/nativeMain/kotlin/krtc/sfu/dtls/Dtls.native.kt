@@ -51,18 +51,18 @@ import krtc.sfu.srtp.SrtpProfile
 import kotlin.concurrent.Volatile
 
 /** Kotlin/Native: ECDSA P-256 key, self-signed certificate and a shared DTLS server SSL_CTX (OpenSSL 3). */
-public actual class DtlsIdentity private constructor(
+internal actual class DtlsIdentity private constructor(
     internal val ctx: CPointer<SSL_CTX>,
     certificate: CPointer<X509>,
 ) {
-    public actual val fingerprint: String = "sha-256 " + memScoped {
+    internal actual val fingerprint: String = "sha-256 " + memScoped {
         val out = allocArray<UByteVar>(32)
         check(krtc_cert_sha256(certificate, out) == 32) { "certificate digest failed" }
         fingerprintHex(out.readBytes(32))
     }
 
-    public actual companion object {
-        public actual fun generate(): DtlsIdentity {
+    internal actual companion object {
+        internal actual fun generate(): DtlsIdentity {
             val key: CPointer<EVP_PKEY> = krtc_ec_p256_key() ?: error("EC key generation failed: ${lastError()}")
             val cert = krtc_self_signed(key, "krtc-sfu") ?: error("certificate generation failed: ${lastError()}")
             val ctx = krtc_dtls_ctx(cert, key) ?: error("DTLS context failed: ${lastError()}")
@@ -82,7 +82,7 @@ internal fun lastError(): String = memScoped {
  * object: it feeds incoming records, drives the retransmission timer and, after the handshake,
  * keeps servicing the association (retransmitting our last flight if the client resends its own).
  */
-public actual class DtlsEndpoint actual constructor(
+internal actual class DtlsEndpoint actual constructor(
     private val identity: DtlsIdentity,
     private val expectedFingerprint: String,
     private val sender: (ByteArray, Int, Int) -> Unit,
@@ -95,15 +95,15 @@ public actual class DtlsEndpoint actual constructor(
 
     @Volatile private var closed = false
 
-    public actual fun start() {
+    internal actual fun start() {
         job = CoroutineScope(Dispatchers.Default).launch { run() }
     }
 
-    public actual fun deliver(data: ByteArray) {
+    internal actual fun deliver(data: ByteArray) {
         if (!closed) inbox.trySend(data)
     }
 
-    public actual fun close() {
+    internal actual fun close() {
         closed = true
         inbox.close()
     }

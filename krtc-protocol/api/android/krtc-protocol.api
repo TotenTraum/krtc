@@ -1,0 +1,306 @@
+public final class krtc/protocol/BytesKt {
+	public static final fun classifyPacket ([BII)Lkrtc/protocol/PacketKind;
+	public static synthetic fun classifyPacket$default ([BIIILjava/lang/Object;)Lkrtc/protocol/PacketKind;
+	public static final fun constantTimeEquals ([BI[BII)Z
+	public static final fun hexToBytes (Ljava/lang/String;)[B
+	public static final fun putU16 ([BII)V
+	public static final fun putU32 ([BIJ)V
+	public static final fun toHex ([BII)Ljava/lang/String;
+	public static synthetic fun toHex$default ([BIIILjava/lang/Object;)Ljava/lang/String;
+	public static final fun u16 ([BI)I
+	public static final fun u32 ([BI)J
+	public static final fun u8 ([BI)I
+}
+
+public final class krtc/protocol/PacketKind : java/lang/Enum {
+	public static final field DTLS Lkrtc/protocol/PacketKind;
+	public static final field RTP_OR_RTCP Lkrtc/protocol/PacketKind;
+	public static final field STUN Lkrtc/protocol/PacketKind;
+	public static final field UNKNOWN Lkrtc/protocol/PacketKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/protocol/PacketKind;
+	public static fun values ()[Lkrtc/protocol/PacketKind;
+}
+
+public final class krtc/protocol/crypto/Crc32 {
+	public static final field INSTANCE Lkrtc/protocol/crypto/Crc32;
+	public final fun compute ([BII)J
+	public static synthetic fun compute$default (Lkrtc/protocol/crypto/Crc32;[BIIILjava/lang/Object;)J
+}
+
+public final class krtc/protocol/crypto/Sha1 {
+	public static final field DIGEST_LENGTH I
+	public static final field INSTANCE Lkrtc/protocol/crypto/Sha1;
+	public final fun digest ([BII)[B
+	public static synthetic fun digest$default (Lkrtc/protocol/crypto/Sha1;[BIIILjava/lang/Object;)[B
+	public final fun hmac ([B[BII)[B
+	public static synthetic fun hmac$default (Lkrtc/protocol/crypto/Sha1;[B[BIIILjava/lang/Object;)[B
+}
+
+public final class krtc/protocol/rtp/AudioLevel {
+	public static final field Companion Lkrtc/protocol/rtp/AudioLevel$Companion;
+	public static final field URI Ljava/lang/String;
+	public fun <init> (ZI)V
+	public final fun getLevel ()I
+	public final fun getVoiceActivity ()Z
+}
+
+public final class krtc/protocol/rtp/AudioLevel$Companion {
+	public final fun read ([BI)Lkrtc/protocol/rtp/AudioLevel;
+}
+
+public final class krtc/protocol/rtp/H264 {
+	public static final field INSTANCE Lkrtc/protocol/rtp/H264;
+	public final fun isKeyFrame ([BII)Z
+}
+
+public final class krtc/protocol/rtp/Rtcp {
+	public static final field BYE I
+	public static final field FMT_AFB I
+	public static final field FMT_FIR I
+	public static final field FMT_NACK I
+	public static final field FMT_PLI I
+	public static final field INSTANCE Lkrtc/protocol/rtp/Rtcp;
+	public static final field PSFB I
+	public static final field RR I
+	public static final field RTPFB I
+	public static final field SDES I
+	public static final field SR I
+	public final fun concat ([[B)[B
+	public final fun fir (JJI)[B
+	public final fun firTargets ([BII)Ljava/util/List;
+	public final fun forEach ([BIILkotlin/jvm/functions/Function4;)V
+	public final fun mediaSsrc ([BI)J
+	public final fun nackSequences ([BII)Ljava/util/List;
+	public final fun pli (JJ)[B
+	public final fun receiverReport (J)[B
+	public final fun remb (JJLjava/util/List;)[B
+	public final fun rembBitrate ([BII)J
+	public final fun rewriteSenderReport ([BIJJ)[B
+	public final fun senderReportRtpTimestamp ([BI)J
+	public final fun senderSsrc ([BI)J
+}
+
+public final class krtc/protocol/rtp/Rtp {
+	public static final field INSTANCE Lkrtc/protocol/rtp/Rtp;
+	public final fun isRtcp ([BII)Z
+	public final fun seqDelta (II)I
+	public final fun setSequenceNumber ([BII)V
+	public final fun setSsrc ([BIJ)V
+	public final fun setTimestamp ([BIJ)V
+}
+
+public final class krtc/protocol/rtp/RtpHeader {
+	public fun <init> ()V
+	public final fun findExtension ([BII)I
+	public final fun getCsrcCount ()I
+	public final fun getExtensionLength ()I
+	public final fun getExtensionOffset ()I
+	public final fun getExtensionProfile ()I
+	public final fun getHeaderLength ()I
+	public final fun getLastElementLength ()I
+	public final fun getMarker ()Z
+	public final fun getPadding ()Z
+	public final fun getPayloadType ()I
+	public final fun getSequenceNumber ()I
+	public final fun getSsrc ()J
+	public final fun getTimestamp ()J
+	public final fun parse ([BII)Z
+	public final fun payloadLength ([BII)I
+}
+
+public final class krtc/protocol/rtp/RtpStreamId {
+	public static final field INSTANCE Lkrtc/protocol/rtp/RtpStreamId;
+	public static final field MID_URI Ljava/lang/String;
+	public static final field REPAIRED_RID_URI Ljava/lang/String;
+	public static final field RID_URI Ljava/lang/String;
+	public final fun read ([BLkrtc/protocol/rtp/RtpHeader;I)Ljava/lang/String;
+	public final fun rename ([BLkrtc/protocol/rtp/RtpHeader;[II)V
+}
+
+public final class krtc/protocol/rtp/Vp8 {
+	public static final field INSTANCE Lkrtc/protocol/rtp/Vp8;
+	public final fun isKeyFrame ([BIILkrtc/protocol/rtp/Vp8$Descriptor;)Z
+	public final fun parse ([BIILkrtc/protocol/rtp/Vp8$Descriptor;)Z
+	public final fun setPictureId ([BILkrtc/protocol/rtp/Vp8$Descriptor;I)V
+	public final fun setTl0PicIdx ([BILkrtc/protocol/rtp/Vp8$Descriptor;I)V
+}
+
+public final class krtc/protocol/rtp/Vp8$Descriptor {
+	public fun <init> ()V
+	public final fun getPartitionId ()I
+	public final fun getPictureId ()I
+	public final fun getPictureIdBits ()I
+	public final fun getPictureIdOffset ()I
+	public final fun getSize ()I
+	public final fun getStart ()Z
+	public final fun getTl0Offset ()I
+	public final fun getTl0PicIdx ()I
+}
+
+public final class krtc/protocol/sdp/Direction : java/lang/Enum {
+	public static final field Companion Lkrtc/protocol/sdp/Direction$Companion;
+	public static final field INACTIVE Lkrtc/protocol/sdp/Direction;
+	public static final field RECVONLY Lkrtc/protocol/sdp/Direction;
+	public static final field SENDONLY Lkrtc/protocol/sdp/Direction;
+	public static final field SENDRECV Lkrtc/protocol/sdp/Direction;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSdp ()Ljava/lang/String;
+	public final fun reversed ()Lkrtc/protocol/sdp/Direction;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/protocol/sdp/Direction;
+	public static fun values ()[Lkrtc/protocol/sdp/Direction;
+}
+
+public final class krtc/protocol/sdp/Direction$Companion {
+	public final fun of (Ljava/lang/String;)Lkrtc/protocol/sdp/Direction;
+}
+
+public abstract interface class krtc/protocol/sdp/HasAttributes {
+	public fun attribute (Ljava/lang/String;)Ljava/lang/String;
+	public fun attributes (Ljava/lang/String;)Ljava/util/List;
+	public abstract fun getAttributes ()Ljava/util/List;
+	public fun hasAttribute (Ljava/lang/String;)Z
+}
+
+public final class krtc/protocol/sdp/HasAttributes$DefaultImpls {
+	public static fun attribute (Lkrtc/protocol/sdp/HasAttributes;Ljava/lang/String;)Ljava/lang/String;
+	public static fun attributes (Lkrtc/protocol/sdp/HasAttributes;Ljava/lang/String;)Ljava/util/List;
+	public static fun hasAttribute (Lkrtc/protocol/sdp/HasAttributes;Ljava/lang/String;)Z
+}
+
+public final class krtc/protocol/sdp/MediaDescription : krtc/protocol/sdp/HasAttributes {
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun attribute (Ljava/lang/String;)Ljava/lang/String;
+	public fun attributes (Ljava/lang/String;)Ljava/util/List;
+	public fun getAttributes ()Ljava/util/List;
+	public final fun getDirection ()Lkrtc/protocol/sdp/Direction;
+	public final fun getExtensions ()Ljava/util/Map;
+	public final fun getFormats ()Ljava/util/List;
+	public final fun getLines ()Ljava/util/List;
+	public final fun getMid ()Ljava/lang/String;
+	public final fun getPort ()I
+	public final fun getProto ()Ljava/lang/String;
+	public final fun getRtpMaps ()Ljava/util/Map;
+	public final fun getSsrcs ()Ljava/util/List;
+	public final fun getType ()Ljava/lang/String;
+	public fun hasAttribute (Ljava/lang/String;)Z
+	public final fun setPort (I)V
+	public final fun setProto (Ljava/lang/String;)V
+	public final fun setType (Ljava/lang/String;)V
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/protocol/sdp/SdpAttribute {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lkrtc/protocol/sdp/SdpAttribute;
+	public static synthetic fun copy$default (Lkrtc/protocol/sdp/SdpAttribute;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/protocol/sdp/SdpAttribute;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/protocol/sdp/SdpLine {
+	public fun <init> (CLjava/lang/String;)V
+	public final fun component1 ()C
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (CLjava/lang/String;)Lkrtc/protocol/sdp/SdpLine;
+	public static synthetic fun copy$default (Lkrtc/protocol/sdp/SdpLine;CLjava/lang/String;ILjava/lang/Object;)Lkrtc/protocol/sdp/SdpLine;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getType ()C
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/protocol/sdp/SessionDescription : krtc/protocol/sdp/HasAttributes {
+	public static final field Companion Lkrtc/protocol/sdp/SessionDescription$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun attribute (Ljava/lang/String;)Ljava/lang/String;
+	public fun attributes (Ljava/lang/String;)Ljava/util/List;
+	public final fun effective (Lkrtc/protocol/sdp/MediaDescription;Ljava/lang/String;)Ljava/lang/String;
+	public final fun fingerprint (Lkrtc/protocol/sdp/MediaDescription;)Lkotlin/Pair;
+	public static synthetic fun fingerprint$default (Lkrtc/protocol/sdp/SessionDescription;Lkrtc/protocol/sdp/MediaDescription;ILjava/lang/Object;)Lkotlin/Pair;
+	public fun getAttributes ()Ljava/util/List;
+	public final fun getLines ()Ljava/util/List;
+	public final fun getMedia ()Ljava/util/List;
+	public fun hasAttribute (Ljava/lang/String;)Z
+	public final fun icePwd (Lkrtc/protocol/sdp/MediaDescription;)Ljava/lang/String;
+	public static synthetic fun icePwd$default (Lkrtc/protocol/sdp/SessionDescription;Lkrtc/protocol/sdp/MediaDescription;ILjava/lang/Object;)Ljava/lang/String;
+	public final fun iceUfrag (Lkrtc/protocol/sdp/MediaDescription;)Ljava/lang/String;
+	public static synthetic fun iceUfrag$default (Lkrtc/protocol/sdp/SessionDescription;Lkrtc/protocol/sdp/MediaDescription;ILjava/lang/Object;)Ljava/lang/String;
+	public final fun setup (Lkrtc/protocol/sdp/MediaDescription;)Ljava/lang/String;
+	public static synthetic fun setup$default (Lkrtc/protocol/sdp/SessionDescription;Lkrtc/protocol/sdp/MediaDescription;ILjava/lang/Object;)Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/protocol/sdp/SessionDescription$Companion {
+	public final fun parse (Ljava/lang/String;)Lkrtc/protocol/sdp/SessionDescription;
+}
+
+public final class krtc/protocol/stun/StunAttribute {
+	public fun <init> (I[BI)V
+	public final fun getPosition ()I
+	public final fun getType ()I
+	public final fun getValue ()[B
+}
+
+public final class krtc/protocol/stun/StunConstants {
+	public static final field ATTR_ERROR_CODE I
+	public static final field ATTR_FINGERPRINT I
+	public static final field ATTR_ICE_CONTROLLED I
+	public static final field ATTR_ICE_CONTROLLING I
+	public static final field ATTR_MESSAGE_INTEGRITY I
+	public static final field ATTR_PRIORITY I
+	public static final field ATTR_SOFTWARE I
+	public static final field ATTR_USERNAME I
+	public static final field ATTR_USE_CANDIDATE I
+	public static final field ATTR_XOR_MAPPED_ADDRESS I
+	public static final field BINDING_ERROR I
+	public static final field BINDING_INDICATION I
+	public static final field BINDING_REQUEST I
+	public static final field BINDING_SUCCESS I
+	public static final field HEADER_LENGTH I
+	public static final field INSTANCE Lkrtc/protocol/stun/StunConstants;
+	public static final field MAGIC_COOKIE J
+}
+
+public final class krtc/protocol/stun/StunMessage {
+	public static final field Companion Lkrtc/protocol/stun/StunMessage$Companion;
+	public final fun attribute (I)Lkrtc/protocol/stun/StunAttribute;
+	public final fun getAttributes ()Ljava/util/List;
+	public final fun getPriority ()Ljava/lang/Long;
+	public final fun getTransactionId ()[B
+	public final fun getType ()I
+	public final fun getUseCandidate ()Z
+	public final fun getUsername ()Ljava/lang/String;
+	public final fun has (I)Z
+	public final fun verifyFingerprint ()Z
+	public final fun verifyIntegrity ([B)Z
+}
+
+public final class krtc/protocol/stun/StunMessage$Companion {
+	public final fun parse ([BII)Lkrtc/protocol/stun/StunMessage;
+	public static synthetic fun parse$default (Lkrtc/protocol/stun/StunMessage$Companion;[BIIILjava/lang/Object;)Lkrtc/protocol/stun/StunMessage;
+}
+
+public final class krtc/protocol/stun/StunMessageBuilder {
+	public fun <init> (I[B)V
+	public final fun attribute (I[B)Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun build ([BZ)[B
+	public static synthetic fun build$default (Lkrtc/protocol/stun/StunMessageBuilder;[BZILjava/lang/Object;)[B
+	public final fun errorCode (ILjava/lang/String;)Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun priority (J)Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun software (Ljava/lang/String;)Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun useCandidate ()Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun username (Ljava/lang/String;)Lkrtc/protocol/stun/StunMessageBuilder;
+	public final fun xorMappedAddress ([BI)Lkrtc/protocol/stun/StunMessageBuilder;
+}
+

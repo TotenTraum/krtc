@@ -7,30 +7,26 @@ import krtc.sfu.platform.PeerAddress
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.platform.secureRandomInt
 import krtc.sfu.platform.secureRandomLong
+import krtc.sfu.SfuParticipant
+import krtc.sfu.SignalSink
 import krtc.sfu.srtp.SrtpSessionKeys
 import kotlin.concurrent.Volatile
-
-/** Outbound signaling channel of a participant (implemented by the WebSocket layer). Must not block. */
-public interface SignalSink {
-    public fun send(message: String)
-    public fun close()
-}
 
 /**
  * Rewrites one forwarded audio stream (SSRC, sequence number, timestamp) so subscribers see a
  * continuous stream under an SSRC the SFU chose, even when the publisher restarts its stream.
  * Shard thread only.
  */
-public class OutboundStream(public val ssrc: Long, private val clockRate: Int) {
+internal class OutboundStream(public val ssrc: Long, private val clockRate: Int) {
     private var lastSourceSsrc = -1L
     private var seqOffset = 0
     private var tsOffset = 0L
     private var started = false
-    public var lastOutSeq: Int = 0; private set
-    public var lastOutTs: Long = 0; private set
+    internal var lastOutSeq: Int = 0; private set
+    internal var lastOutTs: Long = 0; private set
 
     /** Rewrites the header of the plaintext packet in [buf] in place; returns the new sequence number. */
-    public fun rewrite(buf: ByteArray, h: RtpHeader): Int {
+    internal fun rewrite(buf: ByteArray, h: RtpHeader): Int {
         if (h.ssrc != lastSourceSsrc) {
             if (lastSourceSsrc >= 0) {
                 seqOffset = (lastOutSeq + 1 - h.sequenceNumber) and 0xFFFF
@@ -51,16 +47,16 @@ public class OutboundStream(public val ssrc: Long, private val clockRate: Int) {
         return seq
     }
 
-    public fun mapTimestamp(sourceTs: Long): Long = (sourceTs + tsOffset) and 0xFFFFFFFFL
+    internal fun mapTimestamp(sourceTs: Long): Long = (sourceTs + tsOffset) and 0xFFFFFFFFL
 }
 
 /** Ring buffer of recent packets keyed by sequence number. Allocation-free after warm-up. Shard thread only. */
-public class PacketCache(private val capacity: Int) {
+internal class PacketCache(private val capacity: Int) {
     private val seqs = IntArray(capacity) { -1 }
     private val packets = arrayOfNulls<ByteArray>(capacity)
     private val lengths = IntArray(capacity)
 
-    public fun put(seq: Int, buf: ByteArray, length: Int) {
+    internal fun put(seq: Int, buf: ByteArray, length: Int) {
         val i = seq % capacity
         val slot = packets[i]?.takeIf { it.size >= length } ?: ByteArray(maxOf(length, 1400)).also { packets[i] = it }
         buf.copyInto(slot, 0, 0, length)
@@ -68,18 +64,18 @@ public class PacketCache(private val capacity: Int) {
         seqs[i] = seq
     }
 
-    public fun packet(seq: Int): ByteArray? = if (seqs[seq % capacity] == seq) packets[seq % capacity] else null
-    public fun length(seq: Int): Int = lengths[seq % capacity]
+    internal fun packet(seq: Int): ByteArray? = if (seqs[seq % capacity] == seq) packets[seq % capacity] else null
+    internal fun length(seq: Int): Int = lengths[seq % capacity]
 }
 
 /** One simulcast layer of a publisher's video uplink. Shard thread only. */
-public class VideoLayer(public val index: Int) {
-    public var ssrc: Long = -1; internal set
-    public var lastPacketMillis: Long = -1; internal set
+internal class VideoLayer(public val index: Int) {
+    internal var ssrc: Long = -1; internal set
+    internal var lastPacketMillis: Long = -1; internal set
     internal val cache = PacketCache(MediaPlan.VIDEO_CACHE_PACKETS)
     internal var lastKeyframeRequest = -1L
 
-    public fun isActive(now: Long): Boolean = lastPacketMillis >= 0 && now - lastPacketMillis < MediaPlan.LAYER_TIMEOUT_MILLIS
+    internal fun isActive(now: Long): Boolean = lastPacketMillis >= 0 && now - lastPacketMillis < MediaPlan.LAYER_TIMEOUT_MILLIS
 }
 
 /**
@@ -88,11 +84,11 @@ public class VideoLayer(public val index: Int) {
  * Also remembers which source packet went out under each sequence number, so NACKs are served from the
  * publisher's per-layer cache without a per-subscriber packet copy. Shard thread only.
  */
-public class DownlinkVideo {
+internal class DownlinkVideo {
     /** Layer the subscriber asked for (by default the top one); the SFU sends the best active layer ≤ it. */
-    public var preferred: Int = MediaPlan.TOP_LAYER
-    public var current: Int = -1; internal set
-    public var target: Int = -1; internal set
+    internal var preferred: Int = MediaPlan.TOP_LAYER
+    internal var current: Int = -1; internal set
+    internal var target: Int = -1; internal set
 
     private var started = false
     private var seqOffset = 0
@@ -167,32 +163,38 @@ public class DownlinkVideo {
  * - media (room's shard thread only): keys, uplink SSRCs and layers, downlink state, speaking;
  * - negotiation results (volatile snapshots written by Sfu.PeerSession).
  */
-public class Participant(
-    public val id: String,
-    public val name: String,
-    public val room: Room,
-    public val sink: SignalSink,
-) {
+internal class Participant(
+    override val id: String,
+    override val name: String,
+    internal val room: Room,
+    internal val sink: SignalSink,
+) : SfuParticipant {
+    override val roomName: String get() = room.name
+
+    /** Server-side mute: the SFU stops forwarding this participant's audio / video. */
+    @Volatile internal var audioMuted: Boolean = false
+    @Volatile internal var videoMuted: Boolean = false
+
     // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char)
-    public val iceUfrag: String = randomIceString(8)
-    public val icePwd: String = randomIceString(24)
-    public val icePwdBytes: ByteArray = icePwd.encodeToByteArray()
-    public val cname: String = randomIceString(16)
+    internal val iceUfrag: String = randomIceString(8)
+    internal val icePwd: String = randomIceString(24)
+    internal val icePwdBytes: ByteArray = icePwd.encodeToByteArray()
+    internal val cname: String = randomIceString(16)
 
     /** This participant's media as forwarded to everyone else, under SSRCs the SFU chose. */
-    public val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
-    public val videoSsrc: Long = randomSsrc()
-    public val videoRtxSsrc: Long = randomSsrc()
+    internal val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
+    internal val videoSsrc: Long = randomSsrc()
+    internal val videoRtxSsrc: Long = randomSsrc()
 
-    @Volatile public var remote: PeerAddress? = null
-    @Volatile public var lastConsentMillis: Long = nowMillis()
+    @Volatile internal var remote: PeerAddress? = null
+    @Volatile internal var lastConsentMillis: Long = nowMillis()
 
     /** Whether this participant sends video (its answer accepted the video uplink m-line). */
-    @Volatile public var publishesVideo: Boolean = false
+    @Volatile internal var publishesVideo: Boolean = false
 
     /** Publishers whose audio / video m-lines this participant has accepted (from the last applied answer). */
-    @Volatile public var receiving: Set<String> = emptySet()
-    @Volatile public var receivingVideo: Set<String> = emptySet()
+    @Volatile internal var receiving: Set<String> = emptySet()
+    @Volatile internal var receivingVideo: Set<String> = emptySet()
 
     // --- media state, shard thread only ---
     internal var keys: SrtpSessionKeys? = null
@@ -205,7 +207,7 @@ public class Participant(
     internal var lastLoudMillis = 0L
 
     /** Installs SRTP/SRTCP keys on the owning shard; media starts flowing afterwards. */
-    public fun installKeys(k: SrtpSessionKeys) {
+    internal fun installKeys(k: SrtpSessionKeys) {
         room.shard.execute { keys = k }
     }
 

@@ -76,7 +76,7 @@ room.leave()
 
 | Платформа | Таргет Kotlin | WebSocket (Ktor) | Бэкенд `krtc-core` | Когда |
 |---|---|---|---|---|
-| Android | `android` | OkHttp | Временно `org.webrtc`, затем `krtc-native` (JNI) | C4 → C5 |
+| Android | `android` | CIO (OkHttp 5 требует compileSdk 37) | Временно `org.webrtc`, затем `krtc-native` (JNI) | C4 → C5 |
 | iOS | `iosArm64`, `iosSimulatorArm64` | Darwin | Временно `WebRTC.framework` (stasel), затем `krtc-native` (cinterop) | C4 → C5 |
 | macOS (нативно) | `macosArm64` | Darwin | Временно `WebRTC.framework`, затем `krtc-native` (cinterop) | C4 → C5 |
 | Linux (нативно) | `linuxX64`, `linuxArm64` | curl | `krtc-native` (cinterop): готового SDK для Linux нет | C5 |

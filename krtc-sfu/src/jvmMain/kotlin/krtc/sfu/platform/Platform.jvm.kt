@@ -10,21 +10,21 @@ import javax.crypto.spec.SecretKeySpec
 
 // JVM: JCE providers use AES-NI / ARMv8 crypto intrinsics.
 
-public actual class AesCtr actual constructor(key: ByteArray) {
+internal actual class AesCtr actual constructor(key: ByteArray) {
     private val keySpec = SecretKeySpec(key, "AES")
     private val cipher = Cipher.getInstance("AES/CTR/NoPadding")
 
-    public actual fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int) {
+    internal actual fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int) {
         cipher.init(Cipher.ENCRYPT_MODE, keySpec, IvParameterSpec(iv))
         cipher.doFinal(input, inOff, length, output, outOff)
     }
 }
 
-public actual class AesGcm actual constructor(key: ByteArray) {
+internal actual class AesGcm actual constructor(key: ByteArray) {
     private val keySpec = SecretKeySpec(key, "AES")
     private val cipher = Cipher.getInstance("AES/GCM/NoPadding")
 
-    public actual fun encrypt(
+    internal actual fun encrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int {
@@ -33,7 +33,7 @@ public actual class AesGcm actual constructor(key: ByteArray) {
         return cipher.doFinal(input, inOff, length, output, outOff)
     }
 
-    public actual fun decrypt(
+    internal actual fun decrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int {
@@ -48,22 +48,22 @@ public actual class AesGcm actual constructor(key: ByteArray) {
     }
 }
 
-public actual class HmacSha1 actual constructor(key: ByteArray) {
+internal actual class HmacSha1 actual constructor(key: ByteArray) {
     private val mac = Mac.getInstance("HmacSHA1").apply { init(SecretKeySpec(key, "HmacSHA1")) }
 
-    public actual fun update(data: ByteArray, offset: Int, length: Int) {
+    internal actual fun update(data: ByteArray, offset: Int, length: Int) {
         mac.update(data, offset, length)
     }
 
-    public actual fun doFinal(output: ByteArray, outOff: Int) {
+    internal actual fun doFinal(output: ByteArray, outOff: Int) {
         mac.doFinal(output, outOff)
     }
 }
 
 private val random = SecureRandom()
 
-public actual fun secureRandomBytes(size: Int): ByteArray = ByteArray(size).also { random.nextBytes(it) }
+internal actual fun secureRandomBytes(size: Int): ByteArray = ByteArray(size).also { random.nextBytes(it) }
 
-public actual fun availableProcessors(): Int = Runtime.getRuntime().availableProcessors()
+internal actual fun availableProcessors(): Int = Runtime.getRuntime().availableProcessors()
 
-public actual fun environment(name: String): String? = System.getenv(name)
+internal actual fun environment(name: String): String? = System.getenv(name)

@@ -14,17 +14,17 @@ import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 
 /** Per-shard counters: written by one thread only, so increments never contend across cores. */
-public class ShardCounters {
-    public val rtpIn: AtomicLong = AtomicLong(0)
-    public val rtpOut: AtomicLong = AtomicLong(0)
-    public val bytesIn: AtomicLong = AtomicLong(0)
-    public val bytesOut: AtomicLong = AtomicLong(0)
-    public val rtcpIn: AtomicLong = AtomicLong(0)
-    public val rtcpOut: AtomicLong = AtomicLong(0)
-    public val srtpFailures: AtomicLong = AtomicLong(0)
-    public val dropped: AtomicLong = AtomicLong(0)
-    public val keyframeRequests: AtomicLong = AtomicLong(0)
-    public val nacksAnswered: AtomicLong = AtomicLong(0)
+internal class ShardCounters {
+    internal val rtpIn: AtomicLong = AtomicLong(0)
+    internal val rtpOut: AtomicLong = AtomicLong(0)
+    internal val bytesIn: AtomicLong = AtomicLong(0)
+    internal val bytesOut: AtomicLong = AtomicLong(0)
+    internal val rtcpIn: AtomicLong = AtomicLong(0)
+    internal val rtcpOut: AtomicLong = AtomicLong(0)
+    internal val srtpFailures: AtomicLong = AtomicLong(0)
+    internal val dropped: AtomicLong = AtomicLong(0)
+    internal val keyframeRequests: AtomicLong = AtomicLong(0)
+    internal val nacksAnswered: AtomicLong = AtomicLong(0)
 }
 
 /**
@@ -33,18 +33,18 @@ public class ShardCounters {
  * cores. The inbound queue is bounded: under overload packets are dropped (and counted) instead of
  * accumulating latency and memory.
  */
-public class Shard(public val index: Int, capacity: Int = 16_384) : AutoCloseable {
+internal class Shard(public val index: Int, capacity: Int = 16_384) : AutoCloseable {
     private val dispatcher = newSingleThreadContext("shard-$index")
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
     private val queue = Channel<() -> Unit>(capacity)
     private val depth = AtomicInt(0)
 
-    public val counters: ShardCounters = ShardCounters()
+    internal val counters: ShardCounters = ShardCounters()
 
     /** Scratch output buffer owned by this shard's thread. */
     internal val out: ByteArray = ByteArray(2048)
 
-    public val queueDepth: Int get() = depth.load()
+    internal val queueDepth: Int get() = depth.load()
 
     init {
         scope.launch {
@@ -61,7 +61,7 @@ public class Shard(public val index: Int, capacity: Int = 16_384) : AutoCloseabl
     }
 
     /** Enqueues [task]; returns false (and counts a drop) if the shard is overloaded. */
-    public fun execute(task: () -> Unit): Boolean {
+    internal fun execute(task: () -> Unit): Boolean {
         if (queue.trySend(task).isSuccess) {
             depth.incrementAndFetch()
             return true
@@ -70,7 +70,7 @@ public class Shard(public val index: Int, capacity: Int = 16_384) : AutoCloseabl
         return false
     }
 
-    public fun every(periodMillis: Long, task: () -> Unit) {
+    internal fun every(periodMillis: Long, task: () -> Unit) {
         scope.launch {
             while (isActive) {
                 delay(periodMillis)

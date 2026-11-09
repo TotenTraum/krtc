@@ -33,13 +33,13 @@ internal inline fun <R> ByteArray.withPointer(offset: Int = 0, block: (CPointer<
     else usePinned { block(it.addressOf(offset.coerceAtMost(size - 1)).reinterpret()) }
 
 @OptIn(ExperimentalNativeApi::class)
-public actual class AesCtr actual constructor(key: ByteArray) {
+internal actual class AesCtr actual constructor(key: ByteArray) {
     private val ctx: CPointer<EVP_CIPHER_CTX> = key.withPointer { krtc_aes_ctr_new(it, key.size) } ?: error("AES-CTR init failed")
 
     @Suppress("unused")
     private val cleaner = createCleaner(ctx) { EVP_CIPHER_CTX_free(it) }
 
-    public actual fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int) {
+    internal actual fun process(iv: ByteArray, input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int) {
         if (length == 0) return
         val n = iv.withPointer { ivp ->
             input.withPointer(inOff) { ip -> output.withPointer(outOff) { op -> krtc_aes_ctr(ctx, ivp, ip, length, op) } }
@@ -49,14 +49,14 @@ public actual class AesCtr actual constructor(key: ByteArray) {
 }
 
 @OptIn(ExperimentalNativeApi::class)
-public actual class AesGcm actual constructor(key: ByteArray) {
+internal actual class AesGcm actual constructor(key: ByteArray) {
     private val enc: CPointer<EVP_CIPHER_CTX> = key.withPointer { krtc_aes_gcm_new(it, key.size, 1) } ?: error("AES-GCM init failed")
     private val dec: CPointer<EVP_CIPHER_CTX> = key.withPointer { krtc_aes_gcm_new(it, key.size, 0) } ?: error("AES-GCM init failed")
 
     @Suppress("unused")
     private val cleaner = createCleaner(enc to dec) { (e, d) -> EVP_CIPHER_CTX_free(e); EVP_CIPHER_CTX_free(d) }
 
-    public actual fun encrypt(
+    internal actual fun encrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int = iv.withPointer { ivp ->
@@ -65,7 +65,7 @@ public actual class AesGcm actual constructor(key: ByteArray) {
         }
     }.also { check(it >= 0) { "AES-GCM encrypt failed" } }
 
-    public actual fun decrypt(
+    internal actual fun decrypt(
         iv: ByteArray, aad: ByteArray, aadOff: Int, aadLen: Int,
         input: ByteArray, inOff: Int, length: Int, output: ByteArray, outOff: Int,
     ): Int = if (length < 16) -1 else iv.withPointer { ivp ->
@@ -76,29 +76,29 @@ public actual class AesGcm actual constructor(key: ByteArray) {
 }
 
 @OptIn(ExperimentalNativeApi::class)
-public actual class HmacSha1 actual constructor(key: ByteArray) {
+internal actual class HmacSha1 actual constructor(key: ByteArray) {
     private val ctx: CPointer<EVP_MAC_CTX> = key.withPointer { krtc_hmac_sha1_new(it, key.size) } ?: error("HMAC init failed")
 
     @Suppress("unused")
     private val cleaner = createCleaner(ctx) { EVP_MAC_CTX_free(it) }
 
-    public actual fun update(data: ByteArray, offset: Int, length: Int) {
+    internal actual fun update(data: ByteArray, offset: Int, length: Int) {
         if (length == 0) return
         check(data.withPointer(offset) { krtc_hmac_update(ctx, it, length) } == 1) { "HMAC update failed" }
     }
 
-    public actual fun doFinal(output: ByteArray, outOff: Int) {
+    internal actual fun doFinal(output: ByteArray, outOff: Int) {
         require(output.size - outOff >= 20)
         check(output.withPointer(outOff) { krtc_hmac_final(ctx, it) } == 20) { "HMAC final failed" }
     }
 }
 
-public actual fun secureRandomBytes(size: Int): ByteArray {
+internal actual fun secureRandomBytes(size: Int): ByteArray {
     val out = ByteArray(size)
     if (size > 0) check(out.withPointer { RAND_bytes(it, size) } == 1) { "RAND_bytes failed" }
     return out
 }
 
-public actual fun availableProcessors(): Int = sysconf(_SC_NPROCESSORS_ONLN).toInt().coerceAtLeast(1)
+internal actual fun availableProcessors(): Int = sysconf(_SC_NPROCESSORS_ONLN).toInt().coerceAtLeast(1)
 
-public actual fun environment(name: String): String? = getenv(name)?.toKString()
+internal actual fun environment(name: String): String? = getenv(name)?.toKString()

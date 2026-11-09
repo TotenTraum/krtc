@@ -1,0 +1,295 @@
+public abstract class krtc/signaling/ClientMessage {
+	public static final field Companion Lkrtc/signaling/ClientMessage$Companion;
+	public synthetic fun <init> (ILkotlinx/serialization/internal/SerializationConstructorMarker;)V
+	public static final synthetic fun write$Self (Lkrtc/signaling/ClientMessage;Lkotlinx/serialization/encoding/CompositeEncoder;Lkotlinx/serialization/descriptors/SerialDescriptor;)V
+}
+
+public final class krtc/signaling/ClientMessage$Answer : krtc/signaling/ClientMessage {
+	public static final field Companion Lkrtc/signaling/ClientMessage$Answer$Companion;
+	public fun <init> (JLjava/lang/String;)V
+	public final fun component1 ()J
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (JLjava/lang/String;)Lkrtc/signaling/ClientMessage$Answer;
+	public static synthetic fun copy$default (Lkrtc/signaling/ClientMessage$Answer;JLjava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ClientMessage$Answer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSdp ()Ljava/lang/String;
+	public final fun getVersion ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ClientMessage$Answer$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ClientMessage$Answer$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ClientMessage$Answer;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ClientMessage$Answer;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ClientMessage$Answer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ClientMessage$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ClientMessage$Layer : krtc/signaling/ClientMessage {
+	public static final field Companion Lkrtc/signaling/ClientMessage$Layer$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lkrtc/signaling/ClientMessage$Layer;
+	public static synthetic fun copy$default (Lkrtc/signaling/ClientMessage$Layer;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ClientMessage$Layer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLayer ()Ljava/lang/String;
+	public final fun getPeer ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ClientMessage$Layer$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ClientMessage$Layer$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ClientMessage$Layer;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ClientMessage$Layer;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ClientMessage$Layer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/PeerInfo {
+	public static final field Companion Lkrtc/signaling/PeerInfo$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lkrtc/signaling/PeerInfo;
+	public static synthetic fun copy$default (Lkrtc/signaling/PeerInfo;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/PeerInfo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/PeerInfo$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/PeerInfo$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/PeerInfo;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/PeerInfo;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/PeerInfo$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public abstract class krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$Companion;
+	public synthetic fun <init> (ILkotlinx/serialization/internal/SerializationConstructorMarker;)V
+	public static final synthetic fun write$Self (Lkrtc/signaling/ServerMessage;Lkotlinx/serialization/encoding/CompositeEncoder;Lkotlinx/serialization/descriptors/SerialDescriptor;)V
+}
+
+public final class krtc/signaling/ServerMessage$Bye : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$Bye$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lkrtc/signaling/ServerMessage$Bye;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Bye;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Bye;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$Bye$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$Bye$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$Bye;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$Bye;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Bye$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Offer : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$Offer$Companion;
+	public fun <init> (JLjava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (JLjava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (JLjava/lang/String;Ljava/util/Map;)Lkrtc/signaling/ServerMessage$Offer;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Offer;JLjava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Offer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMids ()Ljava/util/Map;
+	public final fun getSdp ()Ljava/lang/String;
+	public final fun getVersion ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$Offer$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$Offer$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$Offer;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$Offer;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Offer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$PeerJoined : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$PeerJoined$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lkrtc/signaling/ServerMessage$PeerJoined;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$PeerJoined;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$PeerJoined;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$PeerJoined$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$PeerJoined$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$PeerJoined;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$PeerJoined;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$PeerJoined$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$PeerLeft : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$PeerLeft$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lkrtc/signaling/ServerMessage$PeerLeft;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$PeerLeft;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$PeerLeft;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$PeerLeft$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$PeerLeft$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$PeerLeft;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$PeerLeft;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$PeerLeft$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Speaking : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$Speaking$Companion;
+	public fun <init> (Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun copy (Ljava/lang/String;Z)Lkrtc/signaling/ServerMessage$Speaking;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Speaking;Ljava/lang/String;ZILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Speaking;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getSpeaking ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$Speaking$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$Speaking$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$Speaking;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$Speaking;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Speaking$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Welcome : krtc/signaling/ServerMessage {
+	public static final field Companion Lkrtc/signaling/ServerMessage$Welcome$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;I)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun component4 ()I
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;I)Lkrtc/signaling/ServerMessage$Welcome;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Welcome;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;IILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Welcome;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getPeers ()Ljava/util/List;
+	public final fun getProtocol ()I
+	public final fun getRoom ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class krtc/signaling/ServerMessage$Welcome$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lkrtc/signaling/ServerMessage$Welcome$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lkrtc/signaling/ServerMessage$Welcome;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lkrtc/signaling/ServerMessage$Welcome;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/ServerMessage$Welcome$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class krtc/signaling/SignalingProtocol {
+	public static final field INSTANCE Lkrtc/signaling/SignalingProtocol;
+	public static final field VERSION I
+	public final fun decodeClient (Ljava/lang/String;)Lkrtc/signaling/ClientMessage;
+	public final fun decodeServer (Ljava/lang/String;)Lkrtc/signaling/ServerMessage;
+	public final fun encode (Lkrtc/signaling/ClientMessage;)Ljava/lang/String;
+	public final fun encode (Lkrtc/signaling/ServerMessage;)Ljava/lang/String;
+	public final fun getJson ()Lkotlinx/serialization/json/Json;
+}
+

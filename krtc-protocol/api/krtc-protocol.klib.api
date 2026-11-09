@@ -1,0 +1,379 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <krtc:krtc-protocol>
+final enum class krtc.protocol.sdp/Direction : kotlin/Enum<krtc.protocol.sdp/Direction> { // krtc.protocol.sdp/Direction|null[0]
+    enum entry INACTIVE // krtc.protocol.sdp/Direction.INACTIVE|null[0]
+    enum entry RECVONLY // krtc.protocol.sdp/Direction.RECVONLY|null[0]
+    enum entry SENDONLY // krtc.protocol.sdp/Direction.SENDONLY|null[0]
+    enum entry SENDRECV // krtc.protocol.sdp/Direction.SENDRECV|null[0]
+
+    final val entries // krtc.protocol.sdp/Direction.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.protocol.sdp/Direction> // krtc.protocol.sdp/Direction.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val sdp // krtc.protocol.sdp/Direction.sdp|{}sdp[0]
+        final fun <get-sdp>(): kotlin/String // krtc.protocol.sdp/Direction.sdp.<get-sdp>|<get-sdp>(){}[0]
+
+    final fun reversed(): krtc.protocol.sdp/Direction // krtc.protocol.sdp/Direction.reversed|reversed(){}[0]
+    final fun valueOf(kotlin/String): krtc.protocol.sdp/Direction // krtc.protocol.sdp/Direction.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.protocol.sdp/Direction> // krtc.protocol.sdp/Direction.values|values#static(){}[0]
+
+    final object Companion { // krtc.protocol.sdp/Direction.Companion|null[0]
+        final fun of(kotlin/String): krtc.protocol.sdp/Direction? // krtc.protocol.sdp/Direction.Companion.of|of(kotlin.String){}[0]
+    }
+}
+
+final enum class krtc.protocol/PacketKind : kotlin/Enum<krtc.protocol/PacketKind> { // krtc.protocol/PacketKind|null[0]
+    enum entry DTLS // krtc.protocol/PacketKind.DTLS|null[0]
+    enum entry RTP_OR_RTCP // krtc.protocol/PacketKind.RTP_OR_RTCP|null[0]
+    enum entry STUN // krtc.protocol/PacketKind.STUN|null[0]
+    enum entry UNKNOWN // krtc.protocol/PacketKind.UNKNOWN|null[0]
+
+    final val entries // krtc.protocol/PacketKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.protocol/PacketKind> // krtc.protocol/PacketKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.protocol/PacketKind // krtc.protocol/PacketKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.protocol/PacketKind> // krtc.protocol/PacketKind.values|values#static(){}[0]
+}
+
+abstract interface krtc.protocol.sdp/HasAttributes { // krtc.protocol.sdp/HasAttributes|null[0]
+    abstract val attributes // krtc.protocol.sdp/HasAttributes.attributes|{}attributes[0]
+        abstract fun <get-attributes>(): kotlin.collections/MutableList<krtc.protocol.sdp/SdpAttribute> // krtc.protocol.sdp/HasAttributes.attributes.<get-attributes>|<get-attributes>(){}[0]
+
+    open fun attribute(kotlin/String): kotlin/String? // krtc.protocol.sdp/HasAttributes.attribute|attribute(kotlin.String){}[0]
+    open fun attributes(kotlin/String): kotlin.collections/List<kotlin/String> // krtc.protocol.sdp/HasAttributes.attributes|attributes(kotlin.String){}[0]
+    open fun hasAttribute(kotlin/String): kotlin/Boolean // krtc.protocol.sdp/HasAttributes.hasAttribute|hasAttribute(kotlin.String){}[0]
+}
+
+final class krtc.protocol.rtp/AudioLevel { // krtc.protocol.rtp/AudioLevel|null[0]
+    constructor <init>(kotlin/Boolean, kotlin/Int) // krtc.protocol.rtp/AudioLevel.<init>|<init>(kotlin.Boolean;kotlin.Int){}[0]
+
+    final val level // krtc.protocol.rtp/AudioLevel.level|{}level[0]
+        final fun <get-level>(): kotlin/Int // krtc.protocol.rtp/AudioLevel.level.<get-level>|<get-level>(){}[0]
+    final val voiceActivity // krtc.protocol.rtp/AudioLevel.voiceActivity|{}voiceActivity[0]
+        final fun <get-voiceActivity>(): kotlin/Boolean // krtc.protocol.rtp/AudioLevel.voiceActivity.<get-voiceActivity>|<get-voiceActivity>(){}[0]
+
+    final object Companion { // krtc.protocol.rtp/AudioLevel.Companion|null[0]
+        final const val URI // krtc.protocol.rtp/AudioLevel.Companion.URI|{}URI[0]
+            final fun <get-URI>(): kotlin/String // krtc.protocol.rtp/AudioLevel.Companion.URI.<get-URI>|<get-URI>(){}[0]
+
+        final fun read(kotlin/ByteArray, kotlin/Int): krtc.protocol.rtp/AudioLevel // krtc.protocol.rtp/AudioLevel.Companion.read|read(kotlin.ByteArray;kotlin.Int){}[0]
+    }
+}
+
+final class krtc.protocol.rtp/RtpHeader { // krtc.protocol.rtp/RtpHeader|null[0]
+    constructor <init>() // krtc.protocol.rtp/RtpHeader.<init>|<init>(){}[0]
+
+    final var csrcCount // krtc.protocol.rtp/RtpHeader.csrcCount|{}csrcCount[0]
+        final fun <get-csrcCount>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.csrcCount.<get-csrcCount>|<get-csrcCount>(){}[0]
+    final var extensionLength // krtc.protocol.rtp/RtpHeader.extensionLength|{}extensionLength[0]
+        final fun <get-extensionLength>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.extensionLength.<get-extensionLength>|<get-extensionLength>(){}[0]
+    final var extensionOffset // krtc.protocol.rtp/RtpHeader.extensionOffset|{}extensionOffset[0]
+        final fun <get-extensionOffset>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.extensionOffset.<get-extensionOffset>|<get-extensionOffset>(){}[0]
+    final var extensionProfile // krtc.protocol.rtp/RtpHeader.extensionProfile|{}extensionProfile[0]
+        final fun <get-extensionProfile>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.extensionProfile.<get-extensionProfile>|<get-extensionProfile>(){}[0]
+    final var headerLength // krtc.protocol.rtp/RtpHeader.headerLength|{}headerLength[0]
+        final fun <get-headerLength>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.headerLength.<get-headerLength>|<get-headerLength>(){}[0]
+    final var lastElementLength // krtc.protocol.rtp/RtpHeader.lastElementLength|{}lastElementLength[0]
+        final fun <get-lastElementLength>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.lastElementLength.<get-lastElementLength>|<get-lastElementLength>(){}[0]
+    final var marker // krtc.protocol.rtp/RtpHeader.marker|{}marker[0]
+        final fun <get-marker>(): kotlin/Boolean // krtc.protocol.rtp/RtpHeader.marker.<get-marker>|<get-marker>(){}[0]
+    final var padding // krtc.protocol.rtp/RtpHeader.padding|{}padding[0]
+        final fun <get-padding>(): kotlin/Boolean // krtc.protocol.rtp/RtpHeader.padding.<get-padding>|<get-padding>(){}[0]
+    final var payloadType // krtc.protocol.rtp/RtpHeader.payloadType|{}payloadType[0]
+        final fun <get-payloadType>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.payloadType.<get-payloadType>|<get-payloadType>(){}[0]
+    final var sequenceNumber // krtc.protocol.rtp/RtpHeader.sequenceNumber|{}sequenceNumber[0]
+        final fun <get-sequenceNumber>(): kotlin/Int // krtc.protocol.rtp/RtpHeader.sequenceNumber.<get-sequenceNumber>|<get-sequenceNumber>(){}[0]
+    final var ssrc // krtc.protocol.rtp/RtpHeader.ssrc|{}ssrc[0]
+        final fun <get-ssrc>(): kotlin/Long // krtc.protocol.rtp/RtpHeader.ssrc.<get-ssrc>|<get-ssrc>(){}[0]
+    final var timestamp // krtc.protocol.rtp/RtpHeader.timestamp|{}timestamp[0]
+        final fun <get-timestamp>(): kotlin/Long // krtc.protocol.rtp/RtpHeader.timestamp.<get-timestamp>|<get-timestamp>(){}[0]
+
+    final fun findExtension(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // krtc.protocol.rtp/RtpHeader.findExtension|findExtension(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun parse(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Boolean // krtc.protocol.rtp/RtpHeader.parse|parse(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun payloadLength(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // krtc.protocol.rtp/RtpHeader.payloadLength|payloadLength(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+}
+
+final class krtc.protocol.sdp/MediaDescription : krtc.protocol.sdp/HasAttributes { // krtc.protocol.sdp/MediaDescription|null[0]
+    constructor <init>(kotlin/String, kotlin/Int, kotlin/String, kotlin.collections/MutableList<kotlin/String>, kotlin.collections/MutableList<krtc.protocol.sdp/SdpLine> = ..., kotlin.collections/MutableList<krtc.protocol.sdp/SdpAttribute> = ...) // krtc.protocol.sdp/MediaDescription.<init>|<init>(kotlin.String;kotlin.Int;kotlin.String;kotlin.collections.MutableList<kotlin.String>;kotlin.collections.MutableList<krtc.protocol.sdp.SdpLine>;kotlin.collections.MutableList<krtc.protocol.sdp.SdpAttribute>){}[0]
+
+    final val attributes // krtc.protocol.sdp/MediaDescription.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/MutableList<krtc.protocol.sdp/SdpAttribute> // krtc.protocol.sdp/MediaDescription.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val direction // krtc.protocol.sdp/MediaDescription.direction|{}direction[0]
+        final fun <get-direction>(): krtc.protocol.sdp/Direction // krtc.protocol.sdp/MediaDescription.direction.<get-direction>|<get-direction>(){}[0]
+    final val extensions // krtc.protocol.sdp/MediaDescription.extensions|{}extensions[0]
+        final fun <get-extensions>(): kotlin.collections/Map<kotlin/Int, kotlin/String> // krtc.protocol.sdp/MediaDescription.extensions.<get-extensions>|<get-extensions>(){}[0]
+    final val formats // krtc.protocol.sdp/MediaDescription.formats|{}formats[0]
+        final fun <get-formats>(): kotlin.collections/MutableList<kotlin/String> // krtc.protocol.sdp/MediaDescription.formats.<get-formats>|<get-formats>(){}[0]
+    final val lines // krtc.protocol.sdp/MediaDescription.lines|{}lines[0]
+        final fun <get-lines>(): kotlin.collections/MutableList<krtc.protocol.sdp/SdpLine> // krtc.protocol.sdp/MediaDescription.lines.<get-lines>|<get-lines>(){}[0]
+    final val mid // krtc.protocol.sdp/MediaDescription.mid|{}mid[0]
+        final fun <get-mid>(): kotlin/String? // krtc.protocol.sdp/MediaDescription.mid.<get-mid>|<get-mid>(){}[0]
+    final val rtpMaps // krtc.protocol.sdp/MediaDescription.rtpMaps|{}rtpMaps[0]
+        final fun <get-rtpMaps>(): kotlin.collections/Map<kotlin/Int, kotlin/String> // krtc.protocol.sdp/MediaDescription.rtpMaps.<get-rtpMaps>|<get-rtpMaps>(){}[0]
+    final val ssrcs // krtc.protocol.sdp/MediaDescription.ssrcs|{}ssrcs[0]
+        final fun <get-ssrcs>(): kotlin.collections/List<kotlin/Long> // krtc.protocol.sdp/MediaDescription.ssrcs.<get-ssrcs>|<get-ssrcs>(){}[0]
+
+    final var port // krtc.protocol.sdp/MediaDescription.port|{}port[0]
+        final fun <get-port>(): kotlin/Int // krtc.protocol.sdp/MediaDescription.port.<get-port>|<get-port>(){}[0]
+        final fun <set-port>(kotlin/Int) // krtc.protocol.sdp/MediaDescription.port.<set-port>|<set-port>(kotlin.Int){}[0]
+    final var proto // krtc.protocol.sdp/MediaDescription.proto|{}proto[0]
+        final fun <get-proto>(): kotlin/String // krtc.protocol.sdp/MediaDescription.proto.<get-proto>|<get-proto>(){}[0]
+        final fun <set-proto>(kotlin/String) // krtc.protocol.sdp/MediaDescription.proto.<set-proto>|<set-proto>(kotlin.String){}[0]
+    final var type // krtc.protocol.sdp/MediaDescription.type|{}type[0]
+        final fun <get-type>(): kotlin/String // krtc.protocol.sdp/MediaDescription.type.<get-type>|<get-type>(){}[0]
+        final fun <set-type>(kotlin/String) // krtc.protocol.sdp/MediaDescription.type.<set-type>|<set-type>(kotlin.String){}[0]
+
+    final fun toString(): kotlin/String // krtc.protocol.sdp/MediaDescription.toString|toString(){}[0]
+}
+
+final class krtc.protocol.sdp/SdpAttribute { // krtc.protocol.sdp/SdpAttribute|null[0]
+    constructor <init>(kotlin/String, kotlin/String? = ...) // krtc.protocol.sdp/SdpAttribute.<init>|<init>(kotlin.String;kotlin.String?){}[0]
+
+    final val name // krtc.protocol.sdp/SdpAttribute.name|{}name[0]
+        final fun <get-name>(): kotlin/String // krtc.protocol.sdp/SdpAttribute.name.<get-name>|<get-name>(){}[0]
+    final val value // krtc.protocol.sdp/SdpAttribute.value|{}value[0]
+        final fun <get-value>(): kotlin/String? // krtc.protocol.sdp/SdpAttribute.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/String // krtc.protocol.sdp/SdpAttribute.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // krtc.protocol.sdp/SdpAttribute.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String? = ...): krtc.protocol.sdp/SdpAttribute // krtc.protocol.sdp/SdpAttribute.copy|copy(kotlin.String;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.protocol.sdp/SdpAttribute.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.protocol.sdp/SdpAttribute.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.protocol.sdp/SdpAttribute.toString|toString(){}[0]
+}
+
+final class krtc.protocol.sdp/SdpLine { // krtc.protocol.sdp/SdpLine|null[0]
+    constructor <init>(kotlin/Char, kotlin/String) // krtc.protocol.sdp/SdpLine.<init>|<init>(kotlin.Char;kotlin.String){}[0]
+
+    final val type // krtc.protocol.sdp/SdpLine.type|{}type[0]
+        final fun <get-type>(): kotlin/Char // krtc.protocol.sdp/SdpLine.type.<get-type>|<get-type>(){}[0]
+    final val value // krtc.protocol.sdp/SdpLine.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.protocol.sdp/SdpLine.value.<get-value>|<get-value>(){}[0]
+
+    final fun component1(): kotlin/Char // krtc.protocol.sdp/SdpLine.component1|component1(){}[0]
+    final fun component2(): kotlin/String // krtc.protocol.sdp/SdpLine.component2|component2(){}[0]
+    final fun copy(kotlin/Char = ..., kotlin/String = ...): krtc.protocol.sdp/SdpLine // krtc.protocol.sdp/SdpLine.copy|copy(kotlin.Char;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.protocol.sdp/SdpLine.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.protocol.sdp/SdpLine.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.protocol.sdp/SdpLine.toString|toString(){}[0]
+}
+
+final class krtc.protocol.sdp/SessionDescription : krtc.protocol.sdp/HasAttributes { // krtc.protocol.sdp/SessionDescription|null[0]
+    constructor <init>(kotlin.collections/MutableList<krtc.protocol.sdp/SdpLine> = ..., kotlin.collections/MutableList<krtc.protocol.sdp/SdpAttribute> = ..., kotlin.collections/MutableList<krtc.protocol.sdp/MediaDescription> = ...) // krtc.protocol.sdp/SessionDescription.<init>|<init>(kotlin.collections.MutableList<krtc.protocol.sdp.SdpLine>;kotlin.collections.MutableList<krtc.protocol.sdp.SdpAttribute>;kotlin.collections.MutableList<krtc.protocol.sdp.MediaDescription>){}[0]
+
+    final val attributes // krtc.protocol.sdp/SessionDescription.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/MutableList<krtc.protocol.sdp/SdpAttribute> // krtc.protocol.sdp/SessionDescription.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val lines // krtc.protocol.sdp/SessionDescription.lines|{}lines[0]
+        final fun <get-lines>(): kotlin.collections/MutableList<krtc.protocol.sdp/SdpLine> // krtc.protocol.sdp/SessionDescription.lines.<get-lines>|<get-lines>(){}[0]
+    final val media // krtc.protocol.sdp/SessionDescription.media|{}media[0]
+        final fun <get-media>(): kotlin.collections/MutableList<krtc.protocol.sdp/MediaDescription> // krtc.protocol.sdp/SessionDescription.media.<get-media>|<get-media>(){}[0]
+
+    final fun effective(krtc.protocol.sdp/MediaDescription, kotlin/String): kotlin/String? // krtc.protocol.sdp/SessionDescription.effective|effective(krtc.protocol.sdp.MediaDescription;kotlin.String){}[0]
+    final fun fingerprint(krtc.protocol.sdp/MediaDescription = ...): kotlin/Pair<kotlin/String, kotlin/String>? // krtc.protocol.sdp/SessionDescription.fingerprint|fingerprint(krtc.protocol.sdp.MediaDescription){}[0]
+    final fun icePwd(krtc.protocol.sdp/MediaDescription = ...): kotlin/String? // krtc.protocol.sdp/SessionDescription.icePwd|icePwd(krtc.protocol.sdp.MediaDescription){}[0]
+    final fun iceUfrag(krtc.protocol.sdp/MediaDescription = ...): kotlin/String? // krtc.protocol.sdp/SessionDescription.iceUfrag|iceUfrag(krtc.protocol.sdp.MediaDescription){}[0]
+    final fun setup(krtc.protocol.sdp/MediaDescription = ...): kotlin/String? // krtc.protocol.sdp/SessionDescription.setup|setup(krtc.protocol.sdp.MediaDescription){}[0]
+    final fun toString(): kotlin/String // krtc.protocol.sdp/SessionDescription.toString|toString(){}[0]
+
+    final object Companion { // krtc.protocol.sdp/SessionDescription.Companion|null[0]
+        final fun parse(kotlin/String): krtc.protocol.sdp/SessionDescription // krtc.protocol.sdp/SessionDescription.Companion.parse|parse(kotlin.String){}[0]
+    }
+}
+
+final class krtc.protocol.stun/StunAttribute { // krtc.protocol.stun/StunAttribute|null[0]
+    constructor <init>(kotlin/Int, kotlin/ByteArray, kotlin/Int) // krtc.protocol.stun/StunAttribute.<init>|<init>(kotlin.Int;kotlin.ByteArray;kotlin.Int){}[0]
+
+    final val position // krtc.protocol.stun/StunAttribute.position|{}position[0]
+        final fun <get-position>(): kotlin/Int // krtc.protocol.stun/StunAttribute.position.<get-position>|<get-position>(){}[0]
+    final val type // krtc.protocol.stun/StunAttribute.type|{}type[0]
+        final fun <get-type>(): kotlin/Int // krtc.protocol.stun/StunAttribute.type.<get-type>|<get-type>(){}[0]
+    final val value // krtc.protocol.stun/StunAttribute.value|{}value[0]
+        final fun <get-value>(): kotlin/ByteArray // krtc.protocol.stun/StunAttribute.value.<get-value>|<get-value>(){}[0]
+}
+
+final class krtc.protocol.stun/StunMessage { // krtc.protocol.stun/StunMessage|null[0]
+    final val attributes // krtc.protocol.stun/StunMessage.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/List<krtc.protocol.stun/StunAttribute> // krtc.protocol.stun/StunMessage.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val priority // krtc.protocol.stun/StunMessage.priority|{}priority[0]
+        final fun <get-priority>(): kotlin/Long? // krtc.protocol.stun/StunMessage.priority.<get-priority>|<get-priority>(){}[0]
+    final val transactionId // krtc.protocol.stun/StunMessage.transactionId|{}transactionId[0]
+        final fun <get-transactionId>(): kotlin/ByteArray // krtc.protocol.stun/StunMessage.transactionId.<get-transactionId>|<get-transactionId>(){}[0]
+    final val type // krtc.protocol.stun/StunMessage.type|{}type[0]
+        final fun <get-type>(): kotlin/Int // krtc.protocol.stun/StunMessage.type.<get-type>|<get-type>(){}[0]
+    final val useCandidate // krtc.protocol.stun/StunMessage.useCandidate|{}useCandidate[0]
+        final fun <get-useCandidate>(): kotlin/Boolean // krtc.protocol.stun/StunMessage.useCandidate.<get-useCandidate>|<get-useCandidate>(){}[0]
+    final val username // krtc.protocol.stun/StunMessage.username|{}username[0]
+        final fun <get-username>(): kotlin/String? // krtc.protocol.stun/StunMessage.username.<get-username>|<get-username>(){}[0]
+
+    final fun attribute(kotlin/Int): krtc.protocol.stun/StunAttribute? // krtc.protocol.stun/StunMessage.attribute|attribute(kotlin.Int){}[0]
+    final fun has(kotlin/Int): kotlin/Boolean // krtc.protocol.stun/StunMessage.has|has(kotlin.Int){}[0]
+    final fun verifyFingerprint(): kotlin/Boolean // krtc.protocol.stun/StunMessage.verifyFingerprint|verifyFingerprint(){}[0]
+    final fun verifyIntegrity(kotlin/ByteArray): kotlin/Boolean // krtc.protocol.stun/StunMessage.verifyIntegrity|verifyIntegrity(kotlin.ByteArray){}[0]
+
+    final object Companion { // krtc.protocol.stun/StunMessage.Companion|null[0]
+        final fun parse(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...): krtc.protocol.stun/StunMessage? // krtc.protocol.stun/StunMessage.Companion.parse|parse(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    }
+}
+
+final class krtc.protocol.stun/StunMessageBuilder { // krtc.protocol.stun/StunMessageBuilder|null[0]
+    constructor <init>(kotlin/Int, kotlin/ByteArray) // krtc.protocol.stun/StunMessageBuilder.<init>|<init>(kotlin.Int;kotlin.ByteArray){}[0]
+
+    final fun attribute(kotlin/Int, kotlin/ByteArray): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.attribute|attribute(kotlin.Int;kotlin.ByteArray){}[0]
+    final fun build(kotlin/ByteArray? = ..., kotlin/Boolean = ...): kotlin/ByteArray // krtc.protocol.stun/StunMessageBuilder.build|build(kotlin.ByteArray?;kotlin.Boolean){}[0]
+    final fun errorCode(kotlin/Int, kotlin/String): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.errorCode|errorCode(kotlin.Int;kotlin.String){}[0]
+    final fun priority(kotlin/Long): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.priority|priority(kotlin.Long){}[0]
+    final fun software(kotlin/String): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.software|software(kotlin.String){}[0]
+    final fun useCandidate(): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.useCandidate|useCandidate(){}[0]
+    final fun username(kotlin/String): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.username|username(kotlin.String){}[0]
+    final fun xorMappedAddress(kotlin/ByteArray, kotlin/Int): krtc.protocol.stun/StunMessageBuilder // krtc.protocol.stun/StunMessageBuilder.xorMappedAddress|xorMappedAddress(kotlin.ByteArray;kotlin.Int){}[0]
+}
+
+final object krtc.protocol.crypto/Crc32 { // krtc.protocol.crypto/Crc32|null[0]
+    final fun compute(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...): kotlin/Long // krtc.protocol.crypto/Crc32.compute|compute(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+}
+
+final object krtc.protocol.crypto/Sha1 { // krtc.protocol.crypto/Sha1|null[0]
+    final const val DIGEST_LENGTH // krtc.protocol.crypto/Sha1.DIGEST_LENGTH|{}DIGEST_LENGTH[0]
+        final fun <get-DIGEST_LENGTH>(): kotlin/Int // krtc.protocol.crypto/Sha1.DIGEST_LENGTH.<get-DIGEST_LENGTH>|<get-DIGEST_LENGTH>(){}[0]
+
+    final fun digest(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...): kotlin/ByteArray // krtc.protocol.crypto/Sha1.digest|digest(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun hmac(kotlin/ByteArray, kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...): kotlin/ByteArray // krtc.protocol.crypto/Sha1.hmac|hmac(kotlin.ByteArray;kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+}
+
+final object krtc.protocol.rtp/H264 { // krtc.protocol.rtp/H264|null[0]
+    final fun isKeyFrame(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Boolean // krtc.protocol.rtp/H264.isKeyFrame|isKeyFrame(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+}
+
+final object krtc.protocol.rtp/Rtcp { // krtc.protocol.rtp/Rtcp|null[0]
+    final const val BYE // krtc.protocol.rtp/Rtcp.BYE|{}BYE[0]
+        final fun <get-BYE>(): kotlin/Int // krtc.protocol.rtp/Rtcp.BYE.<get-BYE>|<get-BYE>(){}[0]
+    final const val FMT_AFB // krtc.protocol.rtp/Rtcp.FMT_AFB|{}FMT_AFB[0]
+        final fun <get-FMT_AFB>(): kotlin/Int // krtc.protocol.rtp/Rtcp.FMT_AFB.<get-FMT_AFB>|<get-FMT_AFB>(){}[0]
+    final const val FMT_FIR // krtc.protocol.rtp/Rtcp.FMT_FIR|{}FMT_FIR[0]
+        final fun <get-FMT_FIR>(): kotlin/Int // krtc.protocol.rtp/Rtcp.FMT_FIR.<get-FMT_FIR>|<get-FMT_FIR>(){}[0]
+    final const val FMT_NACK // krtc.protocol.rtp/Rtcp.FMT_NACK|{}FMT_NACK[0]
+        final fun <get-FMT_NACK>(): kotlin/Int // krtc.protocol.rtp/Rtcp.FMT_NACK.<get-FMT_NACK>|<get-FMT_NACK>(){}[0]
+    final const val FMT_PLI // krtc.protocol.rtp/Rtcp.FMT_PLI|{}FMT_PLI[0]
+        final fun <get-FMT_PLI>(): kotlin/Int // krtc.protocol.rtp/Rtcp.FMT_PLI.<get-FMT_PLI>|<get-FMT_PLI>(){}[0]
+    final const val PSFB // krtc.protocol.rtp/Rtcp.PSFB|{}PSFB[0]
+        final fun <get-PSFB>(): kotlin/Int // krtc.protocol.rtp/Rtcp.PSFB.<get-PSFB>|<get-PSFB>(){}[0]
+    final const val RR // krtc.protocol.rtp/Rtcp.RR|{}RR[0]
+        final fun <get-RR>(): kotlin/Int // krtc.protocol.rtp/Rtcp.RR.<get-RR>|<get-RR>(){}[0]
+    final const val RTPFB // krtc.protocol.rtp/Rtcp.RTPFB|{}RTPFB[0]
+        final fun <get-RTPFB>(): kotlin/Int // krtc.protocol.rtp/Rtcp.RTPFB.<get-RTPFB>|<get-RTPFB>(){}[0]
+    final const val SDES // krtc.protocol.rtp/Rtcp.SDES|{}SDES[0]
+        final fun <get-SDES>(): kotlin/Int // krtc.protocol.rtp/Rtcp.SDES.<get-SDES>|<get-SDES>(){}[0]
+    final const val SR // krtc.protocol.rtp/Rtcp.SR|{}SR[0]
+        final fun <get-SR>(): kotlin/Int // krtc.protocol.rtp/Rtcp.SR.<get-SR>|<get-SR>(){}[0]
+
+    final fun concat(kotlin/Array<out kotlin/ByteArray>...): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.concat|concat(kotlin.Array<out|kotlin.ByteArray>...){}[0]
+    final fun fir(kotlin/Long, kotlin/Long, kotlin/Int): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.fir|fir(kotlin.Long;kotlin.Long;kotlin.Int){}[0]
+    final fun firTargets(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin.collections/List<kotlin/Long> // krtc.protocol.rtp/Rtcp.firTargets|firTargets(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun mediaSsrc(kotlin/ByteArray, kotlin/Int): kotlin/Long // krtc.protocol.rtp/Rtcp.mediaSsrc|mediaSsrc(kotlin.ByteArray;kotlin.Int){}[0]
+    final fun nackSequences(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin.collections/List<kotlin/Int> // krtc.protocol.rtp/Rtcp.nackSequences|nackSequences(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun pli(kotlin/Long, kotlin/Long): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.pli|pli(kotlin.Long;kotlin.Long){}[0]
+    final fun receiverReport(kotlin/Long): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.receiverReport|receiverReport(kotlin.Long){}[0]
+    final fun remb(kotlin/Long, kotlin/Long, kotlin.collections/List<kotlin/Long>): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.remb|remb(kotlin.Long;kotlin.Long;kotlin.collections.List<kotlin.Long>){}[0]
+    final fun rembBitrate(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Long // krtc.protocol.rtp/Rtcp.rembBitrate|rembBitrate(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun rewriteSenderReport(kotlin/ByteArray, kotlin/Int, kotlin/Long, kotlin/Long): kotlin/ByteArray // krtc.protocol.rtp/Rtcp.rewriteSenderReport|rewriteSenderReport(kotlin.ByteArray;kotlin.Int;kotlin.Long;kotlin.Long){}[0]
+    final fun senderReportRtpTimestamp(kotlin/ByteArray, kotlin/Int): kotlin/Long // krtc.protocol.rtp/Rtcp.senderReportRtpTimestamp|senderReportRtpTimestamp(kotlin.ByteArray;kotlin.Int){}[0]
+    final fun senderSsrc(kotlin/ByteArray, kotlin/Int): kotlin/Long // krtc.protocol.rtp/Rtcp.senderSsrc|senderSsrc(kotlin.ByteArray;kotlin.Int){}[0]
+    final inline fun forEach(kotlin/ByteArray, kotlin/Int, kotlin/Int, kotlin/Function4<kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Unit>) // krtc.protocol.rtp/Rtcp.forEach|forEach(kotlin.ByteArray;kotlin.Int;kotlin.Int;kotlin.Function4<kotlin.Int,kotlin.Int,kotlin.Int,kotlin.Int,kotlin.Unit>){}[0]
+}
+
+final object krtc.protocol.rtp/Rtp { // krtc.protocol.rtp/Rtp|null[0]
+    final fun isRtcp(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Boolean // krtc.protocol.rtp/Rtp.isRtcp|isRtcp(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun seqDelta(kotlin/Int, kotlin/Int): kotlin/Int // krtc.protocol.rtp/Rtp.seqDelta|seqDelta(kotlin.Int;kotlin.Int){}[0]
+    final fun setSequenceNumber(kotlin/ByteArray, kotlin/Int, kotlin/Int) // krtc.protocol.rtp/Rtp.setSequenceNumber|setSequenceNumber(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun setSsrc(kotlin/ByteArray, kotlin/Int, kotlin/Long) // krtc.protocol.rtp/Rtp.setSsrc|setSsrc(kotlin.ByteArray;kotlin.Int;kotlin.Long){}[0]
+    final fun setTimestamp(kotlin/ByteArray, kotlin/Int, kotlin/Long) // krtc.protocol.rtp/Rtp.setTimestamp|setTimestamp(kotlin.ByteArray;kotlin.Int;kotlin.Long){}[0]
+}
+
+final object krtc.protocol.rtp/RtpStreamId { // krtc.protocol.rtp/RtpStreamId|null[0]
+    final const val MID_URI // krtc.protocol.rtp/RtpStreamId.MID_URI|{}MID_URI[0]
+        final fun <get-MID_URI>(): kotlin/String // krtc.protocol.rtp/RtpStreamId.MID_URI.<get-MID_URI>|<get-MID_URI>(){}[0]
+    final const val REPAIRED_RID_URI // krtc.protocol.rtp/RtpStreamId.REPAIRED_RID_URI|{}REPAIRED_RID_URI[0]
+        final fun <get-REPAIRED_RID_URI>(): kotlin/String // krtc.protocol.rtp/RtpStreamId.REPAIRED_RID_URI.<get-REPAIRED_RID_URI>|<get-REPAIRED_RID_URI>(){}[0]
+    final const val RID_URI // krtc.protocol.rtp/RtpStreamId.RID_URI|{}RID_URI[0]
+        final fun <get-RID_URI>(): kotlin/String // krtc.protocol.rtp/RtpStreamId.RID_URI.<get-RID_URI>|<get-RID_URI>(){}[0]
+
+    final fun read(kotlin/ByteArray, krtc.protocol.rtp/RtpHeader, kotlin/Int): kotlin/String? // krtc.protocol.rtp/RtpStreamId.read|read(kotlin.ByteArray;krtc.protocol.rtp.RtpHeader;kotlin.Int){}[0]
+    final fun rename(kotlin/ByteArray, krtc.protocol.rtp/RtpHeader, kotlin/IntArray, kotlin/Int) // krtc.protocol.rtp/RtpStreamId.rename|rename(kotlin.ByteArray;krtc.protocol.rtp.RtpHeader;kotlin.IntArray;kotlin.Int){}[0]
+}
+
+final object krtc.protocol.rtp/Vp8 { // krtc.protocol.rtp/Vp8|null[0]
+    final fun isKeyFrame(kotlin/ByteArray, kotlin/Int, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor): kotlin/Boolean // krtc.protocol.rtp/Vp8.isKeyFrame|isKeyFrame(kotlin.ByteArray;kotlin.Int;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor){}[0]
+    final fun parse(kotlin/ByteArray, kotlin/Int, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor): kotlin/Boolean // krtc.protocol.rtp/Vp8.parse|parse(kotlin.ByteArray;kotlin.Int;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor){}[0]
+    final fun setPictureId(kotlin/ByteArray, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor, kotlin/Int) // krtc.protocol.rtp/Vp8.setPictureId|setPictureId(kotlin.ByteArray;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor;kotlin.Int){}[0]
+    final fun setTl0PicIdx(kotlin/ByteArray, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor, kotlin/Int) // krtc.protocol.rtp/Vp8.setTl0PicIdx|setTl0PicIdx(kotlin.ByteArray;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor;kotlin.Int){}[0]
+
+    final class Descriptor { // krtc.protocol.rtp/Vp8.Descriptor|null[0]
+        constructor <init>() // krtc.protocol.rtp/Vp8.Descriptor.<init>|<init>(){}[0]
+
+        final var partitionId // krtc.protocol.rtp/Vp8.Descriptor.partitionId|{}partitionId[0]
+            final fun <get-partitionId>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.partitionId.<get-partitionId>|<get-partitionId>(){}[0]
+        final var pictureId // krtc.protocol.rtp/Vp8.Descriptor.pictureId|{}pictureId[0]
+            final fun <get-pictureId>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.pictureId.<get-pictureId>|<get-pictureId>(){}[0]
+        final var pictureIdBits // krtc.protocol.rtp/Vp8.Descriptor.pictureIdBits|{}pictureIdBits[0]
+            final fun <get-pictureIdBits>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.pictureIdBits.<get-pictureIdBits>|<get-pictureIdBits>(){}[0]
+        final var pictureIdOffset // krtc.protocol.rtp/Vp8.Descriptor.pictureIdOffset|{}pictureIdOffset[0]
+            final fun <get-pictureIdOffset>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.pictureIdOffset.<get-pictureIdOffset>|<get-pictureIdOffset>(){}[0]
+        final var size // krtc.protocol.rtp/Vp8.Descriptor.size|{}size[0]
+            final fun <get-size>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.size.<get-size>|<get-size>(){}[0]
+        final var start // krtc.protocol.rtp/Vp8.Descriptor.start|{}start[0]
+            final fun <get-start>(): kotlin/Boolean // krtc.protocol.rtp/Vp8.Descriptor.start.<get-start>|<get-start>(){}[0]
+        final var tl0Offset // krtc.protocol.rtp/Vp8.Descriptor.tl0Offset|{}tl0Offset[0]
+            final fun <get-tl0Offset>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.tl0Offset.<get-tl0Offset>|<get-tl0Offset>(){}[0]
+        final var tl0PicIdx // krtc.protocol.rtp/Vp8.Descriptor.tl0PicIdx|{}tl0PicIdx[0]
+            final fun <get-tl0PicIdx>(): kotlin/Int // krtc.protocol.rtp/Vp8.Descriptor.tl0PicIdx.<get-tl0PicIdx>|<get-tl0PicIdx>(){}[0]
+    }
+}
+
+final object krtc.protocol.stun/StunConstants { // krtc.protocol.stun/StunConstants|null[0]
+    final const val ATTR_ERROR_CODE // krtc.protocol.stun/StunConstants.ATTR_ERROR_CODE|{}ATTR_ERROR_CODE[0]
+        final fun <get-ATTR_ERROR_CODE>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_ERROR_CODE.<get-ATTR_ERROR_CODE>|<get-ATTR_ERROR_CODE>(){}[0]
+    final const val ATTR_FINGERPRINT // krtc.protocol.stun/StunConstants.ATTR_FINGERPRINT|{}ATTR_FINGERPRINT[0]
+        final fun <get-ATTR_FINGERPRINT>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_FINGERPRINT.<get-ATTR_FINGERPRINT>|<get-ATTR_FINGERPRINT>(){}[0]
+    final const val ATTR_ICE_CONTROLLED // krtc.protocol.stun/StunConstants.ATTR_ICE_CONTROLLED|{}ATTR_ICE_CONTROLLED[0]
+        final fun <get-ATTR_ICE_CONTROLLED>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_ICE_CONTROLLED.<get-ATTR_ICE_CONTROLLED>|<get-ATTR_ICE_CONTROLLED>(){}[0]
+    final const val ATTR_ICE_CONTROLLING // krtc.protocol.stun/StunConstants.ATTR_ICE_CONTROLLING|{}ATTR_ICE_CONTROLLING[0]
+        final fun <get-ATTR_ICE_CONTROLLING>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_ICE_CONTROLLING.<get-ATTR_ICE_CONTROLLING>|<get-ATTR_ICE_CONTROLLING>(){}[0]
+    final const val ATTR_MESSAGE_INTEGRITY // krtc.protocol.stun/StunConstants.ATTR_MESSAGE_INTEGRITY|{}ATTR_MESSAGE_INTEGRITY[0]
+        final fun <get-ATTR_MESSAGE_INTEGRITY>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_MESSAGE_INTEGRITY.<get-ATTR_MESSAGE_INTEGRITY>|<get-ATTR_MESSAGE_INTEGRITY>(){}[0]
+    final const val ATTR_PRIORITY // krtc.protocol.stun/StunConstants.ATTR_PRIORITY|{}ATTR_PRIORITY[0]
+        final fun <get-ATTR_PRIORITY>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_PRIORITY.<get-ATTR_PRIORITY>|<get-ATTR_PRIORITY>(){}[0]
+    final const val ATTR_SOFTWARE // krtc.protocol.stun/StunConstants.ATTR_SOFTWARE|{}ATTR_SOFTWARE[0]
+        final fun <get-ATTR_SOFTWARE>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_SOFTWARE.<get-ATTR_SOFTWARE>|<get-ATTR_SOFTWARE>(){}[0]
+    final const val ATTR_USERNAME // krtc.protocol.stun/StunConstants.ATTR_USERNAME|{}ATTR_USERNAME[0]
+        final fun <get-ATTR_USERNAME>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_USERNAME.<get-ATTR_USERNAME>|<get-ATTR_USERNAME>(){}[0]
+    final const val ATTR_USE_CANDIDATE // krtc.protocol.stun/StunConstants.ATTR_USE_CANDIDATE|{}ATTR_USE_CANDIDATE[0]
+        final fun <get-ATTR_USE_CANDIDATE>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_USE_CANDIDATE.<get-ATTR_USE_CANDIDATE>|<get-ATTR_USE_CANDIDATE>(){}[0]
+    final const val ATTR_XOR_MAPPED_ADDRESS // krtc.protocol.stun/StunConstants.ATTR_XOR_MAPPED_ADDRESS|{}ATTR_XOR_MAPPED_ADDRESS[0]
+        final fun <get-ATTR_XOR_MAPPED_ADDRESS>(): kotlin/Int // krtc.protocol.stun/StunConstants.ATTR_XOR_MAPPED_ADDRESS.<get-ATTR_XOR_MAPPED_ADDRESS>|<get-ATTR_XOR_MAPPED_ADDRESS>(){}[0]
+    final const val BINDING_ERROR // krtc.protocol.stun/StunConstants.BINDING_ERROR|{}BINDING_ERROR[0]
+        final fun <get-BINDING_ERROR>(): kotlin/Int // krtc.protocol.stun/StunConstants.BINDING_ERROR.<get-BINDING_ERROR>|<get-BINDING_ERROR>(){}[0]
+    final const val BINDING_INDICATION // krtc.protocol.stun/StunConstants.BINDING_INDICATION|{}BINDING_INDICATION[0]
+        final fun <get-BINDING_INDICATION>(): kotlin/Int // krtc.protocol.stun/StunConstants.BINDING_INDICATION.<get-BINDING_INDICATION>|<get-BINDING_INDICATION>(){}[0]
+    final const val BINDING_REQUEST // krtc.protocol.stun/StunConstants.BINDING_REQUEST|{}BINDING_REQUEST[0]
+        final fun <get-BINDING_REQUEST>(): kotlin/Int // krtc.protocol.stun/StunConstants.BINDING_REQUEST.<get-BINDING_REQUEST>|<get-BINDING_REQUEST>(){}[0]
+    final const val BINDING_SUCCESS // krtc.protocol.stun/StunConstants.BINDING_SUCCESS|{}BINDING_SUCCESS[0]
+        final fun <get-BINDING_SUCCESS>(): kotlin/Int // krtc.protocol.stun/StunConstants.BINDING_SUCCESS.<get-BINDING_SUCCESS>|<get-BINDING_SUCCESS>(){}[0]
+    final const val HEADER_LENGTH // krtc.protocol.stun/StunConstants.HEADER_LENGTH|{}HEADER_LENGTH[0]
+        final fun <get-HEADER_LENGTH>(): kotlin/Int // krtc.protocol.stun/StunConstants.HEADER_LENGTH.<get-HEADER_LENGTH>|<get-HEADER_LENGTH>(){}[0]
+    final const val MAGIC_COOKIE // krtc.protocol.stun/StunConstants.MAGIC_COOKIE|{}MAGIC_COOKIE[0]
+        final fun <get-MAGIC_COOKIE>(): kotlin/Long // krtc.protocol.stun/StunConstants.MAGIC_COOKIE.<get-MAGIC_COOKIE>|<get-MAGIC_COOKIE>(){}[0]
+}
+
+final fun (kotlin/ByteArray).krtc.protocol/putU16(kotlin/Int, kotlin/Int) // krtc.protocol/putU16|putU16@kotlin.ByteArray(kotlin.Int;kotlin.Int){}[0]
+final fun (kotlin/ByteArray).krtc.protocol/putU32(kotlin/Int, kotlin/Long) // krtc.protocol/putU32|putU32@kotlin.ByteArray(kotlin.Int;kotlin.Long){}[0]
+final fun (kotlin/ByteArray).krtc.protocol/toHex(kotlin/Int = ..., kotlin/Int = ...): kotlin/String // krtc.protocol/toHex|toHex@kotlin.ByteArray(kotlin.Int;kotlin.Int){}[0]
+final fun (kotlin/ByteArray).krtc.protocol/u16(kotlin/Int): kotlin/Int // krtc.protocol/u16|u16@kotlin.ByteArray(kotlin.Int){}[0]
+final fun (kotlin/ByteArray).krtc.protocol/u32(kotlin/Int): kotlin/Long // krtc.protocol/u32|u32@kotlin.ByteArray(kotlin.Int){}[0]
+final fun (kotlin/ByteArray).krtc.protocol/u8(kotlin/Int): kotlin/Int // krtc.protocol/u8|u8@kotlin.ByteArray(kotlin.Int){}[0]
+final fun krtc.protocol/classifyPacket(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...): krtc.protocol/PacketKind // krtc.protocol/classifyPacket|classifyPacket(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+final fun krtc.protocol/constantTimeEquals(kotlin/ByteArray, kotlin/Int, kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Boolean // krtc.protocol/constantTimeEquals|constantTimeEquals(kotlin.ByteArray;kotlin.Int;kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+final fun krtc.protocol/hexToBytes(kotlin/String): kotlin/ByteArray // krtc.protocol/hexToBytes|hexToBytes(kotlin.String){}[0]
