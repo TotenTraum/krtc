@@ -82,6 +82,28 @@ public object Rtcp {
         it.putU32(4, senderSsrc)
     }
 
+    /** Generic NACK (RFC 4585 §6.2.1) for [seqs] of [mediaSsrc], packed as PID + 16-bit mask entries. */
+    public fun nack(senderSsrc: Long, mediaSsrc: Long, seqs: Collection<Int>): ByteArray {
+        val sorted = seqs.map { it and 0xFFFF }.distinct().sortedWith { a, b -> Rtp.seqDelta(b, a) }
+        val fci = ArrayList<Pair<Int, Int>>()
+        for (seq in sorted) {
+            val last = fci.lastOrNull()
+            val d = if (last == null) -1 else (seq - last.first) and 0xFFFF
+            if (last != null && d in 1..16) fci[fci.size - 1] = last.first to (last.second or (1 shl (d - 1)))
+            else fci += seq to 0
+        }
+        val size = 12 + 4 * fci.size
+        val out = ByteArray(size)
+        header(out, 0, FMT_NACK, RTPFB, size)
+        out.putU32(4, senderSsrc)
+        out.putU32(8, mediaSsrc)
+        fci.forEachIndexed { i, (pid, blp) ->
+            out.putU16(12 + 4 * i, pid)
+            out.putU16(14 + 4 * i, blp)
+        }
+        return out
+    }
+
     public fun pli(senderSsrc: Long, mediaSsrc: Long): ByteArray = ByteArray(12).also {
         header(it, 0, FMT_PLI, PSFB, 12)
         it.putU32(4, senderSsrc)

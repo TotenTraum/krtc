@@ -27,6 +27,8 @@ internal class Room(
     private val onSpeaking: (Participant, Boolean) -> Unit,
     /** Testing only: drop this percentage of downlink video packets (first transmissions, not RTX). */
     private val simulatedLossPercent: Int = 0,
+    /** Testing only: drop this percentage of incoming (publisher → SFU) video packets, not RTX. */
+    private val simulatedUplinkLossPercent: Int = 0,
 ) {
     private val lock = SynchronizedObject()
     private val lossRandom = kotlin.random.Random(42)
@@ -38,6 +40,7 @@ internal class Room(
     private val header = RtpHeader()
     private val vp8 = Vp8.Descriptor()
     private val scratch = ByteArray(2048)
+    private val restored = ByteArray(2048) // RTX payloads rebuilt into original packets
     private val counters get() = shard.counters
     private var lastRemb = 0L
 
@@ -73,8 +76,11 @@ internal class Room(
         counters.bytesIn.addAndFetch(length.toLong())
         when {
             h.payloadType == MediaPlan.OPUS_PT -> forwardAudio(from, data, plainLen, h)
-            MediaPlan.isVideo(h.payloadType) -> forwardVideo(from, data, plainLen, h)
-            // Upstream RTX only answers NACKs the SFU sends; it sends none, so drop it.
+            MediaPlan.isVideo(h.payloadType) -> {
+                if (simulatedUplinkLossPercent > 0 && lossRandom.nextInt(100) < simulatedUplinkLossPercent) return
+                forwardVideo(from, data, plainLen, h)
+            }
+            MediaPlan.isRtx(h.payloadType) -> onUpstreamRtx(from, data, plainLen, h)
             else -> Unit
         }
     }
@@ -98,6 +104,7 @@ internal class Room(
         val layer = from.layerOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.RID_EXT_ID))
         layer.ssrc = h.ssrc
         layer.lastPacketMillis = now
+        if (layer.trackArrival(h.sequenceNumber, now)) sendNack(from, layer)
         // Subscribers negotiated their own MID mapping: hide the publisher's MID/RID from them.
         RtpStreamId.rename(data, h, UPLINK_ONLY_EXTENSIONS, MediaPlan.IGNORED_EXT_ID)
         layer.cache.put(h.sequenceNumber, data, plainLen)
@@ -144,6 +151,42 @@ internal class Room(
         udp?.send(shard.index, buf, n, to)
         counters.rtpOut.incrementAndFetch()
         counters.bytesOut.addAndFetch(n.toLong())
+    }
+
+    // ------------------------------------------------------------------ upstream loss recovery
+
+    /** Asks the publisher to retransmit what is missing on [layer] (RFC 4585 generic NACK; it answers with RTX). */
+    private fun sendNack(publisher: Participant, layer: VideoLayer) {
+        val seqs = layer.missingToRequest(nowMillis())
+        if (seqs.isEmpty() || layer.ssrc < 0) return
+        sendRtcp(publisher, Rtcp.concat(Rtcp.receiverReport(MediaPlan.SFU_SSRC), Rtcp.nack(MediaPlan.SFU_SSRC, layer.ssrc, seqs)))
+        counters.nacksSent.incrementAndFetch()
+    }
+
+    /**
+     * A publisher's retransmission (RFC 4588): rebuilds the original packet (payload type from `apt`,
+     * sequence number from the OSN, SSRC of the layer named by repaired-RID) and forwards it as if it
+     * had arrived in time. Padding-only RTX (bandwidth probing) is dropped.
+     */
+    private fun onUpstreamRtx(from: Participant, data: ByteArray, plainLen: Int, h: RtpHeader) {
+        val payload = h.headerLength
+        val payloadLen = h.payloadLength(data, 0, plainLen)
+        if (payloadLen < 2) return
+        val layer = from.layerOfRtx(h.ssrc, RtpStreamId.read(data, h, MediaPlan.REPAIRED_RID_EXT_ID)) ?: return
+        if (layer.ssrc < 0) return
+        val osn = ((data[payload].toInt() and 0xFF) shl 8) or (data[payload + 1].toInt() and 0xFF)
+        if (!layer.isMissing(osn)) return // already recovered (or never lost): don't forward twice
+        val out = restored
+        data.copyInto(out, 0, 0, payload)
+        out[0] = (out[0].toInt() and 0xDF).toByte() // the restored packet carries no RTX padding
+        out[1] = ((data[1].toInt() and 0x80) or MediaPlan.aptFor(h.payloadType)).toByte()
+        Rtp.setSequenceNumber(out, 0, osn)
+        Rtp.setSsrc(out, 0, layer.ssrc)
+        data.copyInto(out, payload, payload + 2, payload + payloadLen)
+        val len = payload + payloadLen - 2
+        if (!header.parse(out, 0, len)) return
+        counters.rtxRecovered.incrementAndFetch()
+        forwardVideo(from, out, len, header)
     }
 
     // ------------------------------------------------------------------ RTCP
@@ -273,6 +316,8 @@ internal class Room(
                 p.speaking = false
                 onSpeaking(p, false)
             }
+            // Re-ask for packets still missing (each sequence number at most a few times).
+            for (layer in p.layers) if (layer.hasMissing()) sendNack(p, layer)
             val activeSsrcs = p.layers.filter { it.isActive(now) }.map { it.ssrc }
             if (remb && activeSsrcs.isNotEmpty()) {
                 sendRtcp(p, Rtcp.concat(Rtcp.receiverReport(MediaPlan.SFU_SSRC), Rtcp.remb(MediaPlan.SFU_SSRC, MediaPlan.VIDEO_BITRATE, activeSsrcs)))

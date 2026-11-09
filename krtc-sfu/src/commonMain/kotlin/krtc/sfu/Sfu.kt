@@ -100,7 +100,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val (p, session, others) = synchronized(lock) {
             val room = rooms.getOrPut(roomName) {
                 opened = true
-                Room(roomName, shards[roomName.hashCode().mod(shards.size)], udp, ::announceSpeaking, config.simulatedLossPercent)
+                Room(roomName, shards[roomName.hashCode().mod(shards.size)], udp, ::announceSpeaking, config.simulatedLossPercent, config.simulatedUplinkLossPercent)
             }
             val id = allow.participantId ?: ids.incrementAndFetch().toString(36)
             val p = Participant(id, name, room, sink)

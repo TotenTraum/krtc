@@ -27,6 +27,8 @@ internal class Metrics {
             droppedOverload = sum { it.dropped },
             keyframeRequests = sum { it.keyframeRequests },
             nacksAnswered = sum { it.nacksAnswered },
+            nacksSent = sum { it.nacksSent },
+            rtxRecovered = sum { it.rtxRecovered },
             stunRequests = stunRequests.load(),
             stunRejected = stunRejected.load(),
             dtlsConnected = dtlsConnected.load(),

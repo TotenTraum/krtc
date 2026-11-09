@@ -10,8 +10,8 @@
 
 | № | Решение | Статус |
 |---|---|---|
-| [0001](0001-engine-libwebrtc.md) | Движок — libwebrtc | Предложено (подтверждается spike) |
-| [0002](0002-binding-c-abi-shim.md) | Биндинг — собственный C ABI-шим `krtc-native` | Предложено (подтверждается spike) |
+| [0001](0001-engine-libwebrtc.md) | Движок — libwebrtc | Принято для macOS и Linux arm64 (ADR-0014) |
+| [0002](0002-binding-c-abi-shim.md) | Биндинг — собственный C ABI-шим `krtc-native` | Принято для macOS и Linux arm64 (ADR-0014) |
 | [0003](0003-browser-targets.md) | JS и Wasm — прямой маппинг на браузерный API | Предложено |
 | [0004](0004-api-model.md) | Модель публичного API | Предложено |
 | [0005](0005-threading.md) | Потоки, корутины и события | Предложено |
@@ -23,6 +23,7 @@
 | [0011](0011-sfu-kotlin-multiplatform.md) | `krtc-sfu` на Kotlin Multiplatform: общее ядро, JVM и Kotlin/Native | Принято |
 | [0012](0012-kmp-client.md) | KMP-клиент: `krtc-core` на интерфейсах и `krtc-client` для Android, iOS, macOS, Linux, Windows, JVM, веба | Предложено |
 | [0013](0013-embeddable-sfu.md) | SFU как встраиваемая KMP-библиотека: `krtc-sfu`, `krtc-sfu-ktor`, `krtc-signaling` | Принято |
+| [0014](0014-spike-krtc-native.md) | Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc, бэкенд `krtc-core` для macOS и Linux | Принято для macOS и Linux arm64 |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

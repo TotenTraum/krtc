@@ -39,7 +39,8 @@ kotlin {
         androidMain.dependencies { implementation(libs.ktor.client.cio) } // OkHttp 5 would require compileSdk 37
         jvmMain.dependencies { implementation(libs.ktor.client.cio) }
         appleMain.dependencies { implementation(libs.ktor.client.darwin) }
-        linuxMain.dependencies { implementation(libs.ktor.client.curl) }
+        // CIO, not curl: the curl engine links a static OpenSSL that clashes with the BoringSSL inside libwebrtc (ADR-0014).
+        linuxMain.dependencies { implementation(libs.ktor.client.cio) }
         mingwMain.dependencies { implementation(libs.ktor.client.winhttp) }
         jsMain.dependencies { implementation(libs.ktor.client.js) }
         wasmJsMain.dependencies { implementation(libs.ktor.client.js) }

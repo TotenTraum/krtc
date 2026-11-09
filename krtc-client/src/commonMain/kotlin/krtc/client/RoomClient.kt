@@ -89,6 +89,9 @@ public class RoomClient(
     private val offers = Channel<ServerMessage.Offer>(Channel.UNLIMITED)
     private var job: Job? = null
 
+    /** The underlying peer connection once joined (for getStats and advanced use). */
+    public val peerConnection: RTCPeerConnection? get() = pc
+
     /** The peer connection's state (ICE + DTLS), once joined. */
     public val connectionState: StateFlow<RTCPeerConnectionState>? get() = pc?.connectionState
 

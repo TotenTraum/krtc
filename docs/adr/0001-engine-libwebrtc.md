@@ -1,6 +1,6 @@
 # ADR-0001. Движок — libwebrtc
 
-- Статус: Предложено (подтверждается spike, этап 10)
+- Статус: Принято для macOS arm64 и Linux arm64 по итогам spike ([ADR-0014](0014-spike-krtc-native.md)); Linux x64, Windows, iOS и Android подтверждаются отдельно
 - Дата: 2026-11-09
 
 ## Контекст

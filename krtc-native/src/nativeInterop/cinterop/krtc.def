@@ -1,0 +1,9 @@
+package = krtc.native.shim
+headers = krtc.h
+# Static libraries (the shim and libwebrtc) are added by Gradle per target and packed into the klib,
+# so applications link them without extra flags. Linux: only glibc (libX11 is loaded lazily if present).
+linkerOpts.osx = -ObjC -lc++ -framework Foundation -framework AVFoundation -framework Security -framework CoreAudio \
+  -framework AudioToolbox -framework AppKit -framework CoreMedia -framework CoreGraphics -framework VideoToolbox \
+  -framework CoreVideo -framework OpenGL -framework Metal -framework MetalKit -framework QuartzCore -framework IOKit \
+  -framework IOSurface -framework ScreenCaptureKit
+linkerOpts.linux = -ldl -lpthread -lm

@@ -1,0 +1,102 @@
+# ADR-0014. Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc
+
+- Статус: Принято для macOS arm64 и Linux arm64: звонок нативного клиента с Chrome через `krtc-sfu` работает (см. «Звонок» и «Linux»). Windows, iOS и Android не проверены
+- Дата: 2026-11-10
+- Проверяет: [ADR-0001](0001-engine-libwebrtc.md), [ADR-0002](0002-binding-c-abi-shim.md), [ADR-0008](0008-libwebrtc-versioning.md), [ADR-0012](0012-kmp-client.md)
+
+## Что сделано
+
+1. **Движок.** Готовая статическая libwebrtc от LiveKit, релиз `webrtc-a545de4` (2026-10-23), архив `webrtc-mac-arm64-release.zip`:
+   - 277 МБ в архиве, `libwebrtc.a` — 741 МБ;
+   - SHA-256 архива: `153a1f1a…ff09e206`;
+   - лежит в `krtc-native/.deps`, в репозиторий не входит.
+2. **C-прослойка** `krtc-native/src/shim/krtc.h` / `krtc.cpp`: 36 функций с плоским C ABI.
+   - фабрика со своими тремя потоками; аудиоустройство на выбор — синтетическое (`krtc_audio.cpp`: PCM приложения или тестовый тон, без звуковой карты) или системное;
+   - видеокодеки платформы (`krtc_apple.mm`: `RTCDefaultVideoEncoderFactory`/`DecoderFactory` — VideoToolbox H.264/H.265, VP8, VP9, AV1) с откатом на VP8;
+   - `getStats` (JSON отчёта libwebrtc), предпочтение кодека (`setCodecPreferences`) и выбор кодека отправки (`RTCRtpEncodingParameters.codec`);
+   - PeerConnection (Unified Plan): описания и answer асинхронно, события `connectionState` и `track`;
+   - трансиверы, треки, тестовый источник видео, счётчик входящих кадров.
+
+   Собирается `build-shim.sh` с дефайнами из `webrtc.ninja` и `-fvisibility=hidden`. Скомпилировалась с первого раза.
+3. **Бэкенд `krtc-core`** (`krtc-native`, `macosArm64`):
+   - cinterop поверх `krtc.h`; прослойка и libwebrtc упакованы в klib, фреймворки macOS — в её `linkerOpts`;
+   - `NativePeerConnectionFactory`, `NativePeerConnection`, трансиверы и треки реализуют интерфейсы `krtc-core`;
+   - асинхронность через `suspendCancellableCoroutine`, колбэки с потока сигнализации кладутся в `Flow` без блокировки (ADR-0005).
+4. **Демо-клиент** `krtc-native-demo`: `krtc-client` + наш бэкенд, входит в комнату `krtc-sfu`, публикует тестовое видео и печатает статистику принятого видео.
+
+## Результаты
+
+| Вопрос | Ответ |
+|---|---|
+| Совместимость `libc++` на macOS | Проблемы нет: сборка LiveKit для macOS сделана с `use_custom_libcxx=false`, то есть против системной `libc++` (`std::__1`). Прослойка собирается Apple clang 21 из Xcode |
+| Совместимость `libc++` на Linux | Решено (см. «Linux»): у LiveKit `use_custom_libcxx=true` (`std::__Cr`), прослойка собирается clang 21 против их встроенной `libc++` (`-nostdinc++`, их `__config_site`) |
+| Линковка | C-тест: 15,8 МБ. Kotlin/Native-демо (debug): 22,6 МБ. Ни одной неразрешённой зависимости |
+| Изоляция символов | Наша прослойка экспортирует только `krtc_*`. Но сборка LiveKit сделана с `rtc_enable_symbol_export=true`, поэтому исполняемый файл экспортирует 2652 символа libwebrtc. Для продукта — своя сборка без экспорта (ADR-0008) или `-exported_symbols_list` |
+| **Конфликт TLS-библиотек** | Внутри `libwebrtc.a` экспортированы BoringSSL-функции (`SSL_new`, `SSL_CTX_new`, `EVP_EncryptInit_ex`…). `krtc-sfu` на нативе использует OpenSSL с теми же именами. **Клиентский движок и нативный SFU нельзя линковать в один бинарь** без переименования символов BoringSSL (`boringssl_prefix_symbols`) в собственной сборке |
+| Кодеки | Встроенной C++-фабрики видеокодеков в сборке нет, зато есть ObjC-фабрики SDK. Через `ObjCToNativeVideoEncoderFactory` получаем H.264 (VideoToolbox), VP8, VP9, AV1; без них — шаблонная фабрика VP8 |
+| Выбор кодека отправки | Как answerer libwebrtc отправляет **первым кодеком предложения**, а не своего ответа: `setCodecPreferences` меняет только порядок в answer. Нужный кодек задаётся после согласования через `RTCRtpEncodingParameters.codec` (`sender.setParameters`). Альтернатива — порядок кодеков в предложении SFU |
+| Формат `getStats` | `RTCStatsReport::ToJson()` отдаёт массив объектов статистики, а не объект по id |
+
+## Звонок
+
+Нативный `krtc-native-demo` (Kotlin/Native + `krtc-client` + этот бэкенд + libwebrtc) и вкладка Chrome в одной комнате `krtc-sfu-server` (2026-11-10):
+
+| Направление | Результат |
+|---|---|
+| Соединение | ICE и DTLS-SRTP за ~3 с; на сервере `dtlsConnected=2`, `srtpFailures=0`, `stunRejected=0` |
+| Chrome → нативный клиент | ~15 кадров/с. Сначала 640×360, затем сервер переключил на верхний слой simulcast 1280×720 |
+| Нативный клиент → Chrome | VP8 640×360, 14,5 кадров/с, потерь 0. С предпочтением H.264: кодер VideoToolbox (`encoderImplementation`), Chrome декодирует H.264 640×360 |
+| Звук нативный клиент → Chrome | Тестовый тон 440 Гц через синтетическое аудиоустройство, Opus ~48 пакетов/с. В Chrome RMS принятого трека 0,158, чередуется с тишиной по схеме 0,5 с / 0,5 с |
+| Звук Chrome → нативный клиент | ~37 пакетов Opus/с, RMS декодированного микса ~0,1 |
+| Завершение | `leave()` и освобождение PeerConnection, треков и фабрики — без ошибок, код выхода 0 |
+
+**Первая попытка не прошла ICE (`FAILED`)**, хотя сервер принимал проверки:
+- `krtc-sfu-server` слушал `0.0.0.0` и объявлял кандидат `127.0.0.1`;
+- libwebrtc не использует loopback и отправляет проверки с адреса сетевого интерфейса;
+- ответ уходил с другого исходного адреса, чем тот, куда клиент стучался, и libwebrtc его отбрасывал (Chrome при этом работал через loopback).
+
+**Решение:** сервер слушает и объявляет один и тот же адрес — добавлена опция `--bind`. Для продакшна это и так обязательное правило. Позже стоит отвечать с адреса назначения входящего пакета (`IP_PKTINFO`), тогда `0.0.0.0` тоже будет работать.
+
+## Linux
+
+Linux arm64 проверен в Docker на маке (2026-11-10): сборка LiveKit `webrtc-linux-arm64-release.zip` (164 МБ, SHA-256 `e87dff71…b5d13c5f`).
+
+**Сборка прослойки.** В контейнере `krtc-native/docker/Dockerfile` (Debian bookworm, clang 21 с apt.llvm.org) скриптом `docker-build-shim.sh`. Кодеки — `krtc_linux.cpp`: VP8 и VP9 (libvpx), H.264 (OpenH264 и FFmpeg), AV1 (libaom и dav1d).
+
+**Три проблемы линковки с Kotlin/Native и их решения:**
+
+| Проблема | Решение |
+|---|---|
+| PulseAudio-модуль libwebrtc вызывает `XOpenDisplay`/`XQueryKeymap`, чтобы отслеживать нажатия клавиш | Переходники в прослойке подгружают `libX11.so.6` через `dlopen`; без неё клавиши просто не отслеживаются. Клиенту не нужен X11 |
+| Внутри libwebrtc — свои `libc++abi` (`std::terminate`, `std::logic_error`, …) и BoringSSL; первая конфликтует с `libstdc++` рантайма Kotlin/Native, BoringSSL — с OpenSSL из Ktor-движка curl | **Изоляция символов:** `ld.lld -r` собирает прослойку и только нужные ей объекты libwebrtc в один объект, `objcopy --keep-global-symbols` оставляет глобальными только 36 функций `krtc_*`. Результат — `libkrtc_webrtc.a` (35 МБ), его и упаковывает klib |
+| В libgcc из sysroot Kotlin/Native (gcc 8.3, glibc 2.25) нет outline-атомиков AArch64 (`__aarch64_cas4_acq`, …) | В тот же объект добавлены builtins compiler-rt |
+
+Из библиотек остаются нужны только glibc и `libgcc_s`; демо запускается в голом `debian:bookworm-slim`. `krtc-client` на Linux теперь использует Ktor CIO вместо curl: CIO не тянет статический OpenSSL (после изоляции curl тоже совместим, но CIO легче).
+
+**Звонок** Linux-клиента в контейнере (SFU и Chrome на маке):
+
+| Направление | Результат |
+|---|---|
+| Соединение | ICE и DTLS-SRTP прошли через NAT Docker (кандидат peer-reflexive) |
+| Linux → Chrome | H.264 (OpenH264) 640×360, 15 кадров/с, потерь 0; тон доходит, RMS в Chrome ~0,15–0,23 |
+| Chrome → Linux | Видео 640×360, затем 1280×720, ~15 кадров/с; Opus ~37 пакетов/с, уровень ~0,1 |
+
+Выход: изоляция символов, задуманная «для продукта», понадобилась уже сейчас. На macOS её стоит сделать тем же способом (`ld -r` + `-exported_symbols_list`), тогда клиент и нативный SFU можно будет линковать в один бинарь.
+
+## Что не проверено
+
+- **Системное аудиоустройство** (`AudioDevice.PLATFORM`): собирается, в звонке не проверялось, чтобы не шуметь.
+- **Simulcast H.264 через VideoToolbox**: идёт только один слой из трёх; не разбирались.
+- **Linux x64** (сборка LiveKit есть, путь тот же), **Windows, iOS, Android.**
+- **Системное аудио на Linux** (PulseAudio/ALSA).
+
+## Решения по итогам
+
+1. **Путь ADR-0002 работает**: плоский C ABI, cinterop, всё упаковано в klib. Отката на официальные SDK не требуется.
+2. **Готовые сборки LiveKit — для разработки и spike.** Для продукта — своя сборка (ADR-0008), в которой:
+   - переименованы символы BoringSSL;
+   - выключен экспорт символов libwebrtc;
+   - на Linux прослойка собирается тем же clang и встроенной `libc++`.
+3. **Следующие шаги для клиента:**
+   - изоляция символов и на macOS;
+   - Linux x64, затем iOS и Android на тех же готовых сборках.

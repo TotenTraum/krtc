@@ -1,0 +1,110 @@
+/*
+ * krtc native shim: a flat C ABI over libwebrtc (ADR-0002).
+ *
+ * All C++ (and libwebrtc's C++ standard library) stays behind this header. Handles are opaque;
+ * functions returning a handle return a new reference the caller releases with the matching
+ * *_release function. Strings returned as `char *` are freed with krtc_free.
+ *
+ * Threading: functions may be called from any thread. Callbacks run on libwebrtc's signaling
+ * thread and must not block or call back into the peer connection synchronously.
+ */
+#ifndef KRTC_H
+#define KRTC_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct krtc_factory krtc_factory;
+typedef struct krtc_pc krtc_pc;
+typedef struct krtc_transceiver krtc_transceiver;
+typedef struct krtc_track krtc_track;
+
+/* Completion of an asynchronous operation. `error` is NULL on success; `sdp` is set by create_answer. */
+typedef void (*krtc_done_fn)(void *user, const char *sdp, const char *error);
+
+enum {
+    KRTC_EVENT_CONNECTION_STATE = 1, /* state: 0 new, 1 connecting, 2 connected, 3 disconnected, 4 failed, 5 closed */
+    KRTC_EVENT_TRACK = 2,            /* transceiver and track are new references owned by the callee */
+};
+typedef void (*krtc_event_fn)(void *user, int event, int state, krtc_transceiver *transceiver, krtc_track *track);
+
+enum {
+    KRTC_DIRECTION_SENDRECV = 0,
+    KRTC_DIRECTION_SENDONLY = 1,
+    KRTC_DIRECTION_RECVONLY = 2,
+    KRTC_DIRECTION_INACTIVE = 3,
+    KRTC_DIRECTION_STOPPED = 4,
+};
+
+enum {
+    KRTC_AUDIO_SYNTHETIC = 0, /* no sound hardware: PCM in/out through krtc_factory_push_audio / pull_audio */
+    KRTC_AUDIO_PLATFORM = 1,  /* the system microphone and speaker */
+};
+
+/* Factory: owns libwebrtc's network, worker and signaling threads.
+ * krtc_factory_create() = synthetic audio + platform video codecs. */
+krtc_factory *krtc_factory_create(void);
+krtc_factory *krtc_factory_create_with(int audio_mode, int platform_video_codecs);
+void krtc_factory_release(krtc_factory *factory);
+
+/* Synthetic audio (48 kHz mono 16-bit). Pushed PCM is sent as the microphone; without it a test tone
+ * (if enabled) or silence is sent. Pulled PCM is the decoded mix of remote audio. Return sample counts. */
+void krtc_factory_set_test_tone(krtc_factory *factory, int enabled);
+int krtc_factory_push_audio(krtc_factory *factory, const int16_t *samples, int count);
+int krtc_factory_pull_audio(krtc_factory *factory, int16_t *out, int count);
+/* RMS level (0..1) of the remote audio mix over the last 10 ms (synthetic audio only). */
+double krtc_factory_output_level(krtc_factory *factory);
+
+/* Video codecs this factory can send, as "video/VP8 video/H264 ..." (free with krtc_free). */
+char *krtc_factory_video_codecs(krtc_factory *factory);
+
+/* Local tracks. The test video track generates frames internally (no camera needed). */
+krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *id);
+krtc_track *krtc_factory_create_test_video_track(krtc_factory *factory, const char *id, int width, int height, int fps);
+
+/* Peer connection (Unified Plan). */
+krtc_pc *krtc_pc_create(krtc_factory *factory, krtc_event_fn on_event, void *user);
+void krtc_pc_set_remote_description(krtc_pc *pc, const char *type, const char *sdp, krtc_done_fn done, void *user);
+void krtc_pc_create_answer(krtc_pc *pc, krtc_done_fn done, void *user);
+void krtc_pc_set_local_description(krtc_pc *pc, const char *type, const char *sdp, krtc_done_fn done, void *user);
+char *krtc_pc_local_description(krtc_pc *pc);
+char *krtc_pc_remote_description(krtc_pc *pc);
+/* The W3C stats report as JSON (an object of RTCStats keyed by id), delivered in `sdp` of `done`. */
+void krtc_pc_get_stats(krtc_pc *pc, krtc_done_fn done, void *user);
+int krtc_pc_transceiver_count(krtc_pc *pc);
+krtc_transceiver *krtc_pc_transceiver_at(krtc_pc *pc, int index);
+void krtc_pc_close(krtc_pc *pc);
+void krtc_pc_release(krtc_pc *pc);
+
+/* Transceivers. */
+char *krtc_transceiver_mid(krtc_transceiver *t);
+int krtc_transceiver_direction(krtc_transceiver *t);
+int krtc_transceiver_set_direction(krtc_transceiver *t, int direction);      /* 0 on success */
+int krtc_transceiver_set_sender_track(krtc_transceiver *t, krtc_track *track); /* NULL clears; 0 on success */
+krtc_track *krtc_transceiver_receiver_track(krtc_transceiver *t);
+/* Moves codecs whose MIME type equals `mime` (e.g. "video/H264") to the front (setCodecPreferences); 0 on success. */
+int krtc_transceiver_prefer_codec(krtc_factory *factory, krtc_transceiver *t, const char *mime);
+/* Sends every encoding with the negotiated codec whose MIME type equals `mime` (RTCRtpEncodingParameters.codec);
+ * call after negotiation. 0 on success, -1 if that codec was not negotiated or the sender refused it. */
+int krtc_transceiver_set_send_codec(krtc_transceiver *t, const char *mime);
+void krtc_transceiver_release(krtc_transceiver *t);
+
+/* Tracks. */
+char *krtc_track_id(krtc_track *track);
+int krtc_track_is_video(krtc_track *track);
+int krtc_track_enabled(krtc_track *track);
+void krtc_track_set_enabled(krtc_track *track, int enabled);
+/* Video tracks: frames delivered so far and the last frame size (attaches a counting sink on first use). */
+void krtc_track_video_stats(krtc_track *track, int64_t *frames, int *width, int *height);
+void krtc_track_release(krtc_track *track);
+
+void krtc_free(void *p);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* KRTC_H */

@@ -41,6 +41,8 @@ public data class SfuConfig(
     val eventBufferSize: Int = 1024,
     /** Testing only: percentage of downlink video packets to drop, to exercise NACK/RTX recovery. */
     val simulatedLossPercent: Int = 0,
+    /** Testing only: percentage of incoming video packets to drop, to exercise upstream NACK/RTX recovery. */
+    val simulatedUplinkLossPercent: Int = 0,
 )
 
 /** What a client asks for when joining. [credentials] is opaque to the SFU (e.g. a token for the host's auth). */
@@ -114,7 +116,12 @@ public data class SfuMetrics(
     val srtpFailures: Long,
     val droppedOverload: Long,
     val keyframeRequests: Long,
+    /** Retransmissions the SFU served to subscribers from its cache. */
     val nacksAnswered: Long,
+    /** NACKs the SFU sent to publishers for packets lost on their uplink. */
+    val nacksSent: Long,
+    /** Packets restored from publishers' RTX retransmissions. */
+    val rtxRecovered: Long,
     val stunRequests: Long,
     val stunRejected: Long,
     val dtlsConnected: Long,

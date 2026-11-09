@@ -29,9 +29,11 @@ JVM:
 |---|---|---|---|
 | `--http-port` | `KRTC_HTTP_PORT` или `PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics` |
 | `--udp-port` | `KRTC_UDP_PORT` | 50000 | Единственный UDP-порт для всех медиа |
-| `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адрес в ICE-кандидате: публичный IP сервера |
+| `--bind` | `KRTC_BIND` | 0.0.0.0 | Локальный адрес UDP-сокетов |
+| `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адрес в ICE-кандидате: публичный IP сервера. Задавайте `--bind` тем же адресом (или адресом, на который его пробрасывает NAT): ICE принимает ответы только с того адреса, куда клиент отправлял проверки |
 | `--shards` | `KRTC_SHARDS` | число ядер | Рабочие потоки и UDP-сокеты |
 | `--simulate-loss` | `KRTC_SIMULATE_LOSS` | 0 | Только для тестов: % отбрасываемых исходящих видеопакетов |
+| `--simulate-uplink-loss` | `KRTC_SIMULATE_UPLINK_LOSS` | 0 | Только для тестов: % отбрасываемых входящих видеопакетов |
 
 Для доступа не с localhost браузеру нужен HTTPS (getUserMedia). Сервер ставится за обратный прокси с TLS.
 
@@ -86,7 +88,7 @@ JVM:
 - `participants`, `rooms`;
 - `rtpIn`/`rtpOut`, `bytesIn`/`bytesOut`, `rtcpIn`/`rtcpOut`;
 - `srtpFailures`, `droppedOverload`;
-- `keyframeRequests`, `nacksAnswered`;
+- `keyframeRequests`, `nacksAnswered` (повторы получателям из кэша), `nacksSent` и `rtxRecovered` (потери на входе от отправителя);
 - `stunRequests`, `stunRejected`, `dtlsConnected`, `dtlsFailed`, `unknownSource`;
 - `shardQueueDepth`.
 
@@ -104,6 +106,5 @@ JVM:
 
 - SVC (VP9/AV1 с пространственными слоями) не поддерживается, только simulcast.
 - Нет оценки полосы по получателям (TWCC) — отправителю задаётся фиксированный REMB 1,5 Мбит/с.
-- Сервер не запрашивает повторы у отправителя: потери на участке от отправителя до сервера не восстанавливаются, только от сервера до получателя.
 - Только IPv4, нет TURN/TCP и авторизации в сигнализации.
 - Linux-бинари собираются на Linux-хосте с OpenSSL 3.

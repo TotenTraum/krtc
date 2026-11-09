@@ -75,6 +75,61 @@ internal class VideoLayer(public val index: Int) {
     internal val cache = PacketCache(MediaPlan.VIDEO_CACHE_PACKETS)
     internal var lastKeyframeRequest = -1L
 
+    // Upstream loss tracking (publisher → SFU), for NACKs to the publisher.
+    private var highestSeq = -1
+    private val missing = LinkedHashMap<Int, IntArray>() // seq → [attempts, last request time (ms) as int]
+
+    /** Records an arriving packet; returns true if it revealed new gaps worth NACKing right away. */
+    internal fun trackArrival(seq: Int, now: Long): Boolean {
+        if (highestSeq < 0) {
+            highestSeq = seq
+            return false
+        }
+        val d = Rtp.seqDelta(highestSeq, seq)
+        if (d <= 0) {
+            missing.remove(seq) // late or retransmitted
+            return false
+        }
+        var gap = false
+        if (d in 2..MAX_GAP) {
+            for (i in 1 until d) missing[(highestSeq + i) and 0xFFFF] = intArrayOf(0, 0)
+            gap = true
+            while (missing.size > MAX_MISSING) missing.remove(missing.keys.first())
+        }
+        highestSeq = seq
+        return gap
+    }
+
+    internal fun isMissing(seq: Int): Boolean = seq in missing
+    internal fun hasMissing(): Boolean = missing.isNotEmpty()
+
+    /** Sequence numbers due for a (re)request now; gives up after a few attempts. */
+    internal fun missingToRequest(now: Long): List<Int> {
+        val nowInt = now.toInt()
+        val out = ArrayList<Int>()
+        val it = missing.entries.iterator()
+        while (it.hasNext()) {
+            val (seq, state) = it.next()
+            if (state[0] >= MAX_NACKS) {
+                it.remove()
+                continue
+            }
+            if (state[0] == 0 || nowInt - state[1] >= NACK_RETRY_MILLIS) {
+                state[0]++
+                state[1] = nowInt
+                out += seq
+            }
+        }
+        return out
+    }
+
+    private companion object {
+        const val MAX_GAP = 200
+        const val MAX_MISSING = 256
+        const val MAX_NACKS = 3
+        const val NACK_RETRY_MILLIS = 100
+    }
+
     internal fun isActive(now: Long): Boolean = lastPacketMillis >= 0 && now - lastPacketMillis < MediaPlan.LAYER_TIMEOUT_MILLIS
 }
 
@@ -218,6 +273,15 @@ internal class Participant(
     }
 
     internal fun layerBySsrc(ssrc: Long): VideoLayer? = layerBySsrc[ssrc]?.let { layers[it] }
+
+    private val layerByRtxSsrc = HashMap<Long, Int>()
+
+    /** The layer an RTX stream repairs: from its repaired-RID, else remembered by SSRC, else the only active layer. */
+    internal fun layerOfRtx(rtxSsrc: Long, repairedRid: String?): VideoLayer? {
+        if (repairedRid != null) return layers[MediaPlan.layerOf(repairedRid).also { layerByRtxSsrc[rtxSsrc] = it }]
+        layerByRtxSsrc[rtxSsrc]?.let { return layers[it] }
+        return layers.filter { it.ssrc >= 0 }.singleOrNull()
+    }
 
     internal fun downlinkFrom(publisherId: String): DownlinkVideo = downlinks.getOrPut(publisherId) { DownlinkVideo() }
 

@@ -52,6 +52,7 @@ public abstract interface class krtc/core/RTCPeerConnection : java/lang/AutoClos
 	public abstract fun getLocalDescription ()Lkrtc/core/RTCSessionDescription;
 	public abstract fun getOntrack ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getRemoteDescription ()Lkrtc/core/RTCSessionDescription;
+	public abstract fun getStats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getTransceivers ()Ljava/util/List;
 	public abstract fun setLocalDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun setRemoteDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -120,6 +121,18 @@ public final class krtc/core/RTCSessionDescription {
 	public final fun getSdp ()Ljava/lang/String;
 	public final fun getType ()Lkrtc/core/RTCSdpType;
 	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/core/RTCStats {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;DLjava/util/Map;)V
+	public final fun double (Ljava/lang/String;)Ljava/lang/Double;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getMembers ()Ljava/util/Map;
+	public final fun getTimestamp ()D
+	public final fun getType ()Ljava/lang/String;
+	public final fun long (Ljava/lang/String;)Ljava/lang/Long;
+	public final fun string (Ljava/lang/String;)Ljava/lang/String;
 	public fun toString ()Ljava/lang/String;
 }
 

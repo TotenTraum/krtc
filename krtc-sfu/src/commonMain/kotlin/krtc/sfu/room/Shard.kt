@@ -25,6 +25,8 @@ internal class ShardCounters {
     internal val dropped: AtomicLong = AtomicLong(0)
     internal val keyframeRequests: AtomicLong = AtomicLong(0)
     internal val nacksAnswered: AtomicLong = AtomicLong(0)
+    internal val nacksSent: AtomicLong = AtomicLong(0)
+    internal val rtxRecovered: AtomicLong = AtomicLong(0)
 }
 
 /**

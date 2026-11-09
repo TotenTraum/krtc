@@ -65,6 +65,18 @@ public class RTCTrackEvent(
     public val transceiver: RTCRtpTransceiver,
 )
 
+/**
+ * One [W3C RTCStats](https://w3c.github.io/webrtc-pc/#dom-rtcstats) dictionary (`inbound-rtp`, `outbound-rtp`,
+ * `codec`, `candidate-pair`, ...; webrtc-stats). [members] holds every other field as String, Double, Long,
+ * Boolean, List or Map.
+ */
+public class RTCStats(public val id: String, public val type: String, public val timestamp: Double, public val members: Map<String, Any?>) {
+    public fun string(name: String): String? = members[name] as? String
+    public fun long(name: String): Long? = (members[name] as? Number)?.toLong()
+    public fun double(name: String): Double? = (members[name] as? Number)?.toDouble()
+    override fun toString(): String = "RTCStats($type $id $members)"
+}
+
 /** [W3C RTCPeerConnection](https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection) (subset) */
 public interface RTCPeerConnection : AutoCloseable {
     public suspend fun setRemoteDescription(description: RTCSessionDescription)
@@ -73,6 +85,9 @@ public interface RTCPeerConnection : AutoCloseable {
     public val localDescription: RTCSessionDescription?
     public val remoteDescription: RTCSessionDescription?
     public fun getTransceivers(): List<RTCRtpTransceiver>
+
+    /** [W3C getStats()](https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-getstats): the RTCStatsReport, keyed by stats id. */
+    public suspend fun getStats(): Map<String, RTCStats>
 
     /** `track` events. */
     public val ontrack: Flow<RTCTrackEvent>

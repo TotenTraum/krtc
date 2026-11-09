@@ -71,6 +71,7 @@ public final class krtc/protocol/rtp/Rtcp {
 	public final fun firTargets ([BII)Ljava/util/List;
 	public final fun forEach ([BIILkotlin/jvm/functions/Function4;)V
 	public final fun mediaSsrc ([BI)J
+	public final fun nack (JJLjava/util/Collection;)[B
 	public final fun nackSequences ([BII)Ljava/util/List;
 	public final fun pli (JJ)[B
 	public final fun receiverReport (J)[B

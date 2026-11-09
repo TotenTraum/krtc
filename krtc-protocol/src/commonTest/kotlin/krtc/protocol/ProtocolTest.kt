@@ -253,6 +253,18 @@ class RtcpTest {
     }
 
     @Test
+    fun nackBuildRoundTrips() {
+        val seqs = listOf(65534, 65535, 0, 2, 40, 41)
+        val nack = krtc.protocol.rtp.Rtcp.nack(1, 9, seqs)
+        var parsed = emptyList<Int>()
+        krtc.protocol.rtp.Rtcp.forEach(nack, 0, nack.size) { type, fmt, at, size ->
+            if (type == krtc.protocol.rtp.Rtcp.RTPFB && fmt == krtc.protocol.rtp.Rtcp.FMT_NACK) parsed = krtc.protocol.rtp.Rtcp.nackSequences(nack, at, size)
+        }
+        assertEquals(seqs, parsed)
+        assertEquals(12 + 4 * 2, nack.size) // 65534 covers up to 2 via its bitmask; 40 starts a second entry
+    }
+
+    @Test
     fun senderReportRewrite() {
         val sr = hexToBytes("80 c8 00 06 00 00 00 09 11 22 33 44 55 66 77 88 00 00 10 00 00 00 00 05 00 00 01 00")
         val out = krtc.protocol.rtp.Rtcp.rewriteSenderReport(sr, 0, 0x1234, 0x2000)

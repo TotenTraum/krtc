@@ -43,6 +43,8 @@ internal object MediaPlan {
     internal const val SFU_SSRC: Long = 0x6b727463L
 
     internal fun isVideo(pt: Int): Boolean = pt == VP8_PT || pt == H264_PT
+    internal fun isRtx(pt: Int): Boolean = pt == VP8_RTX_PT || pt == H264_RTX_PT
+    internal fun aptFor(rtxPt: Int): Int = if (rtxPt == H264_RTX_PT) H264_PT else VP8_PT
     internal fun rtxFor(pt: Int): Int = if (pt == H264_PT) H264_RTX_PT else VP8_RTX_PT
     internal fun layerOf(rid: String): Int = LAYER_RIDS.indexOf(rid).let { if (it < 0) TOP_LAYER else it }
 }

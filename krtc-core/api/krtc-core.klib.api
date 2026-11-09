@@ -84,6 +84,7 @@ abstract interface krtc.core/RTCPeerConnection : kotlin/AutoCloseable { // krtc.
     abstract fun close() // krtc.core/RTCPeerConnection.close|close(){}[0]
     abstract fun getTransceivers(): kotlin.collections/List<krtc.core/RTCRtpTransceiver> // krtc.core/RTCPeerConnection.getTransceivers|getTransceivers(){}[0]
     abstract suspend fun createAnswer(): krtc.core/RTCSessionDescription // krtc.core/RTCPeerConnection.createAnswer|createAnswer(){}[0]
+    abstract suspend fun getStats(): kotlin.collections/Map<kotlin/String, krtc.core/RTCStats> // krtc.core/RTCPeerConnection.getStats|getStats(){}[0]
     abstract suspend fun setLocalDescription(krtc.core/RTCSessionDescription) // krtc.core/RTCPeerConnection.setLocalDescription|setLocalDescription(krtc.core.RTCSessionDescription){}[0]
     abstract suspend fun setRemoteDescription(krtc.core/RTCSessionDescription) // krtc.core/RTCPeerConnection.setRemoteDescription|setRemoteDescription(krtc.core.RTCSessionDescription){}[0]
 }
@@ -159,6 +160,24 @@ final class krtc.core/RTCSessionDescription { // krtc.core/RTCSessionDescription
     final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCSessionDescription.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // krtc.core/RTCSessionDescription.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // krtc.core/RTCSessionDescription.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCStats { // krtc.core/RTCStats|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Double, kotlin.collections/Map<kotlin/String, kotlin/Any?>) // krtc.core/RTCStats.<init>|<init>(kotlin.String;kotlin.String;kotlin.Double;kotlin.collections.Map<kotlin.String,kotlin.Any?>){}[0]
+
+    final val id // krtc.core/RTCStats.id|{}id[0]
+        final fun <get-id>(): kotlin/String // krtc.core/RTCStats.id.<get-id>|<get-id>(){}[0]
+    final val members // krtc.core/RTCStats.members|{}members[0]
+        final fun <get-members>(): kotlin.collections/Map<kotlin/String, kotlin/Any?> // krtc.core/RTCStats.members.<get-members>|<get-members>(){}[0]
+    final val timestamp // krtc.core/RTCStats.timestamp|{}timestamp[0]
+        final fun <get-timestamp>(): kotlin/Double // krtc.core/RTCStats.timestamp.<get-timestamp>|<get-timestamp>(){}[0]
+    final val type // krtc.core/RTCStats.type|{}type[0]
+        final fun <get-type>(): kotlin/String // krtc.core/RTCStats.type.<get-type>|<get-type>(){}[0]
+
+    final fun double(kotlin/String): kotlin/Double? // krtc.core/RTCStats.double|double(kotlin.String){}[0]
+    final fun long(kotlin/String): kotlin/Long? // krtc.core/RTCStats.long|long(kotlin.String){}[0]
+    final fun string(kotlin/String): kotlin/String? // krtc.core/RTCStats.string|string(kotlin.String){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCStats.toString|toString(){}[0]
 }
 
 final class krtc.core/RTCTrackEvent { // krtc.core/RTCTrackEvent|null[0]

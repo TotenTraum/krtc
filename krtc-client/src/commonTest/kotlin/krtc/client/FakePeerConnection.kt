@@ -101,6 +101,8 @@ class FakePeerConnection : RTCPeerConnection {
 
     override fun getTransceivers(): List<RTCRtpTransceiver> = transceivers.toList()
 
+    override suspend fun getStats(): Map<String, krtc.core.RTCStats> = emptyMap()
+
     override fun close() {
         closed = true
         state.value = RTCPeerConnectionState.CLOSED

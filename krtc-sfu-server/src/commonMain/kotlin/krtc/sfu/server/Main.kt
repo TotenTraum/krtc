@@ -20,7 +20,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The standalone krtc SFU: krtc-sfu + krtc-sfu-ktor + a test page, on the JVM or as a Kotlin/Native
  * executable. Options (or environment variables KRTC_*):
- *   --http-port 8080 (or PORT)  --udp-port 50000  --announce 127.0.0.1  --shards <cores>  --simulate-loss 0
+ *   --http-port 8080 (or PORT)  --udp-port 50000  --bind 0.0.0.0  --announce 127.0.0.1  --shards <cores>
+ * Bind and announce the same IP in production: ICE requires replies from the address the client contacted.
+ *   --simulate-loss 0  --simulate-uplink-loss 0   (testing only)
  */
 public fun main(args: Array<String>) {
     val opts = args.toList().chunked(2).filter { it.size == 2 }.associate { (k, v) -> k.removePrefix("--") to v }
@@ -28,9 +30,11 @@ public fun main(args: Array<String>) {
     val defaults = SfuConfig()
     val config = SfuConfig(
         udpPort = opt("udp-port", "KRTC_UDP_PORT")?.toInt() ?: defaults.udpPort,
+        bindAddress = opt("bind", "KRTC_BIND") ?: defaults.bindAddress,
         announcedAddress = opt("announce", "KRTC_ANNOUNCE") ?: defaults.announcedAddress,
         shards = opt("shards", "KRTC_SHARDS")?.toInt() ?: defaults.shards,
         simulatedLossPercent = opt("simulate-loss", "KRTC_SIMULATE_LOSS")?.toInt() ?: 0,
+        simulatedUplinkLossPercent = opt("simulate-uplink-loss", "KRTC_SIMULATE_UPLINK_LOSS")?.toInt() ?: 0,
     )
     val httpPort = (opt("http-port", "KRTC_HTTP_PORT") ?: environment("PORT"))?.toInt() ?: 8080
     val sfu = Sfu(config)
@@ -58,7 +62,7 @@ internal fun SfuMetrics.toJson(): String = buildString {
         "participants" to participants, "rooms" to rooms, "rtpIn" to rtpIn, "rtpOut" to rtpOut,
         "bytesIn" to bytesIn, "bytesOut" to bytesOut, "rtcpIn" to rtcpIn, "rtcpOut" to rtcpOut,
         "srtpFailures" to srtpFailures, "droppedOverload" to droppedOverload, "keyframeRequests" to keyframeRequests,
-        "nacksAnswered" to nacksAnswered, "stunRequests" to stunRequests, "stunRejected" to stunRejected,
+        "nacksAnswered" to nacksAnswered, "nacksSent" to nacksSent, "rtxRecovered" to rtxRecovered, "stunRequests" to stunRequests, "stunRejected" to stunRejected,
         "dtlsConnected" to dtlsConnected, "dtlsFailed" to dtlsFailed, "unknownSource" to unknownSource,
     )
     fields.forEach { (k, v) -> append('"').append(k).append("\":").append(v).append(',') }
