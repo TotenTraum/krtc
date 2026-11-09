@@ -1,0 +1,229 @@
+package krtc.sfu.room
+
+import krtc.protocol.rtp.Rtp
+import krtc.protocol.rtp.RtpHeader
+import krtc.protocol.rtp.Vp8
+import krtc.sfu.platform.PeerAddress
+import krtc.sfu.platform.nowMillis
+import krtc.sfu.platform.secureRandomInt
+import krtc.sfu.platform.secureRandomLong
+import krtc.sfu.srtp.SrtpSessionKeys
+import kotlin.concurrent.Volatile
+
+/** Outbound signaling channel of a participant (implemented by the WebSocket layer). Must not block. */
+public interface SignalSink {
+    public fun send(message: String)
+    public fun close()
+}
+
+/**
+ * Rewrites one forwarded audio stream (SSRC, sequence number, timestamp) so subscribers see a
+ * continuous stream under an SSRC the SFU chose, even when the publisher restarts its stream.
+ * Shard thread only.
+ */
+public class OutboundStream(public val ssrc: Long, private val clockRate: Int) {
+    private var lastSourceSsrc = -1L
+    private var seqOffset = 0
+    private var tsOffset = 0L
+    private var started = false
+    public var lastOutSeq: Int = 0; private set
+    public var lastOutTs: Long = 0; private set
+
+    /** Rewrites the header of the plaintext packet in [buf] in place; returns the new sequence number. */
+    public fun rewrite(buf: ByteArray, h: RtpHeader): Int {
+        if (h.ssrc != lastSourceSsrc) {
+            if (lastSourceSsrc >= 0) {
+                seqOffset = (lastOutSeq + 1 - h.sequenceNumber) and 0xFFFF
+                tsOffset = (lastOutTs + clockRate / 50 - h.timestamp) and 0xFFFFFFFFL
+            }
+            lastSourceSsrc = h.ssrc
+        }
+        val seq = (h.sequenceNumber + seqOffset) and 0xFFFF
+        val ts = (h.timestamp + tsOffset) and 0xFFFFFFFFL
+        if (!started || Rtp.seqDelta(lastOutSeq, seq) > 0) {
+            started = true
+            lastOutSeq = seq
+            lastOutTs = ts
+        }
+        Rtp.setSsrc(buf, 0, ssrc)
+        Rtp.setSequenceNumber(buf, 0, seq)
+        Rtp.setTimestamp(buf, 0, ts)
+        return seq
+    }
+
+    public fun mapTimestamp(sourceTs: Long): Long = (sourceTs + tsOffset) and 0xFFFFFFFFL
+}
+
+/** Ring buffer of recent packets keyed by sequence number. Allocation-free after warm-up. Shard thread only. */
+public class PacketCache(private val capacity: Int) {
+    private val seqs = IntArray(capacity) { -1 }
+    private val packets = arrayOfNulls<ByteArray>(capacity)
+    private val lengths = IntArray(capacity)
+
+    public fun put(seq: Int, buf: ByteArray, length: Int) {
+        val i = seq % capacity
+        val slot = packets[i]?.takeIf { it.size >= length } ?: ByteArray(maxOf(length, 1400)).also { packets[i] = it }
+        buf.copyInto(slot, 0, 0, length)
+        lengths[i] = length
+        seqs[i] = seq
+    }
+
+    public fun packet(seq: Int): ByteArray? = if (seqs[seq % capacity] == seq) packets[seq % capacity] else null
+    public fun length(seq: Int): Int = lengths[seq % capacity]
+}
+
+/** One simulcast layer of a publisher's video uplink. Shard thread only. */
+public class VideoLayer(public val index: Int) {
+    public var ssrc: Long = -1; internal set
+    public var lastPacketMillis: Long = -1; internal set
+    internal val cache = PacketCache(MediaPlan.VIDEO_CACHE_PACKETS)
+    internal var lastKeyframeRequest = -1L
+
+    public fun isActive(now: Long): Boolean = lastPacketMillis >= 0 && now - lastPacketMillis < MediaPlan.LAYER_TIMEOUT_MILLIS
+}
+
+/**
+ * What one subscriber receives from one video publisher: the chosen simulcast layer and an independent
+ * numbering (seq, timestamp, VP8 PictureID/TL0PICIDX) that stays continuous across layer switches.
+ * Also remembers which source packet went out under each sequence number, so NACKs are served from the
+ * publisher's per-layer cache without a per-subscriber packet copy. Shard thread only.
+ */
+public class DownlinkVideo {
+    /** Layer the subscriber asked for (by default the top one); the SFU sends the best active layer ≤ it. */
+    public var preferred: Int = MediaPlan.TOP_LAYER
+    public var current: Int = -1; internal set
+    public var target: Int = -1; internal set
+
+    private var started = false
+    private var seqOffset = 0
+    internal var tsOffset = 0L; private set
+    private var picIdOffset = 0
+    private var tl0Offset = 0
+    private var lastOutSeq = 0
+    private var lastOutTs = 0L
+    private var lastOutPicId = -1
+    private var lastOutTl0 = -1
+
+    private val historySize = MediaPlan.VIDEO_CACHE_PACKETS
+    private val histOutSeq = IntArray(historySize) { -1 }
+    private val histSource = IntArray(historySize) // layer shl 16 or source seq
+    private val histTsOffset = LongArray(historySize)
+    private val histPicOffsets = IntArray(historySize) // picIdOffset shl 8 or tl0Offset (low byte)
+
+    /** Switches to [layer] at a key frame whose first packet has these source values. */
+    internal fun switchTo(layer: Int, h: RtpHeader, d: Vp8.Descriptor?) {
+        current = layer
+        target = layer
+        if (!started) return
+        seqOffset = (lastOutSeq + 1 - h.sequenceNumber) and 0xFFFF
+        tsOffset = (lastOutTs + 3000 - h.timestamp) and 0xFFFFFFFFL // ~33 ms at 90 kHz after the last frame sent
+        if (d != null && d.pictureId >= 0 && lastOutPicId >= 0) picIdOffset = (lastOutPicId + 1 - d.pictureId) and 0x7FFF
+        if (d != null && d.tl0PicIdx >= 0 && lastOutTl0 >= 0) tl0Offset = (lastOutTl0 + 1 - d.tl0PicIdx) and 0xFF
+    }
+
+    /**
+     * Rewrites the plaintext packet in [buf] for this subscriber (original values come from [h] and [d],
+     * not from the buffer, which other subscribers may already have rewritten) and records it for NACKs.
+     */
+    internal fun rewrite(buf: ByteArray, h: RtpHeader, d: Vp8.Descriptor?, payload: Int, ssrc: Long): Int {
+        val seq = (h.sequenceNumber + seqOffset) and 0xFFFF
+        val ts = (h.timestamp + tsOffset) and 0xFFFFFFFFL
+        Rtp.setSsrc(buf, 0, ssrc)
+        Rtp.setSequenceNumber(buf, 0, seq)
+        Rtp.setTimestamp(buf, 0, ts)
+        if (d != null && d.pictureId >= 0) {
+            val pic = (d.pictureId + picIdOffset) and (if (d.pictureIdBits == 15) 0x7FFF else 0x7F)
+            Vp8.setPictureId(buf, payload, d, pic)
+            if (!started || Rtp.seqDelta(lastOutSeq, seq) > 0) lastOutPicId = pic
+        }
+        if (d != null && d.tl0PicIdx >= 0) {
+            val tl0 = (d.tl0PicIdx + tl0Offset) and 0xFF
+            Vp8.setTl0PicIdx(buf, payload, d, tl0)
+            if (!started || Rtp.seqDelta(lastOutSeq, seq) > 0) lastOutTl0 = tl0
+        }
+        if (!started || Rtp.seqDelta(lastOutSeq, seq) > 0) {
+            lastOutSeq = seq
+            lastOutTs = ts
+        }
+        started = true
+        val i = seq % historySize
+        histOutSeq[i] = seq
+        histSource[i] = (current shl 16) or h.sequenceNumber
+        histTsOffset[i] = tsOffset
+        histPicOffsets[i] = (picIdOffset shl 8) or tl0Offset
+        return seq
+    }
+
+    /** For a NACKed [outSeq]: (layer, source seq), or null if it is no longer remembered. */
+    internal fun source(outSeq: Int): Int? = (outSeq % historySize).let { if (histOutSeq[it] == outSeq) histSource[it] else null }
+    internal fun sentTsOffset(outSeq: Int): Long = histTsOffset[outSeq % historySize]
+    internal fun sentPicIdOffset(outSeq: Int): Int = histPicOffsets[outSeq % historySize] ushr 8
+    internal fun sentTl0Offset(outSeq: Int): Int = histPicOffsets[outSeq % historySize] and 0xFF
+}
+
+/**
+ * A member of a room. Fields are grouped by owning thread:
+ * - transport (UDP thread, volatile): remote address, consent time;
+ * - media (room's shard thread only): keys, uplink SSRCs and layers, downlink state, speaking;
+ * - negotiation results (volatile snapshots written by Sfu.PeerSession).
+ */
+public class Participant(
+    public val id: String,
+    public val name: String,
+    public val room: Room,
+    public val sink: SignalSink,
+) {
+    // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char)
+    public val iceUfrag: String = randomIceString(8)
+    public val icePwd: String = randomIceString(24)
+    public val icePwdBytes: ByteArray = icePwd.encodeToByteArray()
+    public val cname: String = randomIceString(16)
+
+    /** This participant's media as forwarded to everyone else, under SSRCs the SFU chose. */
+    public val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
+    public val videoSsrc: Long = randomSsrc()
+    public val videoRtxSsrc: Long = randomSsrc()
+
+    @Volatile public var remote: PeerAddress? = null
+    @Volatile public var lastConsentMillis: Long = nowMillis()
+
+    /** Whether this participant sends video (its answer accepted the video uplink m-line). */
+    @Volatile public var publishesVideo: Boolean = false
+
+    /** Publishers whose audio / video m-lines this participant has accepted (from the last applied answer). */
+    @Volatile public var receiving: Set<String> = emptySet()
+    @Volatile public var receivingVideo: Set<String> = emptySet()
+
+    // --- media state, shard thread only ---
+    internal var keys: SrtpSessionKeys? = null
+    internal var uplinkAudioSsrc = -1L
+    internal val layers = Array(MediaPlan.LAYER_RIDS.size) { VideoLayer(it) }
+    private val layerBySsrc = HashMap<Long, Int>()
+    internal val downlinks = HashMap<String, DownlinkVideo>() // by publisher id
+    internal var rtxSeq = secureRandomInt(0x8000)
+    internal var speaking = false
+    internal var lastLoudMillis = 0L
+
+    /** Installs SRTP/SRTCP keys on the owning shard; media starts flowing afterwards. */
+    public fun installKeys(k: SrtpSessionKeys) {
+        room.shard.execute { keys = k }
+    }
+
+    /** The uplink layer a video packet belongs to: from its RID extension, else from its SSRC. */
+    internal fun layerOf(ssrc: Long, rid: String?): VideoLayer {
+        val index = if (rid != null) MediaPlan.layerOf(rid).also { layerBySsrc[ssrc] = it } else layerBySsrc.getOrPut(ssrc) { MediaPlan.TOP_LAYER }
+        return layers[index]
+    }
+
+    internal fun layerBySsrc(ssrc: Long): VideoLayer? = layerBySsrc[ssrc]?.let { layers[it] }
+
+    internal fun downlinkFrom(publisherId: String): DownlinkVideo = downlinks.getOrPut(publisherId) { DownlinkVideo() }
+
+    override fun toString(): String = "Participant($id, $name)"
+
+    internal companion object {
+        const val ICE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        fun randomIceString(n: Int) = buildString { repeat(n) { append(ICE_CHARS[secureRandomInt(ICE_CHARS.length)]) } }
+        fun randomSsrc(): Long = (secureRandomLong() and 0x7FFFFFFFL) or 1L
+    }
+}

@@ -110,6 +110,11 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
         sessions[p.id]?.onAnswer(version, sdp)
     }
 
+    /** A subscriber's simulcast preference for one publisher's video (0 = lowest layer). */
+    public fun setPreferredLayer(p: Participant, publisherId: String, layer: Int) {
+        p.room.shard.execute { p.room.setPreferredLayer(p, publisherId, layer) }
+    }
+
     public fun leave(p: Participant) {
         val (session, remaining) = synchronized(lock) {
             val session = sessions.remove(p.id) ?: return
@@ -256,11 +261,8 @@ public class Sfu(public val config: SfuConfig) : AutoCloseable {
                 val answer = SessionDescription.parse(sdp)
                 if (dtls == null) startDtls(answer)
                 participant.receiving = inFlightSlots.filterNotNull().map { it.id }.toSet()
-                val newlyWatched = inFlightVideo - participant.receivingVideo
+                // New video subscriptions pick a layer and request a key frame on their first packet (Room.forwardVideo).
                 participant.receivingVideo = inFlightVideo
-                // Someone starts watching a publisher: ask that publisher for a key frame right away.
-                val room = participant.room
-                newlyWatched.forEach { id -> room.members.firstOrNull { it.id == id }?.let { pub -> room.shard.execute { room.requestKeyframe(pub) } } }
                 val uplinkVideo = answer.media.firstOrNull { it.mid == "1" }?.direction
                 val publishes = uplinkVideo == Direction.SENDONLY || uplinkVideo == Direction.SENDRECV
                 val changed = publishes != participant.publishesVideo

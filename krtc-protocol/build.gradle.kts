@@ -5,10 +5,17 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // No sockets, threads or platform dependencies — only data and pure functions.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.kmp.library)
 }
 
 kotlin {
     explicitApi()
+
+    android {
+        namespace = "krtc.protocol"
+        compileSdk = 36
+        minSdk = 24
+    }
 
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }

@@ -21,6 +21,7 @@
 | [0009](0009-server-side-use.md) | Серверное использование | Предложено; сроки SFU заменены ADR-0010 |
 | [0010](0010-sfu-before-1.0.md) | SFU `krtc-sfu` раньше 1.0: архитектура голосового сервера | Принято |
 | [0011](0011-sfu-kotlin-multiplatform.md) | `krtc-sfu` на Kotlin Multiplatform: общее ядро, JVM и Kotlin/Native | Принято |
+| [0012](0012-kmp-client.md) | KMP-клиент: `krtc-core` на интерфейсах и `krtc-client` для Android, iOS, macOS, Linux, Windows, JVM, веба | Предложено |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

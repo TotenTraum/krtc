@@ -1,6 +1,7 @@
 package krtc.sfu.room
 
 import krtc.protocol.rtp.AudioLevel
+import krtc.protocol.rtp.RtpStreamId
 import krtc.protocol.sdp.Direction
 import krtc.protocol.sdp.MediaDescription
 import krtc.protocol.sdp.SdpAttribute
@@ -12,7 +13,7 @@ import krtc.protocol.sdp.SessionDescription
  * header-extension ids and SSRCs, and forwards packets without renumbering payload types.
  *
  * Layout for a participant:
- * - `0` audio, `1` video — its own uplink (recvonly on the SFU side);
+ * - `0` audio, `1` video — its own uplink (recvonly on the SFU side; video asks for simulcast q/h/f);
  * - per slot i: `2+2i` audio and `3+2i` video of one other participant (sendonly), or `inactive` when
  *   the slot is free (someone left) or that participant sends no video. Free slots are reused.
  */
@@ -76,6 +77,13 @@ public class OfferBuilder(
         val m = MediaDescription("video", port, "UDP/TLS/RTP/SAVPF", pts.map { "$it" }.toMutableList())
         transport(p, m, mid)
         val a = m.attributes
+        val uplink = publisher == null && direction == Direction.RECVONLY
+        if (uplink) {
+            // The SFU's own MID/RID ids; renamed away before forwarding (MediaPlan.IGNORED_EXT_ID).
+            a += SdpAttribute("extmap", "${MediaPlan.MID_EXT_ID} ${RtpStreamId.MID_URI}")
+            a += SdpAttribute("extmap", "${MediaPlan.RID_EXT_ID} ${RtpStreamId.RID_URI}")
+            a += SdpAttribute("extmap", "${MediaPlan.REPAIRED_RID_EXT_ID} ${RtpStreamId.REPAIRED_RID_URI}")
+        }
         a += SdpAttribute(direction.sdp)
         a += SdpAttribute("rtcp-mux")
         a += SdpAttribute("rtcp-rsize")
@@ -93,11 +101,16 @@ public class OfferBuilder(
             a += SdpAttribute("rtpmap", "$rtx rtx/90000")
             a += SdpAttribute("fmtp", "$rtx apt=$pt")
         }
+        if (uplink) {
+            // Ask for simulcast: the browser creates one encoding per rid, scaled ¼, ½ and 1 (MediaPlan.LAYER_RIDS).
+            MediaPlan.LAYER_RIDS.forEach { a += SdpAttribute("rid", "$it recv") }
+            a += SdpAttribute("simulcast", "recv " + MediaPlan.LAYER_RIDS.joinToString(";"))
+        }
         if (publisher != null) {
             val (stream, track) = msid(publisher, "video")
             a += SdpAttribute("msid", "$stream $track")
-            a += SdpAttribute("ssrc-group", "FID ${publisher.videoOut.ssrc} ${publisher.videoRtxSsrc}")
-            for (ssrc in listOf(publisher.videoOut.ssrc, publisher.videoRtxSsrc)) {
+            a += SdpAttribute("ssrc-group", "FID ${publisher.videoSsrc} ${publisher.videoRtxSsrc}")
+            for (ssrc in listOf(publisher.videoSsrc, publisher.videoRtxSsrc)) {
                 a += SdpAttribute("ssrc", "$ssrc cname:${publisher.cname}")
                 a += SdpAttribute("ssrc", "$ssrc msid:$stream $track")
             }

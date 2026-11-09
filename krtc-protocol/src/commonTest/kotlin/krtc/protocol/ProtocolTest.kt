@@ -259,3 +259,53 @@ class RtcpTest {
         assertEquals("80c8000600001234112233445566778800002000000000050000" + "0100", out.toHex())
     }
 }
+
+class CodecTest {
+    @Test
+    fun vp8KeyFrameAndPictureIdRewrite() {
+        // Descriptor: X=1,S=1,PID=0 | I=1,L=1 | M=1 PictureID 0x1234 | TL0PICIDX 7 | VP8 header byte P=0 (key frame)
+        val payload = hexToBytes("90 c0 92 34 07 10 00 00")
+        val d = krtc.protocol.rtp.Vp8.Descriptor()
+        assertTrue(krtc.protocol.rtp.Vp8.parse(payload, 0, payload.size, d))
+        assertEquals(0x1234, d.pictureId)
+        assertEquals(15, d.pictureIdBits)
+        assertEquals(7, d.tl0PicIdx)
+        assertEquals(5, d.size)
+        assertTrue(krtc.protocol.rtp.Vp8.isKeyFrame(payload, 0, payload.size, d))
+        krtc.protocol.rtp.Vp8.setPictureId(payload, 0, d, 0x7FFE)
+        krtc.protocol.rtp.Vp8.setTl0PicIdx(payload, 0, d, 200)
+        assertTrue(krtc.protocol.rtp.Vp8.parse(payload, 0, payload.size, d))
+        assertEquals(0x7FFE, d.pictureId)
+        assertEquals(200, d.tl0PicIdx)
+        // P=1: inter frame
+        val delta = hexToBytes("90 c0 92 34 07 11 00")
+        assertTrue(krtc.protocol.rtp.Vp8.parse(delta, 0, delta.size, d))
+        assertFalse(krtc.protocol.rtp.Vp8.isKeyFrame(delta, 0, delta.size, d))
+        // continuation packet of a key frame (S=0) is not a key frame start
+        val cont = hexToBytes("80 c0 92 34 07 10")
+        assertTrue(krtc.protocol.rtp.Vp8.parse(cont, 0, cont.size, d))
+        assertFalse(krtc.protocol.rtp.Vp8.isKeyFrame(cont, 0, cont.size, d))
+    }
+
+    @Test
+    fun h264KeyFrames() {
+        assertTrue(krtc.protocol.rtp.H264.isKeyFrame(hexToBytes("65 88"), 0, 2)) // IDR
+        assertFalse(krtc.protocol.rtp.H264.isKeyFrame(hexToBytes("41 9a"), 0, 2)) // non-IDR slice
+        assertTrue(krtc.protocol.rtp.H264.isKeyFrame(hexToBytes("78 00 02 67 42 00 02 68 ce"), 0, 9)) // STAP-A with SPS
+        assertTrue(krtc.protocol.rtp.H264.isKeyFrame(hexToBytes("7c 85 00"), 0, 3)) // FU-A start of IDR
+        assertFalse(krtc.protocol.rtp.H264.isKeyFrame(hexToBytes("7c 05 00"), 0, 3)) // FU-A continuation
+    }
+
+    @Test
+    fun ridReadAndRename() {
+        // one-byte extensions: id 3 (rid "h", len 1) and id 2 (mid "1", len 1), padding to 8 bytes
+        val pkt = hexToBytes("90 60 00 01 00 00 00 01 00 00 00 07 be de 00 02 30 68 20 31 00 00 00 00 ff")
+        val h = krtc.protocol.rtp.RtpHeader()
+        assertTrue(h.parse(pkt, 0, pkt.size))
+        assertEquals("h", krtc.protocol.rtp.RtpStreamId.read(pkt, h, 3))
+        assertEquals("1", krtc.protocol.rtp.RtpStreamId.read(pkt, h, 2))
+        krtc.protocol.rtp.RtpStreamId.rename(pkt, h, intArrayOf(2, 3), 14)
+        assertEquals(null, krtc.protocol.rtp.RtpStreamId.read(pkt, h, 3))
+        assertEquals("h", krtc.protocol.rtp.RtpStreamId.read(pkt, h, 14))
+    }
+}

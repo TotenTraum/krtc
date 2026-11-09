@@ -116,8 +116,8 @@ class NegotiationTest {
         assertTrue(sdp.hasAttribute("ice-lite"))
         assertEquals("passive", sdp.setup(sdp.media[3]))
         assertEquals(listOf(d.audioOut.ssrc), sdp.media[2].ssrcs)
-        assertEquals(listOf(d.videoOut.ssrc, d.videoRtxSsrc), sdp.media[3].ssrcs)
-        assertEquals(listOf("FID ${d.videoOut.ssrc} ${d.videoRtxSsrc}"), sdp.media[3].attributes("ssrc-group"))
+        assertEquals(listOf(d.videoSsrc, d.videoRtxSsrc), sdp.media[3].ssrcs)
+        assertEquals(listOf("FID ${d.videoSsrc} ${d.videoRtxSsrc}"), sdp.media[3].attributes("ssrc-group"))
         assertEquals(Direction.SENDONLY, sdp.media[3].direction)
     }
 

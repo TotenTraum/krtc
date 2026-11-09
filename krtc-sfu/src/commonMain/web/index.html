@@ -20,6 +20,9 @@
   .tile { position: relative; aspect-ratio: 16 / 9; background: var(--tile); border-radius: 8px; overflow: hidden; outline: 3px solid transparent; transition: outline-color .15s; }
   .tile.speaking { outline-color: var(--speak); }
   .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .layers { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+  .tile .layers button { padding: 2px 8px; font-size: 12px; background: rgba(0,0,0,.45); }
+  .tile .layers button.on { background: var(--accent); }
   .tile .label { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; justify-content: space-between; gap: 8px;
     font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); font-variant-numeric: tabular-nums; }
 </style>
@@ -72,22 +75,25 @@ function fakeAudio() {
 }
 
 function fakeVideo(label) {
-  const canvas = Object.assign(document.createElement('canvas'), { width: 640, height: 360 });
+  const canvas = Object.assign(document.createElement('canvas'), { width: 1280, height: 720 });
   const g = canvas.getContext('2d');
   const hue = Math.floor(Math.random() * 360);
   let t = 0;
-  setInterval(() => {
+  // Ticks come from a worker: timers of background tabs are throttled to 1 Hz, worker timers are not,
+  // so several test tabs on one screen all keep sending 15 fps.
+  const ticker = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 1000 / 15)'], { type: 'text/javascript' })));
+  ticker.onmessage = () => {
     t++;
     g.fillStyle = `hsl(${hue} 45% 30%)`;
-    g.fillRect(0, 0, 640, 360);
+    g.fillRect(0, 0, 1280, 720);
     g.fillStyle = `hsl(${(hue + 180) % 360} 70% 60%)`;
     g.beginPath();
-    g.arc(320 + 220 * Math.cos(t / 15), 180 + 110 * Math.sin(t / 10), 40, 0, 2 * Math.PI);
+    g.arc(640 + 440 * Math.cos(t / 15), 360 + 220 * Math.sin(t / 10), 80, 0, 2 * Math.PI);
     g.fill();
     g.fillStyle = '#fff';
-    g.font = '28px system-ui';
-    g.fillText(`${label}  ${new Date().toLocaleTimeString()}`, 24, 48);
-  }, 1000 / 15);
+    g.font = '56px system-ui';
+    g.fillText(`${label}  ${new Date().toLocaleTimeString()}`, 48, 96);
+  };
   return canvas.captureStream(15).getVideoTracks()[0];
 }
 
@@ -98,11 +104,29 @@ function tile(id, name) {
     el.className = 'tile';
     el.id = 'tile-' + id;
     el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><span class="who"></span><span class="meta"></span></div>';
+    if (id !== state.myId) {
+      // Simulcast: ask the SFU for a lower or higher layer of this participant's video.
+      const layers = document.createElement('div');
+      layers.className = 'layers';
+      for (const [rid, title] of [['q', 'низкое'], ['h', 'среднее'], ['f', 'высокое']]) {
+        const b = Object.assign(document.createElement('button'), { textContent: rid, title: 'Качество: ' + title });
+        b.classList.toggle('on', rid === 'f');
+        b.onclick = () => setLayer(id, rid);
+        layers.append(b);
+      }
+      el.append(layers);
+    }
     $('grid').append(el);
   }
   el.querySelector('.who').textContent = name;
   return el;
 }
+
+function setLayer(peer, rid) {
+  state.ws.send(JSON.stringify({ type: 'layer', peer, layer: rid }));
+  document.querySelectorAll(`#tile-${peer} .layers button`).forEach((b) => b.classList.toggle('on', b.textContent === rid));
+}
+state.setLayer = setLayer;
 
 function setSpeaking(id, speaking) {
   const p = state.peers.get(id);
@@ -126,11 +150,15 @@ async function onOffer(msg) {
 }
 
 async function summary() {
-  const out = { sent: { audioBytes: 0, videoFrames: 0, width: 0 }, peers: {} };
+  const out = { sent: { audioBytes: 0, videoFrames: 0, width: 0, layers: {} }, peers: {} };
   const stats = await state.pc.getStats();
   stats.forEach((s) => {
     if (s.type === 'outbound-rtp' && s.kind === 'audio') out.sent.audioBytes += s.bytesSent;
-    if (s.type === 'outbound-rtp' && s.kind === 'video') { out.sent.videoFrames += s.framesEncoded ?? 0; out.sent.width = s.frameWidth ?? 0; }
+    if (s.type === 'outbound-rtp' && s.kind === 'video') {
+      out.sent.videoFrames += s.framesEncoded ?? 0;
+      out.sent.width = Math.max(out.sent.width, s.frameWidth ?? 0);
+      if (s.rid) out.sent.layers[s.rid] = { width: s.frameWidth ?? 0, fps: s.framesPerSecond ?? 0, active: s.active };
+    }
     if (s.type !== 'inbound-rtp') return;
     const peer = state.midToPeer.get(s.mid);
     if (!peer) return;
@@ -200,7 +228,8 @@ $('join').onsubmit = async (e) => {
       if (meta) meta.textContent = v.width ? `${v.width}×${v.height} · ${v.codec?.split('/')[1] ?? ''} · потеряно ${v.videoLost}` : `аудио · потеряно ${v.audioLost ?? 0}`;
     }
     const mine = document.querySelector('#tile-' + state.myId + ' .meta');
-    if (mine) mine.textContent = s.sent.width ? `${s.sent.width}p отправляется` : '';
+    const layers = Object.entries(s.sent.layers).map(([rid, l]) => `${rid}:${l.width}`).join(' ');
+    if (mine) mine.textContent = layers ? `simulcast ${layers}` : s.sent.width ? `${s.sent.width}p` : '';
   }, 1000);
 };
 </script>

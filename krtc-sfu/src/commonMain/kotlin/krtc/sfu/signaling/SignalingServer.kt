@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * `GET /ws?room=<room>&name=<name>` — JSON messages:
  * - server → client: `welcome`, `offer {version, sdp, mids}`, `peer-joined`, `peer-left`, `speaking`;
- * - client → server: `answer {version, sdp}`.
+ * - client → server: `answer {version, sdp}`, `layer {peer, layer}` (simulcast preference: 0|1|2 or q|h|f).
  *
  * `GET /` serves a test client, `GET /metrics` the counters.
  */
@@ -79,6 +79,13 @@ public fun startSignaling(sfu: Sfu, port: Int): EmbeddedServer<*, *> {
                                 val version = msg["version"]?.jsonPrimitive?.long ?: continue
                                 val sdp = msg["sdp"]?.jsonPrimitive?.content ?: continue
                                 sfu.onAnswer(participant, version, sdp)
+                            }
+                            "layer" -> {
+                                val peer = msg["peer"]?.jsonPrimitive?.content ?: continue
+                                val layer = msg["layer"]?.jsonPrimitive?.content?.let { l ->
+                                    l.toIntOrNull() ?: krtc.sfu.room.MediaPlan.LAYER_RIDS.indexOf(l).takeIf { it >= 0 }
+                                } ?: continue
+                                sfu.setPreferredLayer(participant, peer, layer)
                             }
                         }
                     }
