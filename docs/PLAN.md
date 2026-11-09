@@ -54,6 +54,8 @@ WPT привязаны в `spec/WPT.md`: прямой тест есть у 860 �
 
 ## Этап 2. Изучение существующих решений
 
+Статус: сделан, см. [research/existing-solutions.md](research/existing-solutions.md) (данные на 2026-11-09, stable — M157).
+
 | Проект | Что взять |
 |---|---|
 | libwebrtc (Google) | Основной движок: медиа, кодеки, AEC/NS/AGC, ICE, DTLS |
@@ -65,6 +67,9 @@ WPT привязаны в `spec/WPT.md`: прямой тест есть у 860 �
 | aiortc | Читаемая реализация протоколов |
 
 ## Этап 3. Архитектурные решения (ADR)
+
+Статус: решения оформлены в [docs/adr](adr/README.md), все со статусом «Предложено».
+ADR-0001, 0002 и 0008 подтверждаются spike (этап 10). Ниже — краткое содержание.
 
 - **ADR-1. Движок:** обёртка над libwebrtc (не реализация с нуля).
 - **ADR-2. Биндинг:** собственный C ABI-шим `krtc-native` поверх C++ API libwebrtc;
@@ -79,7 +84,9 @@ WPT привязаны в `spec/WPT.md`: прямой тест есть у 860 �
   ReplayKit, ScreenCaptureKit, PipeWire/X11, DXGI; аудиосессии; рендеринг — модуль под Compose Multiplatform.
 - **ADR-7. Модули:**
   ```
-  krtc-core          (commonMain API, expect/actual)
+  krtc-idl           (сгенерированный W3C-скелет, служебный)
+  krtc-protocol      (чистый Kotlin, sans-IO: SDP, RTP/RTCP, STUN — для клиента и будущего сервера)
+  krtc-core          (публичный API, expect/actual)
   krtc-native        (C++ → C шим, сборка libwebrtc)
   krtc-media         (захват камеры, микрофона, экрана)
   krtc-compose       (видео-рендереры)
@@ -87,7 +94,10 @@ WPT привязаны в `spec/WPT.md`: прямой тест есть у 860 �
   krtc-conformance   (порт WPT-тестов)
   samples/           (Android, iOS, desktop, web)
   ```
-- **ADR-8. Версия libwebrtc:** привязка к Chromium milestone, обновление каждые 1–2 milestone, свой набор патчей.
+- **ADR-8. Версия libwebrtc:** привязка к stable Chromium milestone, обновление каждые 2 milestone и
+  внеочередное при исправлениях безопасности, свой набор патчей, свои prebuilt-артефакты.
+- **ADR-9. Сервер:** серверный участник без устройств и пересылка закодированных кадров — в скоупе 1.0;
+  полноценный SFU — отдельный модуль `krtc-sfu` на `krtc-protocol` после 1.0.
 
 ## Этап 4. Сборка libwebrtc (критический путь)
 
