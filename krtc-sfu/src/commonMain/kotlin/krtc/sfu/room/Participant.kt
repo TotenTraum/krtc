@@ -75,6 +75,21 @@ internal class VideoLayer(public val index: Int) {
     internal val cache = PacketCache(MediaPlan.VIDEO_CACHE_PACKETS)
     internal var lastKeyframeRequest = -1L
 
+    // Incoming bitrate, for fitting layers to subscribers' bandwidth: bytes since the last tick, smoothed.
+    private var bytesSinceTick = 0L
+    internal var bitrateBps: Long = 0; private set
+
+    internal fun countBytes(n: Int) {
+        bytesSinceTick += n
+    }
+
+    internal fun updateBitrate(elapsedMillis: Long) {
+        if (elapsedMillis <= 0) return
+        val sample = bytesSinceTick * 8 * 1000 / elapsedMillis
+        bitrateBps = if (bitrateBps == 0L) sample else (0.7 * bitrateBps + 0.3 * sample).toLong()
+        bytesSinceTick = 0
+    }
+
     // Upstream loss tracking (publisher → SFU), for NACKs to the publisher.
     private var highestSeq = -1
     private val missing = LinkedHashMap<Int, IntArray>() // seq → [attempts, last request time (ms) as int]
@@ -142,6 +157,12 @@ internal class VideoLayer(public val index: Int) {
 internal class DownlinkVideo {
     /** Layer the subscriber asked for (by default the top one); the SFU sends the best active layer ≤ it. */
     internal var preferred: Int = MediaPlan.TOP_LAYER
+
+    /** Highest layer the subscriber's estimated bandwidth allows (bandwidth allocation in Room.tick). */
+    internal var allowed: Int = MediaPlan.TOP_LAYER
+
+    /** The layer cap actually applied: the subscriber's preference and its bandwidth. */
+    internal val cap: Int get() = minOf(preferred, allowed)
     internal var current: Int = -1; internal set
     internal var target: Int = -1; internal set
 
@@ -230,10 +251,34 @@ internal class Participant(
     @Volatile internal var audioMuted: Boolean = false
     @Volatile internal var videoMuted: Boolean = false
 
-    // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char)
-    internal val iceUfrag: String = randomIceString(8)
-    internal val icePwd: String = randomIceString(24)
-    internal val icePwdBytes: ByteArray = icePwd.encodeToByteArray()
+    // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char). Replaced on ICE restart;
+    // the previous pair stays valid until the client's checks switch to the new one.
+    @Volatile internal var iceUfrag: String = randomIceString(8); private set
+    @Volatile internal var icePwd: String = randomIceString(24); private set
+    @Volatile internal var icePwdBytes: ByteArray = icePwd.encodeToByteArray(); private set
+    @Volatile internal var previousIceUfrag: String? = null; private set
+    @Volatile internal var previousIcePwdBytes: ByteArray? = null; private set
+
+    /** New ICE credentials for an ICE restart; the old ones are kept as "previous". */
+    internal fun restartIce() {
+        previousIceUfrag = iceUfrag
+        previousIcePwdBytes = icePwdBytes
+        iceUfrag = randomIceString(8)
+        icePwd = randomIceString(24)
+        icePwdBytes = icePwd.encodeToByteArray()
+    }
+
+    /** The password for checks that use [ufrag] (current or previous), or null if it is not ours. */
+    internal fun icePasswordFor(ufrag: String): ByteArray? = when (ufrag) {
+        iceUfrag -> icePwdBytes
+        previousIceUfrag -> previousIcePwdBytes
+        else -> null
+    }
+
+    internal fun forgetPreviousIce() {
+        previousIceUfrag = null
+        previousIcePwdBytes = null
+    }
     internal val cname: String = randomIceString(16)
 
     /** This participant's media as forwarded to everyone else, under SSRCs the SFU chose. */
@@ -258,6 +303,16 @@ internal class Participant(
     private val layerBySsrc = HashMap<Long, Int>()
     internal val downlinks = HashMap<String, DownlinkVideo>() // by publisher id
     internal var rtxSeq = secureRandomInt(0x8000)
+
+    /** Uplink transport-cc: arrival times of this participant's packets, fed back to it. */
+    internal val twccIn = TwccReceiver()
+
+    /** Downlink transport-cc: send history and the bandwidth estimate towards this participant. */
+    internal val bwe = SendSideBwe()
+
+    /** Testing only (Room.simulatedDownlinkBps): token bucket of the simulated downlink, in bytes. */
+    internal var shapingTokens = 0.0
+    internal var shapingLastMicros = -1L
     internal var speaking = false
     internal var lastLoudMillis = 0L
 

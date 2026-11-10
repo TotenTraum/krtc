@@ -98,6 +98,14 @@ sealed class krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage|null
         final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage> // krtc.signaling/ClientMessage.Companion.serializer|serializer(){}[0]
         final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ClientMessage.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
     }
+
+    final object RestartIce : kotlinx.serialization.internal/SerializerFactory, krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.RestartIce|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.RestartIce.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.RestartIce.hashCode|hashCode(){}[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage.RestartIce> // krtc.signaling/ClientMessage.RestartIce.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ClientMessage.RestartIce.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ClientMessage.RestartIce.toString|toString(){}[0]
+    }
 }
 
 sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null[0]

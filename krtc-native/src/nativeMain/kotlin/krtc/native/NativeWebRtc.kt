@@ -1,5 +1,11 @@
 package krtc.native
 
+import kotlinx.cinterop.reinterpret
+
+import kotlinx.cinterop.convert
+
+import kotlinx.cinterop.UIntVar
+
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.IntVar
@@ -33,46 +39,12 @@ import krtc.core.RTCSdpType
 import krtc.core.RTCStats
 import krtc.core.RTCSessionDescription
 import krtc.core.RTCTrackEvent
-import krtc.native.shim.KRTC_EVENT_CONNECTION_STATE
-import krtc.native.shim.KRTC_EVENT_TRACK
 import cnames.structs.krtc_factory
-import krtc.native.shim.krtc_factory_create_with
-import krtc.native.shim.krtc_factory_output_level
-import krtc.native.shim.krtc_factory_pull_audio
-import krtc.native.shim.krtc_factory_push_audio
-import krtc.native.shim.krtc_factory_set_test_tone
-import krtc.native.shim.krtc_factory_video_codecs
-import krtc.native.shim.krtc_pc_get_stats
-import krtc.native.shim.krtc_transceiver_prefer_codec
-import krtc.native.shim.krtc_factory_create_audio_track
-import krtc.native.shim.krtc_factory_create_test_video_track
-import krtc.native.shim.krtc_factory_release
-import krtc.native.shim.krtc_free
 import cnames.structs.krtc_pc
-import krtc.native.shim.krtc_pc_create
-import krtc.native.shim.krtc_pc_create_answer
-import krtc.native.shim.krtc_pc_local_description
-import krtc.native.shim.krtc_pc_release
-import krtc.native.shim.krtc_pc_remote_description
-import krtc.native.shim.krtc_pc_set_local_description
-import krtc.native.shim.krtc_pc_set_remote_description
-import krtc.native.shim.krtc_pc_transceiver_at
-import krtc.native.shim.krtc_pc_transceiver_count
 import cnames.structs.krtc_track
-import krtc.native.shim.krtc_track_enabled
-import krtc.native.shim.krtc_track_id
-import krtc.native.shim.krtc_track_is_video
-import krtc.native.shim.krtc_track_release
-import krtc.native.shim.krtc_track_set_enabled
-import krtc.native.shim.krtc_track_video_stats
 import cnames.structs.krtc_transceiver
-import krtc.native.shim.krtc_transceiver_direction
-import krtc.native.shim.krtc_transceiver_mid
-import krtc.native.shim.krtc_transceiver_receiver_track
-import krtc.native.shim.krtc_transceiver_release
-import krtc.native.shim.krtc_transceiver_set_send_codec
-import krtc.native.shim.krtc_transceiver_set_direction
-import krtc.native.shim.krtc_transceiver_set_sender_track
+import cnames.structs.krtc_video_source
+import krtc.native.shim.*
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlin.coroutines.Continuation
@@ -122,9 +94,72 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createTestVideoTrack(id: String, width: Int, height: Int, fps: Int): NativeTrack =
         NativeTrack(krtc_factory_create_test_video_track(handle, id, width, height, fps) ?: error("video track creation failed"))
 
+    public actual fun createVideoSource(): NativeVideoSource =
+        NativeVideoSource(krtc_factory_create_video_source(handle) ?: error("video source creation failed"))
+
+    public actual fun createCameraSource(index: Int, width: Int, height: Int, fps: Int): NativeVideoSource? =
+        krtc_factory_create_camera_source(handle, index, width, height, fps)?.let(::NativeVideoSource)
+
+    public actual fun createVideoTrack(source: NativeVideoSource, id: String): NativeTrack =
+        NativeTrack(krtc_factory_create_video_track(handle, id, source.handle) ?: error("video track creation failed"))
+
     actual override fun close() {
         krtc_factory_release(handle)
     }
+}
+
+public actual fun nativeCameras(): List<String> =
+    List(krtc_camera_count()) { i -> krtc_camera_name(i)?.let { p -> p.toKString().also { krtc_free(p) } } ?: "camera $i" }
+
+/** Thread-safe: pushes after [close] are ignored, so a capture thread may outlive the source. */
+public actual class NativeVideoSource internal constructor(internal val handle: CPointer<krtc_video_source>) : AutoCloseable {
+    private val lock = SynchronizedObject()
+    private var closed = false
+
+    public actual fun pushI420(
+        width: Int, height: Int,
+        y: ByteArray, strideY: Int, u: ByteArray, strideU: Int, v: ByteArray, strideV: Int,
+        rotation: Int, timestampMicros: Long,
+    ): Unit = synchronized(lock) {
+        if (closed) return
+        y.usePinned { py ->
+            u.usePinned { pu ->
+                v.usePinned { pv ->
+                    krtc_video_source_push_i420(
+                        handle, width, height,
+                        py.addressOf(0).reinterpret(), strideY, pu.addressOf(0).reinterpret(), strideU, pv.addressOf(0).reinterpret(), strideV,
+                        rotation, timestampMicros,
+                    )
+                }
+            }
+        }
+    }
+
+    public actual fun pushArgb(width: Int, height: Int, argb: IntArray, rotation: Int, timestampMicros: Long) {
+        require(argb.size >= width * height) { "argb holds ${argb.size} pixels, need ${width * height}" }
+        synchronized(lock) {
+            if (!closed) argb.usePinned { krtc_video_source_push_argb(handle, width, height, it.addressOf(0).reinterpret(), rotation, timestampMicros) }
+        }
+    }
+
+    actual override fun close(): Unit = synchronized(lock) {
+        if (closed) return
+        closed = true
+        krtc_video_source_release(handle)
+    }
+}
+
+/** Receives a track's frames from the shim and hands them to the listener in a reused IntArray. */
+private class FrameSink(val listener: (VideoFrame) -> Unit) {
+    var pixels = IntArray(0)
+}
+
+private val frameCallback = staticCFunction { user: COpaquePointer?, width: Int, height: Int, argb: CPointer<UIntVar>?, timestampUs: Long ->
+    val sink = user!!.asStableRef<FrameSink>().get()
+    val n = width * height
+    if (sink.pixels.size != n) sink.pixels = IntArray(n)
+    sink.pixels.usePinned { platform.posix.memcpy(it.addressOf(0), argb, (n.toLong() * 4).convert()) }
+    sink.listener(VideoFrame(width, height, sink.pixels, timestampUs))
 }
 
 public actual class NativeTrack internal constructor(internal val handle: CPointer<krtc_track>) : MediaStreamTrack {
@@ -147,7 +182,18 @@ public actual class NativeTrack internal constructor(internal val handle: CPoint
         NativeVideoStats(frames.value, w.value, h.value)
     }
 
+    private var frameSink: StableRef<FrameSink>? = null
+
+    public actual fun setFrameListener(listener: ((VideoFrame) -> Unit)?) {
+        val old = frameSink
+        frameSink = listener?.let { StableRef.create(FrameSink(it)) }
+        // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
+        krtc_track_set_frame_sink(handle, if (frameSink != null) frameCallback else null, frameSink?.asCPointer())
+        old?.dispose()
+    }
+
     public actual fun release() {
+        setFrameListener(null)
         krtc_track_release(handle)
     }
 }

@@ -1,5 +1,6 @@
-// Software video codecs for the krtc shim (Linux, Android): whichever of libvpx VP8/VP9, OpenH264 + FFmpeg
-// H.264, libaom AV1 and dav1d the libwebrtc build includes (its defines say which).
+// Linux and Android pieces of the krtc shim: software video codecs (whichever of libvpx VP8/VP9, OpenH264 +
+// FFmpeg H.264, libaom AV1 and dav1d the libwebrtc build includes; its defines say which) and, on Linux,
+// V4L2 camera capture.
 #include "krtc_platform.h"
 
 #include "api/video_codecs/video_decoder_factory_template.h"
@@ -19,6 +20,13 @@
 #endif
 #if defined(RTC_DAV1D_IN_INTERNAL_DECODER_FACTORY)
 #include "api/video_codecs/video_decoder_factory_template_dav1d_adapter.h"
+#endif
+#if !defined(__ANDROID__)
+// V4L2 directly: VideoCaptureFactory would also link the PipeWire/xdg-portal camera code, which needs glib.
+#include "api/make_ref_counted.h"
+#include "modules/video_capture/linux/device_info_v4l2.h"
+#include "modules/video_capture/linux/video_capture_v4l2.h"
+#include "system_wrappers/include/clock.h"
 #endif
 
 namespace krtc {
@@ -52,6 +60,76 @@ std::unique_ptr<webrtc::VideoDecoderFactory> PlatformVideoDecoderFactory() {
 #endif
         >>();
 }
+
+#if defined(__ANDROID__)
+// Android: the application captures with Camera2 and pushes frames (krtc_video_source_push_*).
+int CameraCount() { return 0; }
+std::string CameraName(int) { return ""; }
+std::function<void()> StartCamera(int, int, int, int, PushVideoSource *) { return nullptr; }
+#else
+// Linux: V4L2 through libwebrtc's video capture module (its V4L2 classes, not the factory).
+namespace {
+class CameraSink : public webrtc::VideoSinkInterface<webrtc::VideoFrame> {
+public:
+    explicit CameraSink(PushVideoSource *source) : source_(source) {}
+    void OnFrame(const webrtc::VideoFrame &frame) override { source_->Push(frame); }
+
+private:
+    webrtc::scoped_refptr<PushVideoSource> source_;
+};
+
+std::unique_ptr<webrtc::videocapturemodule::DeviceInfoV4l2> DeviceInfo() {
+    auto info = std::make_unique<webrtc::videocapturemodule::DeviceInfoV4l2>();
+    return info->Init() == 0 ? std::move(info) : nullptr;
+}
+
+bool DeviceId(int index, std::string *name, std::string *id) {
+    auto info = DeviceInfo();
+    if (!info || index < 0 || index >= static_cast<int>(info->NumberOfDevices())) return false;
+    char n[256] = {0}, u[256] = {0};
+    if (info->GetDeviceName(index, n, sizeof n, u, sizeof u) != 0) return false;
+    if (name) *name = n;
+    if (id) *id = u;
+    return true;
+}
+}  // namespace
+
+int CameraCount() {
+    auto info = DeviceInfo();
+    return info ? static_cast<int>(info->NumberOfDevices()) : 0;
+}
+
+std::string CameraName(int index) {
+    std::string name;
+    return DeviceId(index, &name, nullptr) ? name : "";
+}
+
+std::function<void()> StartCamera(int index, int width, int height, int fps, PushVideoSource *source) {
+    std::string id;
+    if (!DeviceId(index, nullptr, &id)) return nullptr;
+    auto module = webrtc::make_ref_counted<webrtc::videocapturemodule::VideoCaptureModuleV4L2>(webrtc::Clock::GetRealTimeClock());
+    if (module->Init(id.c_str()) != 0) return nullptr;
+    auto sink = std::make_shared<CameraSink>(source);
+    module->RegisterCaptureDataCallback(sink.get());
+    module->SetApplyRotation(true);
+    webrtc::VideoCaptureCapability capability;
+    capability.width = width;
+    capability.height = height;
+    capability.maxFPS = fps;
+    capability.videoType = webrtc::VideoType::kI420;
+    auto info = DeviceInfo();
+    webrtc::VideoCaptureCapability best;
+    if (info && info->GetBestMatchedCapability(id.c_str(), capability, best) >= 0) capability = best;
+    if (module->StartCapture(capability) != 0) {
+        module->DeRegisterCaptureDataCallback();
+        return nullptr;
+    }
+    return [module, sink]() {
+        module->StopCapture();
+        module->DeRegisterCaptureDataCallback();
+    };
+}
+#endif
 
 }  // namespace krtc
 

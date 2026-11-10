@@ -66,6 +66,14 @@ public final class krtc/signaling/ClientMessage$Layer$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class krtc/signaling/ClientMessage$RestartIce : krtc/signaling/ClientMessage {
+	public static final field INSTANCE Lkrtc/signaling/ClientMessage$RestartIce;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class krtc/signaling/PeerInfo {
 	public static final field Companion Lkrtc/signaling/PeerInfo$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V

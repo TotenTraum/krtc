@@ -20,6 +20,11 @@ internal object Jni {
         fun onEvent(event: Int, state: Int, transceiver: Long, track: Long)
     }
 
+    /** Video frames of a track, on a libwebrtc thread; [argb] is reused for the next frame of the same size. */
+    fun interface FrameListener {
+        fun onFrame(width: Int, height: Int, argb: IntArray, timestampMicros: Long)
+    }
+
     /** Completion of one asynchronous call, on a libwebrtc thread: [result] or [error]. */
     fun interface Done {
         fun complete(result: String?, error: String?)
@@ -34,6 +39,18 @@ internal object Jni {
     @JvmStatic external fun factoryVideoCodecs(factory: Long): String
     @JvmStatic external fun factoryCreateAudioTrack(factory: Long, id: String): Long
     @JvmStatic external fun factoryCreateTestVideoTrack(factory: Long, id: String, width: Int, height: Int, fps: Int): Long
+
+    @JvmStatic external fun factoryCreateVideoSource(factory: Long): Long
+    @JvmStatic external fun factoryCreateCameraSource(factory: Long, index: Int, width: Int, height: Int, fps: Int): Long
+    @JvmStatic external fun factoryCreateVideoTrack(factory: Long, id: String, source: Long): Long
+    @JvmStatic external fun cameraCount(): Int
+    @JvmStatic external fun cameraName(index: Int): String?
+    @JvmStatic external fun videoSourcePushI420(
+        source: Long, width: Int, height: Int, y: ByteArray, strideY: Int, u: ByteArray, strideU: Int, v: ByteArray, strideV: Int,
+        rotation: Int, timestampMicros: Long,
+    )
+    @JvmStatic external fun videoSourcePushArgb(source: Long, width: Int, height: Int, argb: IntArray, rotation: Int, timestampMicros: Long)
+    @JvmStatic external fun videoSourceRelease(source: Long)
 
     @JvmStatic external fun pcCreate(factory: Long, listener: Listener): Long
     @JvmStatic external fun pcSetRemoteDescription(pc: Long, type: String, sdp: String, done: Done)
@@ -61,6 +78,8 @@ internal object Jni {
     @JvmStatic external fun trackEnabled(track: Long): Boolean
     @JvmStatic external fun trackSetEnabled(track: Long, enabled: Boolean)
     @JvmStatic external fun trackVideoStats(track: Long, out: LongArray)
+    @JvmStatic external fun trackSetFrameSink(track: Long, listener: FrameListener?): Long
+    @JvmStatic external fun frameSinkRelease(sink: Long)
     @JvmStatic external fun trackRelease(track: Long)
 
     private fun load() {

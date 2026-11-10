@@ -64,7 +64,45 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createTestVideoTrack(id: String, width: Int, height: Int, fps: Int): NativeTrack =
         NativeTrack(Jni.factoryCreateTestVideoTrack(handle, id, width, height, fps).also { check(it != 0L) { "video track creation failed" } })
 
+    public actual fun createVideoSource(): NativeVideoSource =
+        NativeVideoSource(Jni.factoryCreateVideoSource(handle).also { check(it != 0L) { "video source creation failed" } })
+
+    public actual fun createCameraSource(index: Int, width: Int, height: Int, fps: Int): NativeVideoSource? =
+        Jni.factoryCreateCameraSource(handle, index, width, height, fps).takeIf { it != 0L }?.let(::NativeVideoSource)
+
+    public actual fun createVideoTrack(source: NativeVideoSource, id: String): NativeTrack =
+        NativeTrack(Jni.factoryCreateVideoTrack(handle, id, source.handle).also { check(it != 0L) { "video track creation failed" } })
+
     actual override fun close(): Unit = Jni.factoryRelease(handle)
+}
+
+public actual fun nativeCameras(): List<String> = List(Jni.cameraCount()) { i -> Jni.cameraName(i) ?: "camera $i" }
+
+/** Thread-safe: pushes after [close] are ignored, so a capture thread may outlive the source. */
+public actual class NativeVideoSource internal constructor(internal val handle: Long) : AutoCloseable {
+    private var closed = false
+
+    @Synchronized
+    public actual fun pushI420(
+        width: Int, height: Int,
+        y: ByteArray, strideY: Int, u: ByteArray, strideU: Int, v: ByteArray, strideV: Int,
+        rotation: Int, timestampMicros: Long,
+    ) {
+        if (!closed) Jni.videoSourcePushI420(handle, width, height, y, strideY, u, strideU, v, strideV, rotation, timestampMicros)
+    }
+
+    @Synchronized
+    public actual fun pushArgb(width: Int, height: Int, argb: IntArray, rotation: Int, timestampMicros: Long) {
+        require(argb.size >= width * height) { "argb holds ${argb.size} pixels, need ${width * height}" }
+        if (!closed) Jni.videoSourcePushArgb(handle, width, height, argb, rotation, timestampMicros)
+    }
+
+    @Synchronized
+    actual override fun close() {
+        if (closed) return
+        closed = true
+        Jni.videoSourceRelease(handle)
+    }
 }
 
 public actual class NativeTrack internal constructor(internal val handle: Long) : MediaStreamTrack {
@@ -85,7 +123,20 @@ public actual class NativeTrack internal constructor(internal val handle: Long) 
         return NativeVideoStats(out[0], out[1].toInt(), out[2].toInt())
     }
 
-    public actual fun release(): Unit = Jni.trackRelease(handle)
+    private var frameSink = 0L
+
+    @Synchronized
+    public actual fun setFrameListener(listener: ((VideoFrame) -> Unit)?) {
+        val old = frameSink
+        // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
+        frameSink = Jni.trackSetFrameSink(handle, listener?.let { l -> Jni.FrameListener { w, h, argb, ts -> l(VideoFrame(w, h, argb, ts)) } })
+        if (old != 0L) Jni.frameSinkRelease(old)
+    }
+
+    public actual fun release() {
+        setFrameListener(null)
+        Jni.trackRelease(handle)
+    }
 }
 
 private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpSender {

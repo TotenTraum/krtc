@@ -15,8 +15,11 @@ import krtc.signaling.SignalingProtocol
 import krtc.sfu.dtls.DtlsEndpoint
 import krtc.sfu.dtls.DtlsIdentity
 import krtc.sfu.platform.PeerAddress
+import krtc.sfu.platform.TcpServer
+import krtc.sfu.platform.Transports
 import krtc.sfu.platform.UdpServer
 import krtc.sfu.platform.logger
+import krtc.sfu.platform.nowMicros
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.platform.secureRandomLong
 import krtc.sfu.room.MediaPlan
@@ -55,7 +58,10 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private val identity: DtlsIdentity = DtlsIdentity.generate()
     private val shards = List(config.shards) { Shard(it) }
     private val udp: UdpServer = UdpServer(config.bindAddress, config.udpPort, config.shards, ::onPacket)
-    private val offers = OfferBuilder(config.announcedAddress, udp.localPort, identity.fingerprint)
+    private val announced = config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }
+    private val tcp: TcpServer? = if (config.iceTcp) TcpServer(udp.localAddresses, udp.localPort, ::onPacket) else null
+    private val transports = Transports(udp, tcp)
+    private val offers = OfferBuilder(announced, udp.localPort, identity.fingerprint, udp = config.iceUdp, tcp = tcp != null)
 
     /** Guards membership: [rooms], room member lists and the address table updates. Never held on the media path. */
     private val lock = SynchronizedObject()
@@ -75,9 +81,12 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     init {
         for (s in shards) s.every(100) { housekeeping(s) }
+        for (s in shards) s.every(MediaPlan.TWCC_FEEDBACK_INTERVAL_MILLIS) { transportFeedback(s) }
         udp.start()
+        tcp?.start()
         if (config.simulatedLossPercent > 0) log.warn("Simulating ${config.simulatedLossPercent}% downlink video loss")
-        log.info("SFU UDP on ${udp.localPort} (${udp.socketCount} sockets, announced ${config.announcedAddress}), ${shards.size} shards")
+        if (config.simulatedDownlinkBps > 0) log.warn("Simulating a ${config.simulatedDownlinkBps / 1000} kbps downlink per subscriber")
+        log.info("SFU UDP on ${udp.localAddresses.joinToString { PeerAddress(it, udp.localPort).toString() }} (${udp.socketCount} sockets${if (tcp != null) ", ICE-TCP" else ""}${if (!config.iceUdp) ", UDP candidates off" else ""}), announced ${announced.joinToString()}, ${shards.size} shards")
     }
 
     // ------------------------------------------------------------------ host API
@@ -100,7 +109,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val (p, session, others) = synchronized(lock) {
             val room = rooms.getOrPut(roomName) {
                 opened = true
-                Room(roomName, shards[roomName.hashCode().mod(shards.size)], udp, ::announceSpeaking, config.simulatedLossPercent, config.simulatedUplinkLossPercent)
+                Room(roomName, shards[roomName.hashCode().mod(shards.size)], transports, ::announceSpeaking, config.simulatedLossPercent, config.simulatedUplinkLossPercent, config.simulatedDownlinkBps)
             }
             val id = allow.participantId ?: ids.incrementAndFetch().toString(36)
             val p = Participant(id, name, room, sink)
@@ -129,7 +138,24 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 val layer = message.layer.toIntOrNull() ?: MediaPlan.LAYER_RIDS.indexOf(message.layer).takeIf { it >= 0 } ?: return
                 p.room.shard.execute { p.room.setPreferredLayer(p, message.peer, layer) }
             }
+            ClientMessage.RestartIce -> restartIce(p)
         }
+    }
+
+    /**
+     * ICE restart for [p] (its client lost connectivity): fresh ICE credentials in a new offer. Checks with
+     * either pair are answered until the client uses the new one; DTLS and SRTP continue unchanged.
+     */
+    private fun restartIce(p: Participant) {
+        val session = synchronized(lock) {
+            val session = sessions[p.id]?.takeIf { it.participant === p } ?: return
+            p.previousIceUfrag?.let { if (byUfrag[it] === session) byUfrag.remove(it) } // only one restart in flight
+            p.restartIce()
+            byUfrag[p.iceUfrag] = session
+            session
+        }
+        log.info("$p ICE restart")
+        session.negotiate()
     }
 
     /** Decodes and handles a JSON message from [participant]'s client; unknown messages are ignored. */
@@ -145,6 +171,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             val session = sessions[p.id]?.takeIf { it.participant === p } ?: return
             sessions.remove(p.id)
             byUfrag.remove(p.iceUfrag)
+            p.previousIceUfrag?.let { byUfrag.remove(it) }
             p.remote?.let { if (byAddress[it] === session) byAddress.remove(it) }
             val remaining = p.room.remove(p)
             if (remaining.isEmpty()) {
@@ -186,11 +213,26 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     public fun metrics(): SfuMetrics = metrics.snapshot(sessions.size, synchronized(lock) { rooms.size }, shards)
 
+    /** Bandwidth estimates and received simulcast layers of every participant. */
+    public fun linkStats(): List<SfuLinkStats> = synchronized(lock) { rooms.values.toList() }.flatMap { room ->
+        room.members.map { p ->
+            SfuLinkStats(
+                participantId = p.id,
+                roomName = room.name,
+                downlinkEstimateBps = if (p.bwe.active) p.bwe.estimateBps else 0,
+                downlinkAckedBps = p.bwe.ackedBps,
+                downlinkLossPercent = p.bwe.lossRatio * 100,
+                videoLayers = runCatching { p.downlinks.toList().associate { (publisher, down) -> publisher to down.current } }.getOrDefault(emptyMap()), // owned by the shard thread
+            )
+        }
+    }
+
     /** Ends all sessions (`bye` with "server shutdown"), releases the UDP port and worker threads. Idempotent. */
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         sessions.values.map { it.participant.id }.forEach { kick(it, "server shutdown") }
         udp.close()
+        tcp?.close()
         shards.forEach { it.close() }
     }
 
@@ -208,6 +250,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     // ------------------------------------------------------------------ transport (UDP threads)
 
     private fun onPacket(data: ByteArray, len: Int, from: PeerAddress) {
+        if (!from.tcp && !config.iceUdp) return
         when (classifyPacket(data, 0, len)) {
             PacketKind.STUN -> handleStun(data, len, from)
             PacketKind.DTLS -> {
@@ -220,7 +263,8 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                     metrics.unknownSource.incrementAndFetch()
                 } else {
                     val p = s.participant
-                    p.room.shard.execute { p.room.forward(p, data, len) }
+                    val arrival = nowMicros()
+                    p.room.shard.execute { p.room.forward(p, data, len, arrival) }
                 }
             }
             PacketKind.UNKNOWN -> metrics.unknownSource.incrementAndFetch()
@@ -232,17 +276,24 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val msg = StunMessage.parse(data, 0, len) ?: return
         if (msg.type != StunConstants.BINDING_REQUEST) return
         metrics.stunRequests.incrementAndFetch()
-        val session = msg.username?.substringBefore(':')?.let { byUfrag[it] }
-        if (session == null || !msg.verifyFingerprint() || !msg.verifyIntegrity(session.participant.icePwdBytes)) {
+        val ufrag = msg.username?.substringBefore(':')
+        val session = ufrag?.let { byUfrag[it] }
+        val password = session?.participant?.icePasswordFor(ufrag)
+        if (session == null || password == null || !msg.verifyFingerprint() || !msg.verifyIntegrity(password)) {
             metrics.stunRejected.incrementAndFetch()
             return
         }
         val p = session.participant
         val response = StunMessageBuilder(StunConstants.BINDING_SUCCESS, msg.transactionId)
             .xorMappedAddress(from.ip, from.port)
-            .build(integrityKey = p.icePwdBytes)
-        udp.send(0, response, response.size, from)
+            .build(integrityKey = password)
+        transports.send(0, response, response.size, from)
         p.lastConsentMillis = nowMillis()
+        if (ufrag == p.iceUfrag) p.previousIceUfrag?.let { old ->
+            // The client switched to the restarted credentials: the old ones are done.
+            synchronized(lock) { if (byUfrag[old] === session) byUfrag.remove(old) }
+            p.forgetPreviousIce()
+        }
         val current = p.remote
         if (current == null || (msg.useCandidate && current != from)) {
             synchronized(lock) {
@@ -253,6 +304,11 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             }
             session.flushPendingDtls()
         }
+    }
+
+    private fun transportFeedback(shard: Shard) {
+        val mine = synchronized(lock) { rooms.values.filter { it.shard === shard } }
+        for (room in mine) room.sendTransportFeedback()
     }
 
     private fun housekeeping(shard: Shard) {
@@ -348,7 +404,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             }
             val endpoint = DtlsEndpoint(
                 identity, fp,
-                sender = { buf, off, len -> participant.remote?.let { to -> udp.send(0, buf.copyOfRange(off, off + len), len, to) } },
+                sender = { buf, off, len -> participant.remote?.let { to -> transports.send(0, buf.copyOfRange(off, off + len), len, to) } },
                 onConnected = { keys ->
                     participant.installKeys(SrtpSessionKeys.forDtlsServer(keys.profile, keys.material))
                     mediaConnected = true

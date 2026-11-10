@@ -306,6 +306,48 @@ final object krtc.protocol.rtp/RtpStreamId { // krtc.protocol.rtp/RtpStreamId|nu
     final fun rename(kotlin/ByteArray, krtc.protocol.rtp/RtpHeader, kotlin/IntArray, kotlin/Int) // krtc.protocol.rtp/RtpStreamId.rename|rename(kotlin.ByteArray;krtc.protocol.rtp.RtpHeader;kotlin.IntArray;kotlin.Int){}[0]
 }
 
+final object krtc.protocol.rtp/TransportCc { // krtc.protocol.rtp/TransportCc|null[0]
+    final const val DELTA_MICROS // krtc.protocol.rtp/TransportCc.DELTA_MICROS|{}DELTA_MICROS[0]
+        final fun <get-DELTA_MICROS>(): kotlin/Long // krtc.protocol.rtp/TransportCc.DELTA_MICROS.<get-DELTA_MICROS>|<get-DELTA_MICROS>(){}[0]
+    final const val FMT // krtc.protocol.rtp/TransportCc.FMT|{}FMT[0]
+        final fun <get-FMT>(): kotlin/Int // krtc.protocol.rtp/TransportCc.FMT.<get-FMT>|<get-FMT>(){}[0]
+    final const val LOST // krtc.protocol.rtp/TransportCc.LOST|{}LOST[0]
+        final fun <get-LOST>(): kotlin/Long // krtc.protocol.rtp/TransportCc.LOST.<get-LOST>|<get-LOST>(){}[0]
+    final const val REFERENCE_MICROS // krtc.protocol.rtp/TransportCc.REFERENCE_MICROS|{}REFERENCE_MICROS[0]
+        final fun <get-REFERENCE_MICROS>(): kotlin/Long // krtc.protocol.rtp/TransportCc.REFERENCE_MICROS.<get-REFERENCE_MICROS>|<get-REFERENCE_MICROS>(){}[0]
+    final const val URI // krtc.protocol.rtp/TransportCc.URI|{}URI[0]
+        final fun <get-URI>(): kotlin/String // krtc.protocol.rtp/TransportCc.URI.<get-URI>|<get-URI>(){}[0]
+
+    final fun feedback(kotlin/Long, kotlin/Long, kotlin/Int, kotlin/LongArray, kotlin/Int, kotlin/Int): krtc.protocol.rtp/TransportCc.Built // krtc.protocol.rtp/TransportCc.feedback|feedback(kotlin.Long;kotlin.Long;kotlin.Int;kotlin.LongArray;kotlin.Int;kotlin.Int){}[0]
+    final fun parse(kotlin/ByteArray, kotlin/Int, kotlin/Int): krtc.protocol.rtp/TransportCc.Feedback? // krtc.protocol.rtp/TransportCc.parse|parse(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun read(kotlin/ByteArray, kotlin/Int): kotlin/Int // krtc.protocol.rtp/TransportCc.read|read(kotlin.ByteArray;kotlin.Int){}[0]
+    final fun write(kotlin/ByteArray, kotlin/Int, kotlin/Int) // krtc.protocol.rtp/TransportCc.write|write(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+
+    final class Built { // krtc.protocol.rtp/TransportCc.Built|null[0]
+        constructor <init>(kotlin/ByteArray, kotlin/Int) // krtc.protocol.rtp/TransportCc.Built.<init>|<init>(kotlin.ByteArray;kotlin.Int){}[0]
+
+        final val count // krtc.protocol.rtp/TransportCc.Built.count|{}count[0]
+            final fun <get-count>(): kotlin/Int // krtc.protocol.rtp/TransportCc.Built.count.<get-count>|<get-count>(){}[0]
+        final val packet // krtc.protocol.rtp/TransportCc.Built.packet|{}packet[0]
+            final fun <get-packet>(): kotlin/ByteArray // krtc.protocol.rtp/TransportCc.Built.packet.<get-packet>|<get-packet>(){}[0]
+    }
+
+    final class Feedback { // krtc.protocol.rtp/TransportCc.Feedback|null[0]
+        constructor <init>(kotlin/Int, kotlin/Int, kotlin/LongArray) // krtc.protocol.rtp/TransportCc.Feedback.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.LongArray){}[0]
+
+        final val arrivalMicros // krtc.protocol.rtp/TransportCc.Feedback.arrivalMicros|{}arrivalMicros[0]
+            final fun <get-arrivalMicros>(): kotlin/LongArray // krtc.protocol.rtp/TransportCc.Feedback.arrivalMicros.<get-arrivalMicros>|<get-arrivalMicros>(){}[0]
+        final val baseSeq // krtc.protocol.rtp/TransportCc.Feedback.baseSeq|{}baseSeq[0]
+            final fun <get-baseSeq>(): kotlin/Int // krtc.protocol.rtp/TransportCc.Feedback.baseSeq.<get-baseSeq>|<get-baseSeq>(){}[0]
+        final val count // krtc.protocol.rtp/TransportCc.Feedback.count|{}count[0]
+            final fun <get-count>(): kotlin/Int // krtc.protocol.rtp/TransportCc.Feedback.count.<get-count>|<get-count>(){}[0]
+        final val feedbackCount // krtc.protocol.rtp/TransportCc.Feedback.feedbackCount|{}feedbackCount[0]
+            final fun <get-feedbackCount>(): kotlin/Int // krtc.protocol.rtp/TransportCc.Feedback.feedbackCount.<get-feedbackCount>|<get-feedbackCount>(){}[0]
+
+        final fun seq(kotlin/Int): kotlin/Int // krtc.protocol.rtp/TransportCc.Feedback.seq|seq(kotlin.Int){}[0]
+    }
+}
+
 final object krtc.protocol.rtp/Vp8 { // krtc.protocol.rtp/Vp8|null[0]
     final fun isKeyFrame(kotlin/ByteArray, kotlin/Int, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor): kotlin/Boolean // krtc.protocol.rtp/Vp8.isKeyFrame|isKeyFrame(kotlin.ByteArray;kotlin.Int;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor){}[0]
     final fun parse(kotlin/ByteArray, kotlin/Int, kotlin/Int, krtc.protocol.rtp/Vp8.Descriptor): kotlin/Boolean // krtc.protocol.rtp/Vp8.parse|parse(kotlin.ByteArray;kotlin.Int;kotlin.Int;krtc.protocol.rtp.Vp8.Descriptor){}[0]

@@ -33,6 +33,15 @@ public data class SfuConfig(
     val bindAddress: String = "0.0.0.0",
     /** Address put into ICE candidates; must be reachable by clients (public IP behind NAT). */
     val announcedAddress: String = "127.0.0.1",
+    /**
+     * All addresses to offer as ICE host candidates, in order of preference (e.g. a public IPv4 and an IPv6
+     * address). Empty means just [announcedAddress].
+     */
+    val announcedAddresses: List<String> = emptyList(),
+    /** Also accept ICE over TCP (RFC 6544) on the same port, for clients whose UDP is blocked. */
+    val iceTcp: Boolean = true,
+    /** Offer and accept UDP candidates. Off only to force ICE-TCP (testing, or networks without UDP). */
+    val iceUdp: Boolean = true,
     /** Worker threads (and UDP sockets); rooms are spread across them. */
     val shards: Int = availableProcessors(),
     /** Who may join which room, under which id. Defaults to allowing everyone with generated ids. */
@@ -43,6 +52,8 @@ public data class SfuConfig(
     val simulatedLossPercent: Int = 0,
     /** Testing only: percentage of incoming video packets to drop, to exercise upstream NACK/RTX recovery. */
     val simulatedUplinkLossPercent: Int = 0,
+    /** Testing only: cap every subscriber's downlink at this many bits per second (token bucket, drops the excess). */
+    val simulatedDownlinkBps: Long = 0,
 )
 
 /** What a client asks for when joining. [credentials] is opaque to the SFU (e.g. a token for the host's auth). */
@@ -104,6 +115,21 @@ public data class ParticipantInfo(
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)
 
 /** A snapshot of the SFU's counters (cumulative since start, except the gauges). */
+/**
+ * Congestion-control view of one participant's transport (a snapshot; values come from the media thread).
+ * [downlinkEstimateBps] is the SFU's estimate of what it can send to this participant (transport-cc), 0 when
+ * the participant sends no transport-cc feedback; [videoLayers] maps each publisher it watches to the
+ * simulcast layer it currently gets (0 = lowest, -1 = none yet).
+ */
+public data class SfuLinkStats(
+    val participantId: String,
+    val roomName: String,
+    val downlinkEstimateBps: Long,
+    val downlinkAckedBps: Long,
+    val downlinkLossPercent: Double,
+    val videoLayers: Map<String, Int>,
+)
+
 public data class SfuMetrics(
     val participants: Int,
     val rooms: Int,

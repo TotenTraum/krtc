@@ -19,6 +19,9 @@ linkerOpts.linux_arm64 = -lssl -lcrypto
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/tcp.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -42,6 +45,119 @@ static inline int krtc_set_recv_timeout_ms(int fd, int ms) {
     tv.tv_sec = ms / 1000;
     tv.tv_usec = (ms % 1000) * 1000;
     return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+}
+
+/* IPv4 or IPv6 socket address from raw bytes (4 or 16) and a host-order port; returns its length, 0 if invalid. */
+static inline int krtc_sockaddr_make(void *out, const unsigned char *ip, int ipLen, int port) {
+    memset(out, 0, sizeof(struct sockaddr_storage));
+    if (ipLen == 4) {
+        struct sockaddr_in *a = (struct sockaddr_in *) out;
+        a->sin_family = AF_INET;
+        a->sin_port = htons((uint16_t) port);
+        memcpy(&a->sin_addr, ip, 4);
+        return sizeof *a;
+    }
+    if (ipLen == 16) {
+        struct sockaddr_in6 *a = (struct sockaddr_in6 *) out;
+        a->sin6_family = AF_INET6;
+        a->sin6_port = htons((uint16_t) port);
+        memcpy(&a->sin6_addr, ip, 16);
+        return sizeof *a;
+    }
+    return 0;
+}
+
+/* Reads a socket address into ip (16 bytes of room) and port; returns 4 or 16 (IPv4-mapped IPv6 gives 4), 0 if unknown. */
+static inline int krtc_sockaddr_read(const void *in, unsigned char *ip, int *port) {
+    const struct sockaddr *sa = (const struct sockaddr *) in;
+    if (sa->sa_family == AF_INET) {
+        const struct sockaddr_in *a = (const struct sockaddr_in *) in;
+        memcpy(ip, &a->sin_addr, 4);
+        *port = ntohs(a->sin_port);
+        return 4;
+    }
+    if (sa->sa_family == AF_INET6) {
+        const struct sockaddr_in6 *a = (const struct sockaddr_in6 *) in;
+        *port = ntohs(a->sin6_port);
+        if (IN6_IS_ADDR_V4MAPPED(&a->sin6_addr)) { memcpy(ip, ((const unsigned char *) &a->sin6_addr) + 12, 4); return 4; }
+        memcpy(ip, &a->sin6_addr, 16);
+        return 16;
+    }
+    return 0;
+}
+
+/* Parses a textual IPv4/IPv6 address into out (16 bytes of room); returns 4, 16 or 0. */
+static inline int krtc_parse_ip(const char *text, unsigned char *out) {
+    if (inet_pton(AF_INET, text, out) == 1) return 4;
+    if (inet_pton(AF_INET6, text, out) == 1) return 16;
+    return 0;
+}
+
+static inline int krtc_set_ipv6_only(int fd) {
+    int one = 1;
+    return setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof one);
+}
+
+/*
+ * Addresses of the interfaces that are up, as raw bytes (each entry: 1 length byte, then 4 or 16 bytes) in out.
+ * want: 4 = IPv4 only, 6 = IPv6 only, 0 = both. IPv6 link-local addresses are skipped (they need a scope).
+ * Returns the number of bytes written.
+ */
+static inline int krtc_local_addresses(int want, unsigned char *out, int cap) {
+    struct ifaddrs *list = NULL, *i;
+    int n = 0;
+    if (getifaddrs(&list) != 0) return 0;
+    for (i = list; i; i = i->ifa_next) {
+        if (!i->ifa_addr || !(i->ifa_flags & IFF_UP)) continue;
+        if (i->ifa_addr->sa_family == AF_INET && want != 6 && n + 5 <= cap) {
+            out[n++] = 4;
+            memcpy(out + n, &((struct sockaddr_in *) i->ifa_addr)->sin_addr, 4);
+            n += 4;
+        } else if (i->ifa_addr->sa_family == AF_INET6 && want != 4 && n + 17 <= cap) {
+            const struct in6_addr *a6 = &((struct sockaddr_in6 *) i->ifa_addr)->sin6_addr;
+            if (IN6_IS_ADDR_LINKLOCAL(a6)) continue;
+            out[n++] = 16;
+            memcpy(out + n, a6, 16);
+            n += 16;
+        }
+    }
+    freeifaddrs(list);
+    return n;
+}
+
+/* TCP (ICE-TCP): no SIGPIPE on writes to closed connections; whole-buffer send/recv. */
+static inline void krtc_tcp_setup(int fd) {
+    int one = 1;
+#ifdef SO_NOSIGPIPE
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
+    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof one);
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+}
+
+static inline int krtc_send_all(int fd, const unsigned char *buf, int len) {
+#ifdef MSG_NOSIGNAL
+    int flags = MSG_NOSIGNAL;
+#else
+    int flags = 0;
+#endif
+    int off = 0;
+    while (off < len) {
+        ssize_t n = send(fd, buf + off, (size_t) (len - off), flags);
+        if (n <= 0) return -1;
+        off += (int) n;
+    }
+    return 0;
+}
+
+static inline int krtc_recv_all(int fd, unsigned char *buf, int len) {
+    int off = 0;
+    while (off < len) {
+        ssize_t n = recv(fd, buf + off, (size_t) (len - off), 0);
+        if (n <= 0) return -1;
+        off += (int) n;
+    }
+    return 0;
 }
 
 /* ---------------- AES / HMAC ---------------- */

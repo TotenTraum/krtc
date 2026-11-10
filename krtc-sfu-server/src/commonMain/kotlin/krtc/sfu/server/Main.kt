@@ -13,6 +13,7 @@ import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
 import krtc.sfu.Sfu
 import krtc.sfu.SfuConfig
+import krtc.sfu.SfuLinkStats
 import krtc.sfu.SfuMetrics
 import krtc.sfu.ktor.krtcSfu
 import kotlin.time.Duration.Companion.seconds
@@ -20,9 +21,11 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The standalone krtc SFU: krtc-sfu + krtc-sfu-ktor + a test page, on the JVM or as a Kotlin/Native
  * executable. Options (or environment variables KRTC_*):
- *   --http-port 8080 (or PORT)  --udp-port 50000  --bind 0.0.0.0  --announce 127.0.0.1  --shards <cores>
- * Bind and announce the same IP in production: ICE requires replies from the address the client contacted.
- *   --simulate-loss 0  --simulate-uplink-loss 0   (testing only)
+ *   --http-port 8080 (or PORT)  --udp-port 50000  --bind 0.0.0.0  --announce 127.0.0.1[,more]  --shards <cores>
+ *   --ice-tcp true  --ice-udp true
+ * `--bind 0.0.0.0` (IPv4) or `::` (IPv4 + IPv6) listens on every interface address and answers from the address
+ * each client used; `--announce` lists the addresses clients should reach (public IPs behind NAT).
+ *   --simulate-loss 0  --simulate-uplink-loss 0  --simulate-downlink-kbps 0   (testing only)
  */
 public fun main(args: Array<String>) {
     val opts = args.toList().chunked(2).filter { it.size == 2 }.associate { (k, v) -> k.removePrefix("--") to v }
@@ -31,15 +34,18 @@ public fun main(args: Array<String>) {
     val config = SfuConfig(
         udpPort = opt("udp-port", "KRTC_UDP_PORT")?.toInt() ?: defaults.udpPort,
         bindAddress = opt("bind", "KRTC_BIND") ?: defaults.bindAddress,
-        announcedAddress = opt("announce", "KRTC_ANNOUNCE") ?: defaults.announcedAddress,
+        announcedAddresses = (opt("announce", "KRTC_ANNOUNCE") ?: defaults.announcedAddress).split(',').map { it.trim() }.filter { it.isNotEmpty() },
         shards = opt("shards", "KRTC_SHARDS")?.toInt() ?: defaults.shards,
         simulatedLossPercent = opt("simulate-loss", "KRTC_SIMULATE_LOSS")?.toInt() ?: 0,
         simulatedUplinkLossPercent = opt("simulate-uplink-loss", "KRTC_SIMULATE_UPLINK_LOSS")?.toInt() ?: 0,
+        iceTcp = opt("ice-tcp", "KRTC_ICE_TCP")?.toBooleanStrictOrNull() ?: defaults.iceTcp,
+        iceUdp = opt("ice-udp", "KRTC_ICE_UDP")?.toBooleanStrictOrNull() ?: defaults.iceUdp,
+        simulatedDownlinkBps = (opt("simulate-downlink-kbps", "KRTC_SIMULATE_DOWNLINK_KBPS")?.toLong() ?: 0) * 1000,
     )
     val httpPort = (opt("http-port", "KRTC_HTTP_PORT") ?: environment("PORT"))?.toInt() ?: 8080
     val sfu = Sfu(config)
     val server = standaloneServer(sfu, httpPort)
-    println("krtc-sfu: http://localhost:$httpPort/  (UDP ${sfu.udpPort}, announced ${config.announcedAddress})")
+    println("krtc-sfu: http://localhost:$httpPort/  (UDP ${sfu.udpPort}, announced ${config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }.joinToString()})")
     server.start(wait = true)
 }
 
@@ -52,6 +58,7 @@ public fun standaloneServer(sfu: Sfu, port: Int): EmbeddedServer<*, *> = embedde
     routing {
         get("/") { call.respondText(INDEX_HTML, ContentType.Text.Html) }
         get("/metrics") { call.respondText(sfu.metrics().toJson(), ContentType.Application.Json) }
+        get("/stats") { call.respondText(sfu.linkStats().toJson(), ContentType.Application.Json) }
         krtcSfu(sfu, "/ws")
     }
 }
@@ -67,6 +74,12 @@ internal fun SfuMetrics.toJson(): String = buildString {
     )
     fields.forEach { (k, v) -> append('"').append(k).append("\":").append(v).append(',') }
     append("\"shardQueueDepth\":").append(shardQueueDepth.joinToString(",", "[", "]")).append('}')
+}
+
+internal fun List<SfuLinkStats>.toJson(): String = joinToString(",", "[", "]") { s ->
+    val layers = s.videoLayers.entries.joinToString(",", "{", "}") { (k, v) -> "\"$k\":$v" }
+    "{\"participant\":\"${s.participantId}\",\"room\":\"${s.roomName}\",\"downlinkEstimateBps\":${s.downlinkEstimateBps}," +
+        "\"downlinkAckedBps\":${s.downlinkAckedBps},\"downlinkLossPercent\":${(s.downlinkLossPercent * 10).toLong() / 10.0},\"videoLayers\":$layers}"
 }
 
 internal expect fun environment(name: String): String?

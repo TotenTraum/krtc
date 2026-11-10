@@ -18,6 +18,7 @@ public final class krtc/client/RoomClient {
 	public final fun join (Ljava/lang/String;Ljava/lang/String;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun join$default (Lkrtc/client/RoomClient;Ljava/lang/String;Ljava/lang/String;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun leave ()V
+	public final fun restartIce (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setCamera (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setMicrophone (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setVideoQuality (Ljava/lang/String;Lkrtc/client/VideoQuality;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

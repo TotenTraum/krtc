@@ -108,4 +108,30 @@ class RoomClientSfuTest {
             assertTrue(pc.closed)
         }
     }
+
+    @Test
+    fun failedConnectionTriggersIceRestartWithFreshCredentials(): Unit = runBlocking {
+        withTimeout(15_000) {
+            val factory = FakeFactory()
+            val client = RoomClient(url, factory)
+            client.join("ice", "Carol", microphone = FakeTrack("audio"))
+            client.state.first { it is RoomState.Connected }
+            val pc = factory.created.single()
+            val firstUfrag = waitForUfrag(pc) { true }
+
+            pc.state.value = krtc.core.RTCPeerConnectionState.FAILED // e.g. the network changed
+            val restartedUfrag = waitForUfrag(pc) { it != firstUfrag }
+            assertTrue(restartedUfrag != firstUfrag, "the new offer carries fresh ICE credentials")
+            pc.state.value = krtc.core.RTCPeerConnectionState.CONNECTED
+            client.leave()
+        }
+    }
+
+    private suspend fun waitForUfrag(pc: FakePeerConnection, accept: (String) -> Boolean): String {
+        while (true) {
+            val ufrag = pc.remoteDescription?.sdp?.lineSequence()?.firstOrNull { it.startsWith("a=ice-ufrag:") }?.removePrefix("a=ice-ufrag:")
+            if (ufrag != null && accept(ufrag)) return ufrag
+            kotlinx.coroutines.delay(20)
+        }
+    }
 }

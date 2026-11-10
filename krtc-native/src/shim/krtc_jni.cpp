@@ -17,6 +17,7 @@ namespace {
 JavaVM *g_vm = nullptr;
 jmethodID g_on_event = nullptr;
 jmethodID g_complete = nullptr;
+jmethodID g_on_frame = nullptr;
 
 JNIEnv *Env() {
     JNIEnv *env = nullptr;
@@ -75,6 +76,33 @@ void OnDone(void *user, const char *result, const char *error) {
     env->DeleteGlobalRef(done);
 }
 
+/** A track's frame sink: the Kotlin listener and an int[] reused while the frame size stays the same. */
+struct FrameSink {
+    jobject listener = nullptr;
+    jintArray pixels = nullptr;
+    int size = 0;
+};
+
+void OnFrame(void *user, int width, int height, const uint32_t *argb, int64_t timestamp_us) {
+    JNIEnv *env = Env();
+    auto *sink = static_cast<FrameSink *>(user);
+    const int n = width * height;
+    if (sink->size != n) {
+        if (sink->pixels) env->DeleteGlobalRef(sink->pixels);
+        jintArray local = env->NewIntArray(n);
+        if (!local) {
+            env->ExceptionClear();
+            return;
+        }
+        sink->pixels = static_cast<jintArray>(env->NewGlobalRef(local));
+        env->DeleteLocalRef(local);
+        sink->size = n;
+    }
+    env->SetIntArrayRegion(sink->pixels, 0, n, reinterpret_cast<const jint *>(argb));
+    env->CallVoidMethod(sink->listener, g_on_frame, width, height, sink->pixels, static_cast<jlong>(timestamp_us));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
 template <typename T> T *H(jlong handle) { return reinterpret_cast<T *>(static_cast<intptr_t>(handle)); }
 template <typename T> jlong J(T *p) { return static_cast<jlong>(reinterpret_cast<intptr_t>(p)); }
 
@@ -88,10 +116,12 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) return JNI_ERR;
     jclass listener = env->FindClass("krtc/native/Jni$Listener");
     jclass done = env->FindClass("krtc/native/Jni$Done");
-    if (!listener || !done) return JNI_ERR;
+    jclass frames = env->FindClass("krtc/native/Jni$FrameListener");
+    if (!listener || !done || !frames) return JNI_ERR;
+    g_on_frame = env->GetMethodID(frames, "onFrame", "(II[IJ)V");
     g_on_event = env->GetMethodID(listener, "onEvent", "(IIJJ)V");
     g_complete = env->GetMethodID(done, "complete", "(Ljava/lang/String;Ljava/lang/String;)V");
-    return g_on_event && g_complete ? JNI_VERSION_1_6 : JNI_ERR;
+    return g_on_event && g_complete && g_on_frame ? JNI_VERSION_1_6 : JNI_ERR;
 }
 
 // Factory.
@@ -118,6 +148,34 @@ KRTC_JNI(jlong, factoryCreateAudioTrack)(JNIEnv *env, jclass, jlong f, jstring i
 KRTC_JNI(jlong, factoryCreateTestVideoTrack)(JNIEnv *env, jclass, jlong f, jstring id, jint w, jint h, jint fps) {
     return J(krtc_factory_create_test_video_track(H<krtc_factory>(f), Utf(env, id).get(), w, h, fps));
 }
+
+// Video sources and cameras.
+KRTC_JNI(jlong, factoryCreateVideoSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_video_source(H<krtc_factory>(f))); }
+KRTC_JNI(jlong, factoryCreateCameraSource)(JNIEnv *, jclass, jlong f, jint index, jint w, jint h, jint fps) {
+    return J(krtc_factory_create_camera_source(H<krtc_factory>(f), index, w, h, fps));
+}
+KRTC_JNI(jlong, factoryCreateVideoTrack)(JNIEnv *env, jclass, jlong f, jstring id, jlong source) {
+    return J(krtc_factory_create_video_track(H<krtc_factory>(f), Utf(env, id).get(), H<krtc_video_source>(source)));
+}
+KRTC_JNI(jint, cameraCount)(JNIEnv *, jclass) { return krtc_camera_count(); }
+KRTC_JNI(jstring, cameraName)(JNIEnv *env, jclass, jint index) { return Take(env, krtc_camera_name(index)); }
+KRTC_JNI(void, videoSourcePushI420)(JNIEnv *env, jclass, jlong s, jint w, jint h, jbyteArray y, jint sy, jbyteArray u, jint su,
+                                    jbyteArray v, jint sv, jint rotation, jlong ts) {
+    jbyte *py = env->GetByteArrayElements(y, nullptr);
+    jbyte *pu = env->GetByteArrayElements(u, nullptr);
+    jbyte *pv = env->GetByteArrayElements(v, nullptr);
+    krtc_video_source_push_i420(H<krtc_video_source>(s), w, h, reinterpret_cast<uint8_t *>(py), sy, reinterpret_cast<uint8_t *>(pu), su,
+                                reinterpret_cast<uint8_t *>(pv), sv, rotation, ts);
+    env->ReleaseByteArrayElements(v, pv, JNI_ABORT);
+    env->ReleaseByteArrayElements(u, pu, JNI_ABORT);
+    env->ReleaseByteArrayElements(y, py, JNI_ABORT);
+}
+KRTC_JNI(void, videoSourcePushArgb)(JNIEnv *env, jclass, jlong s, jint w, jint h, jintArray argb, jint rotation, jlong ts) {
+    jint *p = env->GetIntArrayElements(argb, nullptr);
+    krtc_video_source_push_argb(H<krtc_video_source>(s), w, h, reinterpret_cast<uint32_t *>(p), rotation, ts);
+    env->ReleaseIntArrayElements(argb, p, JNI_ABORT);
+}
+KRTC_JNI(void, videoSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_video_source_release(H<krtc_video_source>(s)); }
 
 // Peer connection.
 KRTC_JNI(jlong, pcCreate)(JNIEnv *env, jclass, jlong f, jobject listener) {
@@ -180,5 +238,22 @@ KRTC_JNI(void, trackVideoStats)(JNIEnv *env, jclass, jlong t, jlongArray out) {
     krtc_track_video_stats(H<krtc_track>(t), &frames, &w, &h);
     const jlong values[3] = {frames, w, h};
     env->SetLongArrayRegion(out, 0, 3, values);
+}
+/** Installs a frame listener (null removes); returns the sink to release with frameSinkRelease once replaced. */
+KRTC_JNI(jlong, trackSetFrameSink)(JNIEnv *env, jclass, jlong t, jobject listener) {
+    if (!listener) {
+        krtc_track_set_frame_sink(H<krtc_track>(t), nullptr, nullptr);
+        return 0;
+    }
+    auto *sink = new FrameSink();
+    sink->listener = env->NewGlobalRef(listener);
+    krtc_track_set_frame_sink(H<krtc_track>(t), OnFrame, sink);
+    return J(sink);
+}
+KRTC_JNI(void, frameSinkRelease)(JNIEnv *env, jclass, jlong handle) {
+    auto *sink = H<FrameSink>(handle);
+    env->DeleteGlobalRef(sink->listener);
+    if (sink->pixels) env->DeleteGlobalRef(sink->pixels);
+    delete sink;
 }
 KRTC_JNI(void, trackRelease)(JNIEnv *, jclass, jlong t) { krtc_track_release(H<krtc_track>(t)); }

@@ -119,6 +119,34 @@ public final class krtc/protocol/rtp/RtpStreamId {
 	public final fun rename ([BLkrtc/protocol/rtp/RtpHeader;[II)V
 }
 
+public final class krtc/protocol/rtp/TransportCc {
+	public static final field DELTA_MICROS J
+	public static final field FMT I
+	public static final field INSTANCE Lkrtc/protocol/rtp/TransportCc;
+	public static final field LOST J
+	public static final field REFERENCE_MICROS J
+	public static final field URI Ljava/lang/String;
+	public final fun feedback (JJI[JII)Lkrtc/protocol/rtp/TransportCc$Built;
+	public final fun parse ([BII)Lkrtc/protocol/rtp/TransportCc$Feedback;
+	public final fun read ([BI)I
+	public final fun write ([BII)V
+}
+
+public final class krtc/protocol/rtp/TransportCc$Built {
+	public fun <init> ([BI)V
+	public final fun getCount ()I
+	public final fun getPacket ()[B
+}
+
+public final class krtc/protocol/rtp/TransportCc$Feedback {
+	public fun <init> (II[J)V
+	public final fun getArrivalMicros ()[J
+	public final fun getBaseSeq ()I
+	public final fun getCount ()I
+	public final fun getFeedbackCount ()I
+	public final fun seq (I)I
+}
+
 public final class krtc/protocol/rtp/Vp8 {
 	public static final field INSTANCE Lkrtc/protocol/rtp/Vp8;
 	public final fun isKeyFrame ([BIILkrtc/protocol/rtp/Vp8$Descriptor;)Z

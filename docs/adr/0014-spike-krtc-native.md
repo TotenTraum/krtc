@@ -103,12 +103,35 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
 - **Звонок** из эмулятора (Android 16, arm64, `krtc-native-android-demo`): VP8 640×360, 15 кадров/с, потерь 0; тон доходит (RMS в Chrome ~0,13–0,17); видео Chrome 1280×720 и Opus принимаются, уровень ~0,106.
 - **Пакет `krtc.native`:** `native` — ключевое слово Java. Kotlin и JNI это не мешает, но из Java классы недоступны и такое имя нельзя взять namespace Android-приложения. Перед публикацией пакет стоит переименовать.
 
+## Медиа: камера, свои кадры, вывод
+
+Общий API (`commonMain`, все платформы):
+- `NativePeerConnectionFactory.createVideoSource()`: приложение кладёт кадры `pushI420` или `pushArgb`. `createVideoTrack(source)` делает из источника трек.
+- `createCameraSource(index, w, h, fps)` и `nativeCameras()` — встроенный захват камеры.
+- `NativeTrack.setFrameListener { frame -> }`: каждый кадр трека (принятого или своего), уже повёрнутый, в ARGB (`0xAARRGGBB`). Массив переиспользуется между кадрами одного размера.
+- `NativeVideoSource` потокобезопасен: кадры после `close()` отбрасываются, поэтому поток захвата может пережить источник.
+
+Прослойка: `krtc::PushVideoSource`; ARGB-sink через libyuv (`I420ToARGB`, `ARGBToI420`). В JNI кадр передаётся в Kotlin через `int[]`, который переиспользуется.
+
+| Платформа | Камера | Проверено |
+|---|---|---|
+| macOS, iOS | `RTCCameraVideoCapturer` (AVFoundation) → свой `RTCVideoCapturerDelegate` → `ObjCToNativeVideoFrameBuffer`. Перед стартом запрашивается разрешение; при отказе — `null` | Камера перечисляется («Камера (MacBook Air)»). Захват не проверен: процессу из этой сессии macOS не показывает запрос (у приложения-хоста нет описания доступа к камере), и честно выдаётся `null`. Из Terminal.app запрос появится |
+| Linux | V4L2 через классы `DeviceInfoV4l2` и `VideoCaptureModuleV4L2` напрямую. `VideoCaptureFactory` не годится: тянет камеру через PipeWire/xdg-portal, а ей нужен glib | Перечисление в контейнере (камер нет); бинарь по-прежнему зависит только от glibc |
+| Android | `AndroidCamera` (Camera2 в Kotlin): YUV_420_888 → I420 → `pushI420` с поворотом сенсора | Эмулятор: Chrome получает 720×1280 VP8 с картинкой виртуальной камеры, потерь 0 |
+| Android, звук | `AndroidAudio`: AudioRecord (`VOICE_COMMUNICATION`, системные AEC/NS) → `pushAudio`, `pullAudio` → AudioTrack | Собирается; эмулятор запускался без звука |
+
+Вывод проверен везде, где был звонок:
+- **macOS (native и JVM):** кадры Chrome отрисованы, средний цвет (106, 35, 108) совпадает с тем, что Chrome показывает у себя (112, 47, 110);
+- **Android:** приняты и отрисованы и кадры Chrome, и камера второго Android-клиента;
+- **push:** кадры, сгенерированные в Kotlin, Chrome принимает 640×360 с ожидаемым цветом.
+
 ## Что не проверено
 
 - **Системное аудиоустройство** (`AudioDevice.PLATFORM`): собирается, в звонке не проверялось, чтобы не шуметь.
 - **Simulcast H.264 через VideoToolbox**: идёт только один слой из трёх; не разбирались.
 - **Windows**; **iOS на устройстве**; **desktop JVM на Linux и Windows** (нужны `libkrtc_jni` под них).
-- **Android:** MediaCodec (H.264, аппаратные кодеки), камера, системное аудио (Java-классы `org.webrtc`), ABI кроме arm64-v8a.
+- **Камера на macOS** (нужен запуск из приложения с описанием доступа или из Terminal.app), **на Linux** (нет устройства), **на iOS** (у симулятора нет камеры).
+- **Android:** MediaCodec (аппаратный H.264), звук `AndroidAudio` в звонке, ABI кроме arm64-v8a.
 - **Системное аудио на Linux** (PulseAudio/ALSA).
 
 ## Решения по итогам
@@ -120,6 +143,6 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
    - на Linux прослойка собирается тем же clang и встроенной `libc++`.
 3. **Следующие шаги для клиента:**
    - изоляция символов и для Kotlin/Native на macOS/iOS (как на Linux);
-   - Android: MediaCodec и камера через Java-классы `org.webrtc`, остальные ABI;
+   - Android: MediaCodec, остальные ABI;
    - Windows (сборки LiveKit `win-x64`/`win-arm64` есть);
    - переименовать пакет `krtc.native`.

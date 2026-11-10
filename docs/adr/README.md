@@ -24,6 +24,7 @@
 | [0012](0012-kmp-client.md) | KMP-клиент: `krtc-core` на интерфейсах и `krtc-client` для Android, iOS, macOS, Linux, Windows, JVM, веба | Предложено |
 | [0013](0013-embeddable-sfu.md) | SFU как встраиваемая KMP-библиотека: `krtc-sfu`, `krtc-sfu-ktor`, `krtc-signaling` | Принято |
 | [0014](0014-spike-krtc-native.md) | Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc, бэкенд `krtc-core` для macOS, Linux, iOS, JVM и Android | Принято, кроме Windows |
+| [0015](0015-sfu-transport-and-congestion.md) | Транспорт и управление перегрузкой SFU: transport-cc и выбор слоёв, сокет на адрес, IPv6, ICE-TCP, ICE restart | Принято |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

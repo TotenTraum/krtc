@@ -21,6 +21,7 @@ typedef struct krtc_factory krtc_factory;
 typedef struct krtc_pc krtc_pc;
 typedef struct krtc_transceiver krtc_transceiver;
 typedef struct krtc_track krtc_track;
+typedef struct krtc_video_source krtc_video_source;
 
 /* Completion of an asynchronous operation. `error` is NULL on success; `sdp` is set by create_answer. */
 typedef void (*krtc_done_fn)(void *user, const char *sdp, const char *error);
@@ -65,6 +66,23 @@ char *krtc_factory_video_codecs(krtc_factory *factory);
 krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *id);
 krtc_track *krtc_factory_create_test_video_track(krtc_factory *factory, const char *id, int width, int height, int fps);
 
+/* Video sources. A pushed source takes frames from the application; a camera source captures (Apple:
+ * AVFoundation, Linux: V4L2; NULL where unavailable, e.g. Android, where the app captures and pushes, or when the
+ * user denies camera access; on Apple the first call may show the OS permission prompt and wait for it).
+ * Releasing a source stops its camera; tracks made from it keep their own reference. */
+krtc_video_source *krtc_factory_create_video_source(krtc_factory *factory);
+int krtc_camera_count(void);
+char *krtc_camera_name(int index); /* free with krtc_free */
+krtc_video_source *krtc_factory_create_camera_source(krtc_factory *factory, int index, int width, int height, int fps);
+/* I420 planes; rotation 0/90/180/270 (clockwise, applied by the receiver); timestamp_us 0 = now. */
+void krtc_video_source_push_i420(krtc_video_source *source, int width, int height,
+                                 const uint8_t *y, int stride_y, const uint8_t *u, int stride_u, const uint8_t *v, int stride_v,
+                                 int rotation, int64_t timestamp_us);
+/* 32-bit ARGB pixels (0xAARRGGBB as native-endian ints), width × height, rows contiguous. */
+void krtc_video_source_push_argb(krtc_video_source *source, int width, int height, const uint32_t *argb, int rotation, int64_t timestamp_us);
+krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *id, krtc_video_source *source);
+void krtc_video_source_release(krtc_video_source *source);
+
 /* Peer connection (Unified Plan). */
 krtc_pc *krtc_pc_create(krtc_factory *factory, krtc_event_fn on_event, void *user);
 void krtc_pc_set_remote_description(krtc_pc *pc, const char *type, const char *sdp, krtc_done_fn done, void *user);
@@ -99,6 +117,10 @@ int krtc_track_enabled(krtc_track *track);
 void krtc_track_set_enabled(krtc_track *track, int enabled);
 /* Video tracks: frames delivered so far and the last frame size (attaches a counting sink on first use). */
 void krtc_track_video_stats(krtc_track *track, int64_t *frames, int *width, int *height);
+/* Video tracks: every frame, rotated upright, as ARGB (0xAARRGGBB ints, width × height, rows contiguous), on a
+ * libwebrtc thread; the pixels are valid during the call only. NULL removes the sink. */
+typedef void (*krtc_frame_fn)(void *user, int width, int height, const uint32_t *argb, int64_t timestamp_us);
+void krtc_track_set_frame_sink(krtc_track *track, krtc_frame_fn fn, void *user);
 void krtc_track_release(krtc_track *track);
 
 void krtc_free(void *p);

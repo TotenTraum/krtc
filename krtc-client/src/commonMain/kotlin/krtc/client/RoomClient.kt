@@ -29,6 +29,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -112,6 +114,7 @@ public class RoomClient(
         job = scope.launch {
             launch { peerConnection.ontrack.collect { ev -> onTrack(ev.transceiver.mid, ev.track) } }
             launch { for (offer in offers) answer(peerConnection, offer) }
+            launch { restartIceWhenStuck(peerConnection) }
             try {
                 for (frame in ws.incoming) {
                     if (frame is Frame.Text) SignalingProtocol.decodeServer(frame.readText())?.let(::onMessage)
@@ -176,6 +179,27 @@ public class RoomClient(
 
     private fun participant(id: String): RemoteParticipant? = participantsFlow.value.firstOrNull { it.id == id }
 
+    /**
+     * Recovers from lost connectivity (network change, NAT rebinding): when the peer connection fails, or stays
+     * disconnected for [ICE_RESTART_GRACE_MILLIS], asks the SFU for an ICE restart, repeating every
+     * [ICE_RESTART_RETRY_MILLIS] until it reconnects.
+     */
+    private suspend fun restartIceWhenStuck(peerConnection: RTCPeerConnection) {
+        peerConnection.connectionState.collectLatest { s ->
+            if (s != RTCPeerConnectionState.DISCONNECTED && s != RTCPeerConnectionState.FAILED) return@collectLatest
+            if (s == RTCPeerConnectionState.DISCONNECTED) delay(ICE_RESTART_GRACE_MILLIS)
+            while (stateFlow.value is RoomState.Connected) {
+                restartIce()
+                delay(ICE_RESTART_RETRY_MILLIS)
+            }
+        }
+    }
+
+    /** Asks the SFU for an ICE restart (fresh ICE credentials in a new offer); media and DTLS continue. */
+    public suspend fun restartIce() {
+        send(ClientMessage.RestartIce)
+    }
+
     /** Replaces the published microphone track (null stops sending audio content). */
     public suspend fun setMicrophone(track: MediaStreamTrack?) {
         microphone = track
@@ -214,5 +238,7 @@ public class RoomClient(
     private companion object {
         const val UPLINK_AUDIO_MID = "0"
         const val UPLINK_VIDEO_MID = "1"
+        const val ICE_RESTART_GRACE_MILLIS = 2_000L
+        const val ICE_RESTART_RETRY_MILLIS = 5_000L
     }
 }

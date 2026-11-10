@@ -2,6 +2,7 @@ package krtc.sfu.room
 
 import krtc.protocol.rtp.AudioLevel
 import krtc.protocol.rtp.RtpStreamId
+import krtc.protocol.rtp.TransportCc
 import krtc.protocol.sdp.Direction
 import krtc.protocol.sdp.MediaDescription
 import krtc.protocol.sdp.SdpAttribute
@@ -18,9 +19,14 @@ import krtc.protocol.sdp.SessionDescription
  *   the slot is free (someone left) or that participant sends no video. Free slots are reused.
  */
 internal class OfferBuilder(
-    private val announcedAddress: String,
+    /** Host candidate addresses, most preferred first. */
+    private val announcedAddresses: List<String>,
     private val port: Int,
     private val fingerprint: String,
+    /** Offer UDP host candidates. */
+    private val udp: Boolean = true,
+    /** Offer passive TCP host candidates (RFC 6544) on the same port. */
+    private val tcp: Boolean = false,
 ) {
     internal fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
         val sd = SessionDescription()
@@ -42,13 +48,19 @@ internal class OfferBuilder(
     }
 
     private fun transport(p: Participant, m: MediaDescription, mid: String) {
-        m.lines += SdpLine('c', "IN IP4 $announcedAddress")
+        val first = announcedAddresses.first()
+        m.lines += SdpLine('c', "IN ${if (':' in first) "IP6" else "IP4"} $first")
         val a = m.attributes
         a += SdpAttribute("ice-ufrag", p.iceUfrag)
         a += SdpAttribute("ice-pwd", p.icePwd)
         a += SdpAttribute("fingerprint", fingerprint)
         a += SdpAttribute("setup", "passive")
-        a += SdpAttribute("candidate", "1 1 udp 2130706431 $announcedAddress $port typ host")
+        announcedAddresses.forEachIndexed { i, address ->
+            // RFC 8445 §5.1.2: type preference 126 (host), local preference by order, component 1.
+            // TCP gets a lower type preference so clients use it only when UDP fails.
+            if (udp) a += SdpAttribute("candidate", "${1 + i} 1 udp ${priority(126, i)} $address $port typ host")
+            if (tcp) a += SdpAttribute("candidate", "${101 + i} 1 tcp ${priority(80, i)} $address $port typ host tcptype passive")
+        }
         a += SdpAttribute("end-of-candidates")
         a += SdpAttribute("mid", mid)
     }
@@ -58,11 +70,13 @@ internal class OfferBuilder(
         transport(p, m, mid)
         val a = m.attributes
         a += SdpAttribute("extmap", "${MediaPlan.AUDIO_LEVEL_EXT_ID} ${AudioLevel.URI}")
+        a += SdpAttribute("extmap", "${MediaPlan.TRANSPORT_CC_EXT_ID} ${TransportCc.URI}")
         a += SdpAttribute(direction.sdp)
         a += SdpAttribute("rtcp-mux")
         a += SdpAttribute("rtcp-rsize")
         a += SdpAttribute("rtpmap", "${MediaPlan.OPUS_PT} opus/48000/2")
         a += SdpAttribute("fmtp", "${MediaPlan.OPUS_PT} minptime=10;useinbandfec=1;usedtx=1")
+        a += SdpAttribute("rtcp-fb", "${MediaPlan.OPUS_PT} transport-cc")
         if (publisher != null) {
             val (stream, track) = msid(publisher, "audio")
             a += SdpAttribute("msid", "$stream $track")
@@ -84,6 +98,7 @@ internal class OfferBuilder(
             a += SdpAttribute("extmap", "${MediaPlan.RID_EXT_ID} ${RtpStreamId.RID_URI}")
             a += SdpAttribute("extmap", "${MediaPlan.REPAIRED_RID_EXT_ID} ${RtpStreamId.REPAIRED_RID_URI}")
         }
+        a += SdpAttribute("extmap", "${MediaPlan.TRANSPORT_CC_EXT_ID} ${TransportCc.URI}")
         a += SdpAttribute(direction.sdp)
         a += SdpAttribute("rtcp-mux")
         a += SdpAttribute("rtcp-rsize")
@@ -94,6 +109,7 @@ internal class OfferBuilder(
             a += SdpAttribute("rtpmap", "$pt $codec")
             fmtp?.let { a += SdpAttribute("fmtp", "$pt $it") }
             a += SdpAttribute("rtcp-fb", "$pt goog-remb")
+            a += SdpAttribute("rtcp-fb", "$pt transport-cc")
             a += SdpAttribute("rtcp-fb", "$pt nack")
             a += SdpAttribute("rtcp-fb", "$pt nack pli")
             a += SdpAttribute("rtcp-fb", "$pt ccm fir")
@@ -117,6 +133,8 @@ internal class OfferBuilder(
         }
         return m
     }
+
+    private fun priority(typePreference: Int, index: Int): Long = (typePreference.toLong() shl 24) + ((65535L - index) shl 8) + 255
 
     /** One MediaStream per publisher, so the browser lip-syncs its audio and video tracks. */
     private fun msid(publisher: Participant, kind: String) = "peer-${publisher.id}" to "$kind-${publisher.id}"

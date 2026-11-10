@@ -27,13 +27,16 @@ JVM:
 
 | Параметр | Переменная | По умолчанию | Что это |
 |---|---|---|---|
-| `--http-port` | `KRTC_HTTP_PORT` или `PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics` |
-| `--udp-port` | `KRTC_UDP_PORT` | 50000 | Единственный UDP-порт для всех медиа |
-| `--bind` | `KRTC_BIND` | 0.0.0.0 | Локальный адрес UDP-сокетов |
-| `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адрес в ICE-кандидате: публичный IP сервера. Задавайте `--bind` тем же адресом (или адресом, на который его пробрасывает NAT): ICE принимает ответы только с того адреса, куда клиент отправлял проверки |
+| `--http-port` | `KRTC_HTTP_PORT` или `PORT` | 8080 | HTTP: тестовая страница, `/ws`, `/metrics`, `/stats` |
+| `--udp-port` | `KRTC_UDP_PORT` | 50000 | Единственный порт для всех медиа: UDP и (ICE-TCP) TCP |
+| `--bind` | `KRTC_BIND` | 0.0.0.0 | Локальный адрес. `0.0.0.0` — все IPv4-адреса машины, `::` — все IPv4 и IPv6: на каждый адрес свои сокеты, ответ уходит с того адреса, на который писал клиент |
+| `--announce` | `KRTC_ANNOUNCE` | 127.0.0.1 | Адреса ICE-кандидатов через запятую, по убыванию предпочтения: публичные IPv4 и IPv6 сервера |
+| `--ice-tcp` | `KRTC_ICE_TCP` | true | Принимать ICE по TCP (RFC 6544) на том же порту — для сетей, где закрыт UDP |
+| `--ice-udp` | `KRTC_ICE_UDP` | true | `false` — только TCP-кандидаты (сети без UDP, тесты) |
 | `--shards` | `KRTC_SHARDS` | число ядер | Рабочие потоки и UDP-сокеты |
 | `--simulate-loss` | `KRTC_SIMULATE_LOSS` | 0 | Только для тестов: % отбрасываемых исходящих видеопакетов |
 | `--simulate-uplink-loss` | `KRTC_SIMULATE_UPLINK_LOSS` | 0 | Только для тестов: % отбрасываемых входящих видеопакетов |
+| `--simulate-downlink-kbps` | `KRTC_SIMULATE_DOWNLINK_KBPS` | 0 | Только для тестов: ограничить канал до каждого получателя (token bucket, лишнее отбрасывается) |
 
 Для доступа не с localhost браузеру нужен HTTPS (getUserMedia). Сервер ставится за обратный прокси с TLS.
 
@@ -42,7 +45,8 @@ JVM:
 ```
 браузер ──WebSocket /ws──► signaling (Ktor CIO) ──► Sfu: offer/answer, комнаты      [commonMain]
    │
-   └──UDP :50000 (STUN │ DTLS │ SRTP/SRTCP) ──► UdpServer: сокет на шард, SO_REUSEPORT  [jvm: NIO │ native: POSIX]
+   ├──UDP :50000 (STUN │ DTLS │ SRTP/SRTCP) ──► UdpServer: на каждый локальный адрес сокет на шард, SO_REUSEPORT  [jvm: NIO │ native: POSIX]
+   └──TCP :50000 (то же, кадры RFC 4571) ──► TcpServer: ICE-TCP, пассивные кандидаты
                     STUN ─► ICE-lite
                     DTLS ─► DtlsEndpoint ─► ключи SRTP/SRTCP                         [jvm: BouncyCastle │ native: OpenSSL]
                     SRTP ─► шард комнаты ─► Room.forward:
@@ -53,7 +57,9 @@ JVM:
                     SRTCP ─► NACK → повтор из кэша слоя (RTX)
                              PLI/FIR → PLI отправителю
                              SR → переслать получателям
-                    сервер → отправителю: REMB раз в секунду, PLI при новом зрителе
+                             transport-cc от получателя → оценка канала (GCC: задержка + потери)
+                             → слои simulcast подбираются под оценку
+                    сервер → отправителю: transport-cc каждые 50 мс (его GCC), REMB как потолок, PLI при новом зрителе
 ```
 
 Раскладка SDP у каждого участника (сервер всегда отправляет offer):
@@ -91,6 +97,8 @@ JVM:
 - `keyframeRequests`, `nacksAnswered` (повторы получателям из кэша), `nacksSent` и `rtxRecovered` (потери на входе от отправителя);
 - `stunRequests`, `stunRejected`, `dtlsConnected`, `dtlsFailed`, `unknownSource`;
 - `shardQueueDepth`.
+
+`GET /stats` (то же, что `Sfu.linkStats()`) — по каждому участнику: `downlinkEstimateBps` (оценка канала до него по transport-cc; 0, если клиент не шлёт feedback), `downlinkAckedBps`, `downlinkLossPercent` и `videoLayers` — какой слой simulcast он сейчас получает от каждого отправителя.
 
 ## Тесты и бенчмарк
 

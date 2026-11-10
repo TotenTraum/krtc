@@ -27,7 +27,9 @@ kotlin {
 val sfu = Sfu(
     SfuConfig(
         udpPort = 50000,                         // один UDP-порт на все медиа
-        announcedAddress = "203.0.113.10",       // публичный IP для ICE-кандидата
+        bindAddress = "::",                      // все IPv4 и IPv6 адреса машины; ответ — с того адреса, куда писал клиент
+        announcedAddresses = listOf("203.0.113.10", "2001:db8::10"), // публичные IP для ICE-кандидатов
+        // iceTcp = true (по умолчанию): ICE по TCP на том же порту для сетей без UDP
         joinPolicy = JoinPolicy { request ->     // твоя авторизация
             val user = auth.verify(request.credentials) ?: return@JoinPolicy JoinDecision.Deny("unauthorized")
             if (!user.canJoin(request.room)) JoinDecision.Deny("forbidden")
@@ -78,8 +80,17 @@ sfu.kick(userId, "banned")                     // клиенту уходит by
 sfu.setMuted(userId, audio = true)             // сервер перестаёт пересылать его звук
 sfu.rooms(); sfu.room("team"); sfu.participant(userId)
 sfu.metrics()                                  // SfuMetrics: пакеты, байты, ошибки SRTP, DTLS, очереди шардов
+sfu.linkStats()                                // по участнику: оценка канала до него (transport-cc), потери, слои simulcast
 sfu.close()                                    // bye всем, освобождение порта и потоков
 ```
+
+## Сеть и перегрузка
+
+Подробности и замеры — [ADR-0015](../docs/adr/0015-sfu-transport-and-congestion.md).
+- **transport-cc в обе стороны.** Отправителям SFU каждые 50 мс шлёт feedback, их GCC сам регулирует битрейт. До каждого получателя SFU оценивает канал (задержка + потери) и подбирает ему слои simulcast. Слой, выбранный клиентом через `Layer`, остаётся потолком.
+- **Wildcard-bind** (`0.0.0.0` или `::`) открывает сокеты на каждом локальном адресе и отвечает с того, на который писал клиент. IPv6 поддерживается.
+- **ICE-TCP** на том же порту — для сетей без UDP.
+- **ICE restart** по `ClientMessage.RestartIce`: `krtc-client` просит его сам, когда соединение пропало.
 
 ## Протокол
 

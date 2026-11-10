@@ -7,9 +7,11 @@ import krtc.protocol.rtp.Rtcp
 import krtc.protocol.rtp.Rtp
 import krtc.protocol.rtp.RtpHeader
 import krtc.protocol.rtp.RtpStreamId
+import krtc.protocol.rtp.TransportCc
 import krtc.protocol.rtp.Vp8
 import krtc.sfu.platform.PeerAddress
-import krtc.sfu.platform.UdpServer
+import krtc.sfu.platform.Transports
+import krtc.sfu.platform.nowMicros
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.srtp.SrtpSessionKeys
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -23,12 +25,14 @@ import kotlin.concurrent.Volatile
 internal class Room(
     internal val name: String,
     internal val shard: Shard,
-    private val udp: UdpServer?,
+    private val udp: Transports?,
     private val onSpeaking: (Participant, Boolean) -> Unit,
     /** Testing only: drop this percentage of downlink video packets (first transmissions, not RTX). */
     private val simulatedLossPercent: Int = 0,
     /** Testing only: drop this percentage of incoming (publisher → SFU) video packets, not RTX. */
     private val simulatedUplinkLossPercent: Int = 0,
+    /** Testing only: each subscriber's downlink carries at most this many bits per second; the rest is dropped. */
+    private val simulatedDownlinkBps: Long = 0,
 ) {
     private val lock = SynchronizedObject()
     private val lossRandom = kotlin.random.Random(42)
@@ -43,6 +47,7 @@ internal class Room(
     private val restored = ByteArray(2048) // RTX payloads rebuilt into original packets
     private val counters get() = shard.counters
     private var lastRemb = 0L
+    private var lastTick = -1L
 
     internal fun add(p: Participant): List<Participant> = synchronized(lock) {
         val before = members
@@ -58,8 +63,9 @@ internal class Room(
     /**
      * Media hot path, on the shard thread: authenticate and decrypt once, then rewrite and re-encrypt
      * for every subscriber. Cost is O(subscribers) per packet — the classic SFU fan-out.
+     * [arrivalMicros] is when the UDP thread received the packet (for transport-cc feedback).
      */
-    internal fun forward(from: Participant, data: ByteArray, length: Int) {
+    internal fun forward(from: Participant, data: ByteArray, length: Int, arrivalMicros: Long = nowMicros()) {
         val keys = from.keys ?: return
         if (Rtp.isRtcp(data, 0, length)) {
             onRtcp(from, keys, data, length)
@@ -74,6 +80,11 @@ internal class Room(
         if (!h.parse(data, 0, plainLen)) return
         counters.rtpIn.incrementAndFetch()
         counters.bytesIn.addAndFetch(length.toLong())
+        val tcc = h.findExtension(data, 0, MediaPlan.TRANSPORT_CC_EXT_ID)
+        if (tcc >= 0 && h.lastElementLength >= 2) {
+            from.twccIn.record(TransportCc.read(data, tcc), arrivalMicros)
+            from.twccIn.mediaSsrc = h.ssrc
+        }
         when {
             h.payloadType == MediaPlan.OPUS_PT -> forwardAudio(from, data, plainLen, h)
             MediaPlan.isVideo(h.payloadType) -> {
@@ -90,12 +101,15 @@ internal class Room(
         if (from.audioMuted) return
         trackSpeaking(from, data, h)
         from.audioOut.rewrite(data, h)
+        val tcc = h.findExtension(data, 0, MediaPlan.TRANSPORT_CC_EXT_ID)
+        val sendMicros = nowMicros()
         val out = shard.out
         for (sub in members) {
             if (sub === from || from.id !in sub.receiving) continue
             val k = sub.keys ?: continue
             val to = sub.remote ?: continue
-            send(out, k.rtpOut.protect(data, 0, plainLen, out, 0), to)
+            stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
+            deliver(sub, out, k.rtpOut.protect(data, 0, plainLen, out, 0), to, sendMicros)
         }
     }
 
@@ -104,6 +118,7 @@ internal class Room(
         val layer = from.layerOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.RID_EXT_ID))
         layer.ssrc = h.ssrc
         layer.lastPacketMillis = now
+        layer.countBytes(plainLen)
         if (layer.trackArrival(h.sequenceNumber, now)) sendNack(from, layer)
         // Subscribers negotiated their own MID mapping: hide the publisher's MID/RID from them.
         RtpStreamId.rename(data, h, UPLINK_ONLY_EXTENSIONS, MediaPlan.IGNORED_EXT_ID)
@@ -114,6 +129,8 @@ internal class Room(
         val payloadLen = h.payloadLength(data, 0, plainLen)
         val d = if (h.payloadType == MediaPlan.VP8_PT && Vp8.parse(data, payload, payloadLen, vp8)) vp8 else null
         val keyFrame = if (d != null) Vp8.isKeyFrame(data, payload, payloadLen, d) else H264.isKeyFrame(data, payload, payloadLen)
+        val tcc = h.findExtension(data, 0, MediaPlan.TRANSPORT_CC_EXT_ID)
+        val sendMicros = nowMicros()
 
         val out = shard.out
         for (sub in members) {
@@ -126,16 +143,17 @@ internal class Room(
             if (down.target != down.current && layer.index == down.target && keyFrame) down.switchTo(layer.index, h, d)
             if (layer.index != down.current) continue
             down.rewrite(data, h, d, payload, from.videoSsrc)
+            stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
             val n = k.rtpOut.protect(data, 0, plainLen, out, 0)
             if (simulatedLossPercent > 0 && lossRandom.nextInt(100) < simulatedLossPercent) continue
-            send(out, n, to)
+            deliver(sub, out, n, to, sendMicros)
         }
     }
 
-    /** Picks the best active layer at or below the subscriber's preference and asks for a key frame on it. */
+    /** Picks the best active layer within the subscriber's cap (preference and bandwidth) and asks for a key frame on it. */
     private fun chooseLayer(publisher: Participant, down: DownlinkVideo, now: Long) {
         val active = publisher.layers.filter { it.isActive(now) }
-        val chosen = active.lastOrNull { it.index <= down.preferred } ?: active.firstOrNull() ?: return
+        val chosen = active.lastOrNull { it.index <= down.cap } ?: active.firstOrNull() ?: return
         down.target = chosen.index
         if (down.target != down.current) requestKeyframe(publisher, chosen)
     }
@@ -145,6 +163,25 @@ internal class Room(
         val down = subscriber.downlinkFrom(publisherId)
         down.preferred = layer.coerceIn(0, MediaPlan.TOP_LAYER)
         down.target = -1 // re-evaluated on the next packet
+    }
+
+    /** Gives a packet to [sub] its own transport-wide sequence number (and remembers when it went out). */
+    private fun stampTransportSeq(sub: Participant, buf: ByteArray, extAt: Int, length: Int, sendMicros: Long) {
+        if (extAt >= 0) TransportCc.write(buf, extAt, sub.bwe.onSend(sendMicros, length))
+    }
+
+    /** Sends media to a subscriber, through the simulated downlink when testing with one. */
+    private fun deliver(sub: Participant, buf: ByteArray, n: Int, to: PeerAddress, nowMicros: Long) {
+        if (simulatedDownlinkBps > 0) {
+            val bytesPerMicro = simulatedDownlinkBps / 8e6
+            val burst = simulatedDownlinkBps / 8 * 0.3 // 300 ms worth of buffer
+            if (sub.shapingLastMicros >= 0) sub.shapingTokens = minOf(burst, sub.shapingTokens + (nowMicros - sub.shapingLastMicros) * bytesPerMicro)
+            else sub.shapingTokens = burst
+            sub.shapingLastMicros = nowMicros
+            if (sub.shapingTokens < n) return
+            sub.shapingTokens -= n
+        }
+        send(buf, n, to)
     }
 
     private fun send(buf: ByteArray, n: Int, to: PeerAddress) {
@@ -201,6 +238,8 @@ internal class Room(
         Rtcp.forEach(data, 0, n) { type, fmt, at, size ->
             when {
                 type == Rtcp.SR -> forwardSenderReport(from, data, at)
+                type == Rtcp.RTPFB && fmt == TransportCc.FMT ->
+                    TransportCc.parse(data, at, size)?.let { from.bwe.onFeedback(it, nowMillis()) }
                 type == Rtcp.RTPFB && fmt == Rtcp.FMT_NACK ->
                     publisherOfVideo(Rtcp.mediaSsrc(data, at))?.let { retransmit(it, from, Rtcp.nackSequences(data, at, size)) }
                 type == Rtcp.PSFB && fmt == Rtcp.FMT_PLI ->
@@ -260,6 +299,7 @@ internal class Room(
             rtx[hl] = (outSeq ushr 8).toByte() // original sequence number, as the subscriber saw it
             rtx[hl + 1] = outSeq.toByte()
             pkt.copyInto(rtx, hl + 2, hl, len)
+            val tcc = header.findExtension(pkt, 0, MediaPlan.TRANSPORT_CC_EXT_ID)
             if (header.payloadType == MediaPlan.VP8_PT && Vp8.parse(rtx, hl + 2, len - hl, vp8)) {
                 if (vp8.pictureId >= 0) {
                     val mask = if (vp8.pictureIdBits == 15) 0x7FFF else 0x7F
@@ -267,7 +307,9 @@ internal class Room(
                 }
                 if (vp8.tl0PicIdx >= 0) Vp8.setTl0PicIdx(rtx, hl + 2, vp8, (vp8.tl0PicIdx + down.sentTl0Offset(outSeq)) and 0xFF)
             }
-            send(shard.out, k.rtpOut.protect(rtx, 0, len + 2, shard.out, 0), to)
+            val sendMicros = nowMicros()
+            stampTransportSeq(subscriber, rtx, tcc, len + 2, sendMicros)
+            deliver(subscriber, shard.out, k.rtpOut.protect(rtx, 0, len + 2, shard.out, 0), to, sendMicros)
             counters.nacksAnswered.incrementAndFetch()
         }
     }
@@ -310,7 +352,10 @@ internal class Room(
     internal fun tick(now: Long) {
         val remb = now - lastRemb >= MediaPlan.REMB_INTERVAL_MILLIS
         if (remb) lastRemb = now
+        val elapsed = if (lastTick < 0) 0L else now - lastTick
+        lastTick = now
         val snapshot = members
+        for (p in snapshot) for (layer in p.layers) layer.updateBitrate(elapsed)
         for (p in snapshot) {
             if (p.speaking && now - p.lastLoudMillis > MediaPlan.SPEAKING_HOLD_MILLIS) {
                 p.speaking = false
@@ -331,9 +376,71 @@ internal class Room(
                     it.remove()
                     continue
                 }
-                val best = publisher.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.preferred }?.index ?: -1
+                val best = publisher.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.cap }?.index ?: -1
                 val currentActive = down.current >= 0 && publisher.layers[down.current].isActive(now)
                 if (!currentActive || (best > down.current && down.target != best)) down.target = -1
+            }
+            allocate(p, snapshot, now)
+        }
+    }
+
+    /** Sends transport-cc feedback to every publisher for the packets that arrived since the last call. */
+    internal fun sendTransportFeedback() {
+        for (p in members) p.twccIn.feedback(MediaPlan.SFU_SSRC)?.let { sendRtcp(p, it) }
+    }
+
+    /**
+     * Fits [sub]'s video downlinks into its estimated bandwidth: drops the most expensive stream a layer
+     * while over budget, then upgrades streams while everything still fits with headroom. Changes take
+     * effect at the next key frame of the new layer. Subscribers without transport-cc feedback are not limited.
+     */
+    private fun allocate(sub: Participant, snapshot: List<Participant>, now: Long) {
+        if (!sub.bwe.active) return
+        val pubs = ArrayList<Participant>()
+        val downs = ArrayList<DownlinkVideo>()
+        for ((publisherId, down) in sub.downlinks) {
+            if (publisherId !in sub.receivingVideo) continue
+            pubs += snapshot.firstOrNull { it.id == publisherId } ?: continue
+            downs += down
+        }
+        if (downs.isEmpty()) return
+        val audioStreams = snapshot.count { it !== sub && it.id in sub.receiving }
+        val budget = sub.bwe.estimateBps - audioStreams * MediaPlan.AUDIO_RESERVE_BPS
+        val active = Array(downs.size) { i -> pubs[i].layers.filter { it.isActive(now) && it.index <= downs[i].preferred }.map { it.index } }
+        val choice = IntArray(downs.size) { i ->
+            val a = active[i]
+            if (a.isEmpty()) -1 else a.lastOrNull { it <= downs[i].allowed } ?: a.first()
+        }
+        fun cost(i: Int, layer: Int): Long = if (layer < 0) 0 else pubs[i].layers[layer].bitrateBps
+        fun total(): Long = choice.indices.sumOf { cost(it, choice[it]) }
+
+        while (total() > budget) {
+            var worst = -1
+            for (i in choice.indices) {
+                if (choice[i] < 0 || active[i].first() >= choice[i]) continue
+                if (worst < 0 || cost(i, choice[i]) > cost(worst, choice[worst])) worst = i
+            }
+            if (worst < 0) break
+            choice[worst] = active[worst].last { it < choice[worst] }
+        }
+        var upgraded = true
+        while (upgraded) {
+            upgraded = false
+            for (i in choice.indices) {
+                if (choice[i] < 0) continue
+                val next = active[i].firstOrNull { it > choice[i] } ?: continue
+                if (total() - cost(i, choice[i]) + cost(i, next) <= budget * MediaPlan.UPGRADE_HEADROOM) {
+                    choice[i] = next
+                    upgraded = true
+                }
+            }
+        }
+        for (i in downs.indices) {
+            if (choice[i] < 0) continue
+            val allowed = if (choice[i] == active[i].last()) MediaPlan.TOP_LAYER else choice[i]
+            if (downs[i].allowed != allowed) {
+                downs[i].allowed = allowed
+                downs[i].target = -1 // re-chosen on the next packet, switching at a key frame
             }
         }
     }

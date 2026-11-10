@@ -38,7 +38,7 @@ private fun keysOf(profile: SrtpProfile, master: ByteArray, salt: ByteArray, rtp
     )
 
 private class Setup(val profile: SrtpProfile, listeners: Int, udp: UdpServer?, sink: PeerAddress, val shard: Shard) {
-    val room = Room("bench", shard, udp, onSpeaking = { _, _ -> })
+    val room = Room("bench", shard, udp?.let { krtc.sfu.platform.Transports(it, null) }, onSpeaking = { _, _ -> })
     val speaker = Participant("speaker", "speaker", room, NoSignal)
     private val masterKey = ByteArray(profile.keyLength) { it.toByte() }
     private val masterSalt = ByteArray(profile.saltLength) { (it + 1).toByte() }

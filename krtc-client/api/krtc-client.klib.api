@@ -51,6 +51,7 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
 
     final fun leave() // krtc.client/RoomClient.leave|leave(){}[0]
     final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun restartIce() // krtc.client/RoomClient.restartIce|restartIce(){}[0]
     final suspend fun setCamera(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setCamera|setCamera(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setMicrophone(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setMicrophone|setMicrophone(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setVideoQuality(kotlin/String, krtc.client/VideoQuality) // krtc.client/RoomClient.setVideoQuality|setVideoQuality(kotlin.String;krtc.client.VideoQuality){}[0]

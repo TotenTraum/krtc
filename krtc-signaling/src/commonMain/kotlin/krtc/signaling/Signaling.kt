@@ -72,4 +72,11 @@ public sealed class ClientMessage {
     /** Simulcast preference for one participant's video: `q`, `h` or `f`. */
     @Serializable @SerialName("layer")
     public data class Layer(val peer: String, val layer: String) : ClientMessage()
+
+    /**
+     * Asks for an ICE restart (RFC 8445 §9) after the client's connectivity failed, e.g. on a network change.
+     * The server answers with a new offer carrying fresh ICE credentials; DTLS and media state survive.
+     */
+    @Serializable @SerialName("restart-ice")
+    public data object RestartIce : ClientMessage()
 }

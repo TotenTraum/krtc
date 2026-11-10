@@ -90,8 +90,45 @@ public expect class NativePeerConnectionFactory(
     /** A synthetic video track (moving square), so no camera access is needed. */
     public fun createTestVideoTrack(id: String = "video", width: Int = 640, height: Int = 360, fps: Int = 15): NativeTrack
 
+    /** A video source the application feeds with [NativeVideoSource.pushI420] / [NativeVideoSource.pushArgb]. */
+    public fun createVideoSource(): NativeVideoSource
+
+    /**
+     * Captures camera [index] (see [nativeCameras]) at about [width] × [height] and [fps]; null if there is no such
+     * camera or the platform has no built-in capture (Android: capture with Camera2 into [createVideoSource]).
+     * The OS may ask the user for camera permission.
+     */
+    public fun createCameraSource(index: Int = 0, width: Int = 1280, height: Int = 720, fps: Int = 30): NativeVideoSource?
+
+    /** A video track on [source]; several tracks may share one source. */
+    public fun createVideoTrack(source: NativeVideoSource, id: String = "video"): NativeTrack
+
     override fun close()
 }
+
+/** Cameras the built-in capture can open, by index (Apple: AVFoundation, Linux: V4L2; empty elsewhere). */
+public expect fun nativeCameras(): List<String>
+
+/** A video source: frames pushed by the application, or a camera. [close] stops a camera. */
+public expect class NativeVideoSource : AutoCloseable {
+    /** Pushes one I420 frame. [rotation] (0, 90, 180, 270, clockwise) is applied by receivers; [timestampMicros] 0 means now. */
+    public fun pushI420(
+        width: Int, height: Int,
+        y: ByteArray, strideY: Int, u: ByteArray, strideU: Int, v: ByteArray, strideV: Int,
+        rotation: Int = 0, timestampMicros: Long = 0,
+    )
+
+    /** Pushes one frame of 0xAARRGGBB pixels, rows contiguous. */
+    public fun pushArgb(width: Int, height: Int, argb: IntArray, rotation: Int = 0, timestampMicros: Long = 0)
+
+    override fun close()
+}
+
+/**
+ * One decoded (or captured) video frame, upright, as 0xAARRGGBB pixels with rows contiguous.
+ * [argb] is reused for the next frame of the same size: copy it to keep it beyond the listener call.
+ */
+public class VideoFrame(public val width: Int, public val height: Int, public val argb: IntArray, public val timestampMicros: Long)
 
 public expect class NativeTrack : MediaStreamTrack {
     override val id: String
@@ -101,6 +138,12 @@ public expect class NativeTrack : MediaStreamTrack {
 
     /** For received video: frames delivered so far and the last frame size. */
     public fun videoStats(): NativeVideoStats
+
+    /**
+     * Video tracks: calls [listener] with every frame (on a libwebrtc thread; keep it short), e.g. to render it.
+     * Null stops the frames.
+     */
+    public fun setFrameListener(listener: ((VideoFrame) -> Unit)?)
 
     public fun release()
 }

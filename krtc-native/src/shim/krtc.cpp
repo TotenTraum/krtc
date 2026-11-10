@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "api/audio/create_audio_device_module.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
@@ -35,6 +36,8 @@
 #include "media/base/adapted_video_track_source.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
+#include "third_party/libyuv/include/libyuv/convert.h"
+#include "third_party/libyuv/include/libyuv/convert_argb.h"
 
 #define KRTC_API extern "C" __attribute__((visibility("default")))
 
@@ -88,6 +91,26 @@ private:
     const int width_, height_, fps_;
     std::atomic<bool> running_{true};
     std::thread thread_;
+};
+
+/** Converts every frame of a track to ARGB for the application. */
+class ArgbSink : public VideoSinkInterface<VideoFrame> {
+public:
+    ArgbSink(krtc_frame_fn fn, void *user) : fn_(fn), user_(user) {}
+    void OnFrame(const VideoFrame &frame) override {
+        scoped_refptr<I420BufferInterface> i420 = frame.video_frame_buffer()->ToI420();
+        if (!i420) return;
+        const int w = i420->width(), h = i420->height();
+        argb_.resize(static_cast<size_t>(w) * h);
+        libyuv::I420ToARGB(i420->DataY(), i420->StrideY(), i420->DataU(), i420->StrideU(), i420->DataV(), i420->StrideV(),
+                           reinterpret_cast<uint8_t *>(argb_.data()), w * 4, w, h);
+        fn_(user_, w, h, argb_.data(), frame.timestamp_us());
+    }
+
+private:
+    krtc_frame_fn fn_;
+    void *user_;
+    std::vector<uint32_t> argb_;
 };
 
 class FrameCounter : public VideoSinkInterface<VideoFrame> {
@@ -165,12 +188,23 @@ private:
 };
 }  // namespace
 
+struct krtc_video_source {
+    scoped_refptr<krtc::PushVideoSource> source;
+    std::function<void()> stop_camera;
+    ~krtc_video_source() {
+        if (stop_camera) stop_camera();
+    }
+};
+
 struct krtc_track {
     scoped_refptr<MediaStreamTrackInterface> track;
     std::unique_ptr<FrameCounter> counter;
+    std::unique_ptr<ArgbSink> sink;
     ~krtc_track() {
-        if (counter && track->kind() == MediaStreamTrackInterface::kVideoKind) {
-            static_cast<VideoTrackInterface *>(track.get())->RemoveSink(counter.get());
+        if (track->kind() == MediaStreamTrackInterface::kVideoKind) {
+            auto *video = static_cast<VideoTrackInterface *>(track.get());
+            if (counter) video->RemoveSink(counter.get());
+            if (sink) video->RemoveSink(sink.get());
         }
     }
 };
@@ -274,6 +308,61 @@ KRTC_API krtc_track *krtc_factory_create_test_video_track(krtc_factory *factory,
     scoped_refptr<VideoTrackInterface> track = factory->factory->CreateVideoTrack(source, id);
     return track ? new krtc_track{track, nullptr} : nullptr;
 }
+
+KRTC_API krtc_video_source *krtc_factory_create_video_source(krtc_factory *) {
+    return new krtc_video_source{make_ref_counted<krtc::PushVideoSource>(), nullptr};
+}
+
+KRTC_API int krtc_camera_count(void) { return krtc::CameraCount(); }
+
+KRTC_API char *krtc_camera_name(int index) { return Dup(krtc::CameraName(index)); }
+
+KRTC_API krtc_video_source *krtc_factory_create_camera_source(krtc_factory *, int index, int width, int height, int fps) {
+    auto source = make_ref_counted<krtc::PushVideoSource>();
+    std::function<void()> stop = krtc::StartCamera(index, width, height, fps > 0 ? fps : 30, source.get());
+    if (!stop) return nullptr;
+    return new krtc_video_source{source, std::move(stop)};
+}
+
+namespace {
+VideoRotation Rotation(int degrees) {
+    switch (degrees) {
+        case 90: return kVideoRotation_90;
+        case 180: return kVideoRotation_180;
+        case 270: return kVideoRotation_270;
+        default: return kVideoRotation_0;
+    }
+}
+}  // namespace
+
+KRTC_API void krtc_video_source_push_i420(krtc_video_source *s, int width, int height, const uint8_t *y, int stride_y,
+                                          const uint8_t *u, int stride_u, const uint8_t *v, int stride_v, int rotation,
+                                          int64_t timestamp_us) {
+    scoped_refptr<I420Buffer> buf = I420Buffer::Copy(width, height, y, stride_y, u, stride_u, v, stride_v);
+    s->source->Push(VideoFrame::Builder()
+                        .set_video_frame_buffer(buf)
+                        .set_rotation(Rotation(rotation))
+                        .set_timestamp_us(timestamp_us > 0 ? timestamp_us : TimeMicros())
+                        .build());
+}
+
+KRTC_API void krtc_video_source_push_argb(krtc_video_source *s, int width, int height, const uint32_t *argb, int rotation, int64_t timestamp_us) {
+    scoped_refptr<I420Buffer> buf = I420Buffer::Create(width, height);
+    libyuv::ARGBToI420(reinterpret_cast<const uint8_t *>(argb), width * 4, buf->MutableDataY(), buf->StrideY(), buf->MutableDataU(),
+                       buf->StrideU(), buf->MutableDataV(), buf->StrideV(), width, height);
+    s->source->Push(VideoFrame::Builder()
+                        .set_video_frame_buffer(buf)
+                        .set_rotation(Rotation(rotation))
+                        .set_timestamp_us(timestamp_us > 0 ? timestamp_us : TimeMicros())
+                        .build());
+}
+
+KRTC_API krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *id, krtc_video_source *s) {
+    scoped_refptr<VideoTrackInterface> track = factory->factory->CreateVideoTrack(s->source, id);
+    return track ? new krtc_track{track, nullptr} : nullptr;
+}
+
+KRTC_API void krtc_video_source_release(krtc_video_source *s) { delete s; }
 
 KRTC_API krtc_pc *krtc_pc_create(krtc_factory *factory, krtc_event_fn on_event, void *user) {
     auto *p = new krtc_pc();
@@ -423,6 +512,20 @@ KRTC_API void krtc_track_video_stats(krtc_track *track, int64_t *frames, int *wi
     *frames = track->counter->frames.load();
     *width = track->counter->width.load();
     *height = track->counter->height.load();
+}
+
+KRTC_API void krtc_track_set_frame_sink(krtc_track *track, krtc_frame_fn fn, void *user) {
+    if (track->track->kind() != MediaStreamTrackInterface::kVideoKind) return;
+    auto *video = static_cast<VideoTrackInterface *>(track->track.get());
+    if (track->sink) {
+        video->RemoveSink(track->sink.get()); // synchronous: no callback runs after this returns
+        track->sink.reset();
+    }
+    if (!fn) return;
+    track->sink = std::make_unique<ArgbSink>(fn, user);
+    VideoSinkWants wants;
+    wants.rotation_applied = true;
+    video->AddOrUpdateSink(track->sink.get(), wants);
 }
 
 KRTC_API void krtc_track_release(krtc_track *track) { delete track; }

@@ -45,7 +45,7 @@ private class FakeTransceiver(override val mid: String, kind: String) : RTCRtpTr
 class FakePeerConnection : RTCPeerConnection {
     private val transceivers = mutableListOf<FakeTransceiver>()
     private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
-    private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
+    val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     override var localDescription: RTCSessionDescription? = null; private set
     override var remoteDescription: RTCSessionDescription? = null; private set
     var closed = false; private set

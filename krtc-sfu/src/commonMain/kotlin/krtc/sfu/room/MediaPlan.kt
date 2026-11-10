@@ -14,6 +14,16 @@ internal object MediaPlan {
     internal const val RID_EXT_ID: Int = 3
     internal const val REPAIRED_RID_EXT_ID: Int = 4
 
+    /** Transport-wide sequence number (transport-cc), on every m-line in both directions. */
+    internal const val TRANSPORT_CC_EXT_ID: Int = 5
+    internal const val TWCC_FEEDBACK_INTERVAL_MILLIS: Long = 50
+
+    /** Downlink budget kept for each forwarded audio stream when fitting video layers to the estimate. */
+    internal const val AUDIO_RESERVE_BPS: Long = 64_000
+
+    /** Upgrade a layer only if everything then fits in this share of the estimate (hysteresis). */
+    internal const val UPGRADE_HEADROOM: Double = 0.85
+
     /** Unnegotiated id the uplink-only extensions are renamed to before forwarding, so subscribers ignore them. */
     internal const val IGNORED_EXT_ID: Int = 14
 

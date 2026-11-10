@@ -12,6 +12,23 @@
 
 Публичный API общий (`commonMain`): `NativePeerConnectionFactory`, `NativeTrack`, `AudioDevice`.
 
+## Использование
+
+```kotlin
+val factory = NativePeerConnectionFactory(preferredVideoCodec = "video/H264")
+val camera = factory.createCameraSource()                 // macOS/iOS/Linux; на Android — AndroidCamera(context, factory.createVideoSource())
+    ?: factory.createVideoSource()                        // или свои кадры: source.pushArgb(w, h, pixels) / pushI420(...)
+val client = RoomClient("wss://sfu.example.com", factory)
+client.join("team", "Alice", microphone = factory.createAudioTrack(), camera = factory.createVideoTrack(camera))
+
+// Вывод: каждый кадр собеседника в ARGB (0xAARRGGBB), уже повёрнутый.
+client.participants.value.first().video.value?.let { track ->
+    (track as NativeTrack).setFrameListener { frame -> render(frame.width, frame.height, frame.argb) }
+}
+```
+
+Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux). `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
+
 ## Подготовка
 
 Готовые libwebrtc от LiveKit (релиз `webrtc-a545de4`) распаковываются в `.deps/<платформа>` (каталог не коммитится). Платформы: `mac-arm64`, `linux-arm64`, `linux-x64`, `ios-simulator-arm64`, `ios-device-arm64`, `android-arm64`:
@@ -30,7 +47,14 @@ Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Android
 
 ## Демо
 
-Запусти `krtc-sfu-server` с `--bind` и `--announce` на LAN-адресе мака (libwebrtc не ходит через loopback) и открой вкладку Chrome в комнате `test`. Аргументы демо: адрес сервера, комната, имя, секунды, (необязательно) видеокодек.
+Запусти `krtc-sfu-server` с `--announce <LAN-IP>` (libwebrtc не ходит через loopback; `--bind` не нужен) и открой вкладку Chrome в комнате `test`.
+
+Аргументы демо: адрес сервера, комната, имя, секунды, видеокодек (`-` — без предпочтения) и флаги:
+- `push-video` — кадры, сгенерированные в Kotlin (API своих кадров);
+- `camera` — камера 0 (на macOS запускай из Terminal.app, чтобы система спросила разрешение);
+- `restart-ice` — ICE restart на 5-й секунде.
+
+Принятое видео отрисовывается через frame listener, демо печатает средний цвет кадра.
 
 ```bash
 krtc-native/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe ws://<LAN-IP>:8092 test mac-client 30 video/H264
