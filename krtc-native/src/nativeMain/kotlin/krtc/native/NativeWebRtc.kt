@@ -29,6 +29,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import krtc.core.MediaStreamTrack
 import krtc.core.PeerConnectionFactory
 import krtc.core.RTCConfiguration
+import krtc.core.RTCDataChannel
+import krtc.core.RTCDataChannelInit
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpReceiver
@@ -237,6 +239,10 @@ private val doneCallback = staticCFunction { user: COpaquePointer?, sdp: kotlinx
     else pending.continuation.resume(sdp?.toKString())
 }
 
+private val remoteDataChannelCallback = staticCFunction { user: COpaquePointer?, channel: CPointer<cnames.structs.krtc_data_channel>? ->
+    user!!.asStableRef<NativePeerConnection>().get().onDataChannel(channel!!)
+}
+
 private val eventCallback = staticCFunction { user: COpaquePointer?, event: Int, state: Int, transceiver: CPointer<krtc_transceiver>?, track: CPointer<krtc_track>? ->
     user!!.asStableRef<NativePeerConnection>().get().onEvent(event, state, transceiver, track)
 }
@@ -249,8 +255,31 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
     private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     private var closed = false
+    private val channels = mutableListOf<NativeDataChannel>() // guarded by lock
+    private val remoteChannels = MutableSharedFlow<RTCDataChannel>(replay = 16)
+
+    init {
+        krtc_pc_set_data_channel_handler(handle, remoteDataChannelCallback, self.asCPointer())
+    }
 
     override val ontrack: SharedFlow<RTCTrackEvent> get() = tracks
+    override val ondatachannel: SharedFlow<RTCDataChannel> get() = remoteChannels
+
+    override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
+        require(init.maxRetransmits == null || init.maxPacketLifeTime == null) { "maxRetransmits and maxPacketLifeTime are exclusive" }
+        val h = krtc_pc_create_data_channel(
+            handle, label, if (init.ordered) 1 else 0, init.maxRetransmits ?: -1, init.maxPacketLifeTime ?: -1,
+            init.protocol, if (init.negotiated) 1 else 0, init.id ?: -1,
+        ) ?: throw IllegalArgumentException("createDataChannel('$label') failed")
+        return NativeDataChannel(h).also { synchronized(lock) { channels += it } }
+    }
+
+    /** On libwebrtc's signaling thread. */
+    fun onDataChannel(channel: CPointer<cnames.structs.krtc_data_channel>) {
+        val dc = NativeDataChannel(channel)
+        synchronized(lock) { channels += dc }
+        remoteChannels.tryEmit(dc)
+    }
     override val connectionState: StateFlow<RTCPeerConnectionState> = state.asStateFlow()
 
     /** On libwebrtc's signaling thread: hand off without blocking. */
@@ -323,6 +352,8 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             if (closed) return
             closed = true
         }
+        krtc_pc_set_data_channel_handler(handle, null, null)
+        synchronized(lock) { channels.toList().also { channels.clear() } }.forEach { it.release() }
         krtc_pc_release(handle)
         synchronized(lock) { transceivers.values.forEach { it.release() }; transceivers.clear() }
         self.dispose()

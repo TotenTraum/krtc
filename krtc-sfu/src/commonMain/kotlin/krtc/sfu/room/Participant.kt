@@ -316,6 +316,14 @@ internal class Participant(
     internal var speaking = false
     internal var lastLoudMillis = 0L
 
+    /** Its answer accepted the data channel m-line (written by Sfu.PeerSession). */
+    @Volatile internal var dataNegotiated: Boolean = false
+
+    // --- data channels, shard thread only (DataRelay) ---
+    internal var data: krtc.sfu.sctp.DataChannels? = null
+    internal var reliableChannel: krtc.sfu.sctp.DataChannel? = null
+    internal var lossyChannel: krtc.sfu.sctp.DataChannel? = null
+
     /** Installs SRTP/SRTCP keys on the owning shard; media starts flowing afterwards. */
     internal fun installKeys(k: SrtpSessionKeys) {
         room.shard.execute { keys = k }

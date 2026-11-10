@@ -23,6 +23,11 @@
   .tile .layers { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
   .tile .layers button { padding: 2px 8px; font-size: 12px; background: rgba(0,0,0,.45); }
   .tile .layers button.on { background: var(--accent); }
+  #chat { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  #log { max-height: 200px; overflow-y: auto; font-size: 14px; margin-bottom: 8px; }
+  #log .who { color: var(--muted); }
+  #say { display: flex; gap: 8px; }
+  #say input { flex: 1; margin: 0; }
   .tile .label { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; justify-content: space-between; gap: 8px;
     font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); font-variant-numeric: tabular-nums; }
 </style>
@@ -47,6 +52,10 @@
   <section id="call" class="card" hidden>
     <p id="status">Подключение…</p>
     <div id="grid"></div>
+    <div id="chat">
+      <div id="log"></div>
+      <form id="say"><input type="text" id="text" placeholder="Сообщение всем в комнате" autocomplete="off" disabled><button type="submit">Отправить</button></form>
+    </div>
   </section>
 </main>
 <script>
@@ -57,7 +66,7 @@ const params = new URLSearchParams(location.search);
 if (params.get('mute') === '1') $('play').checked = false;
 if (params.get('video')) $('video').value = params.get('video');
 
-const state = { ws: null, pc: null, myId: null, audio: null, video: null, peers: new Map(), midToPeer: new Map() };
+const state = { ws: null, pc: null, myId: null, audio: null, video: null, peers: new Map(), midToPeer: new Map(), messages: [] };
 window.krtc = state; // for automated checks
 
 function fakeAudio() {
@@ -96,6 +105,68 @@ function fakeVideo(label) {
   };
   return canvas.captureStream(15).getVideoTracks()[0];
 }
+
+// Room messages over the SFU's data channels: binary envelope (krtc-signaling DataEnvelope).
+// version 1 | id count | (len, id)* | len, topic | payload. To the SFU: recipients; from the SFU: the sender.
+const utf8 = new TextEncoder();
+const fromUtf8 = new TextDecoder();
+function wrap(ids, topic, payload) {
+  const idBytes = ids.map((i) => utf8.encode(i));
+  const t = utf8.encode(topic);
+  const out = new Uint8Array(2 + idBytes.reduce((n, b) => n + 1 + b.length, 0) + 1 + t.length + payload.length);
+  let at = 0;
+  out[at++] = 1;
+  out[at++] = ids.length;
+  for (const b of idBytes) { out[at++] = b.length; out.set(b, at); at += b.length; }
+  out[at++] = t.length; out.set(t, at); at += t.length;
+  out.set(payload, at);
+  return out;
+}
+function unwrap(buffer) {
+  const d = new Uint8Array(buffer);
+  if (d[0] !== 1) return null;
+  let at = 1;
+  const ids = [];
+  for (let n = d[at++]; n > 0; n--) { const len = d[at++]; ids.push(fromUtf8.decode(d.subarray(at, at + len))); at += len; }
+  const len = d[at++];
+  const topic = fromUtf8.decode(d.subarray(at, at + len));
+  return { ids, topic, payload: d.subarray(at + len) };
+}
+function openChannels(pc) {
+  state.reliable = pc.createDataChannel('krtc');
+  state.lossy = pc.createDataChannel('krtc-lossy', { ordered: false, maxRetransmits: 0 });
+  for (const ch of [state.reliable, state.lossy]) {
+    ch.binaryType = 'arraybuffer';
+    ch.onmessage = (e) => {
+      const m = unwrap(e.data);
+      if (!m) return;
+      const from = m.ids[0] ?? null;
+      state.messages.push({ from, topic: m.topic, text: fromUtf8.decode(m.payload), reliable: ch === state.reliable });
+      if (m.topic === 'chat') say(from ? (state.peers.get(from)?.name ?? from) : 'сервер', fromUtf8.decode(m.payload));
+    };
+  }
+  state.reliable.onopen = () => { $('text').disabled = false; };
+}
+function sendData(topic, text, { to = [], reliable = true } = {}) {
+  const ch = reliable ? state.reliable : state.lossy;
+  if (ch?.readyState !== 'open') return false;
+  ch.send(wrap(to, topic, utf8.encode(text)));
+  return true;
+}
+state.sendData = sendData;
+function say(who, text) {
+  const line = document.createElement('div');
+  line.innerHTML = '<span class="who"></span> ';
+  line.querySelector('.who').textContent = who + ':';
+  line.append(text);
+  $('log').append(line);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+$('say').onsubmit = (e) => {
+  e.preventDefault();
+  const text = $('text').value.trim();
+  if (text && sendData('chat', text)) { say('вы', text); $('text').value = ''; }
+};
 
 function tile(id, name) {
   let el = $('tile-' + id);
@@ -185,6 +256,7 @@ $('join').onsubmit = async (e) => {
   if (mode === 'camera') state.video = (await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })).getVideoTracks()[0];
 
   const pc = (state.pc = new RTCPeerConnection());
+  openChannels(pc); // they open once the SFU's offer brings the SCTP m-line and DTLS is up
   pc.ontrack = (ev) => {
     const peer = state.midToPeer.get(ev.transceiver.mid);
     if (ev.track.kind === 'video') {

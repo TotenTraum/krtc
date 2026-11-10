@@ -10,7 +10,7 @@
 | desktop JVM (macOS arm64) | `jvm` | JNI, dylib в jar | проверен |
 | Android arm64 | `android` | JNI, `.so` в AAR | проверен на эмуляторе |
 
-Публичный API общий (`commonMain`): `NativePeerConnectionFactory`, `NativeTrack`, `AudioDevice`.
+Публичный API общий (`commonMain`): `NativePeerConnectionFactory`, `NativeTrack`, `AudioDevice`. Data channels — через `RTCPeerConnection.createDataChannel` и `ondatachannel` из `krtc-core` ([ADR-0016](../docs/adr/0016-data-channels.md)).
 
 ## Использование
 
@@ -20,6 +20,12 @@ val camera = factory.createCameraSource()                 // macOS/iOS/Linux; н
     ?: factory.createVideoSource()                        // или свои кадры: source.pushArgb(w, h, pixels) / pushI420(...)
 val client = RoomClient("wss://sfu.example.com", factory)
 client.join("team", "Alice", microphone = factory.createAudioTrack(), camera = factory.createVideoTrack(camera))
+
+// Сообщения комнаты (data channels через SFU).
+launch { client.data.collect { m -> println("${m.from}: ${m.payload.decodeToString()}") } }
+client.dataOpen.first { it }
+client.sendData("привет".encodeToByteArray(), topic = "chat")                 // всем; to = listOf(id) — адресно
+client.sendData(cursorBytes, topic = "cursor", reliable = false)              // без повторов
 
 // Вывод: каждый кадр собеседника в ARGB (0xAARRGGBB), уже повёрнутый.
 client.participants.value.first().video.value?.let { track ->
@@ -52,7 +58,8 @@ Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Android
 Аргументы демо: адрес сервера, комната, имя, секунды, видеокодек (`-` — без предпочтения) и флаги:
 - `push-video` — кадры, сгенерированные в Kotlin (API своих кадров);
 - `camera` — камера 0 (на macOS запускай из Terminal.app, чтобы система спросила разрешение);
-- `restart-ice` — ICE restart на 5-й секунде.
+- `restart-ice` — ICE restart на 5-й секунде;
+- `chat` — сообщение в комнату каждую секунду (data channels); полученные сообщения демо печатает всегда.
 
 Принятое видео отрисовывается через frame listener, демо печатает средний цвет кадра.
 

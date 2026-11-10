@@ -74,6 +74,22 @@ public final class krtc/signaling/ClientMessage$RestartIce : krtc/signaling/Clie
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class krtc/signaling/DataEnvelope {
+	public static final field INSTANCE Lkrtc/signaling/DataEnvelope;
+	public static final field LOSSY_LABEL Ljava/lang/String;
+	public static final field MAX_MESSAGE_SIZE I
+	public static final field RELIABLE_LABEL Ljava/lang/String;
+	public final fun decode ([B)Lkrtc/signaling/DataEnvelope$Message;
+	public final fun encode (Ljava/util/List;Ljava/lang/String;[B)[B
+}
+
+public final class krtc/signaling/DataEnvelope$Message {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;[B)V
+	public final fun getIds ()Ljava/util/List;
+	public final fun getPayload ()[B
+	public final fun getTopic ()Ljava/lang/String;
+}
+
 public final class krtc/signaling/PeerInfo {
 	public static final field Companion Lkrtc/signaling/PeerInfo$Companion;
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V

@@ -33,7 +33,11 @@ internal class Room(
     private val simulatedUplinkLossPercent: Int = 0,
     /** Testing only: each subscriber's downlink carries at most this many bits per second; the rest is dropped. */
     private val simulatedDownlinkBps: Long = 0,
+    dataPolicy: krtc.sfu.DataPolicy = krtc.sfu.DataPolicy.Relay,
 ) {
+    /** Data channel messaging between members (shard thread). */
+    internal val data: DataRelay = DataRelay(this, dataPolicy)
+
     private val lock = SynchronizedObject()
     private val lossRandom = kotlin.random.Random(42)
 

@@ -1,6 +1,6 @@
 # krtc-sfu
 
-Встраиваемый SFU для серверов на Kotlin Multiplatform (JVM, macOS, Linux). Аудио (Opus), видео (VP8/H.264), simulcast, NACK/RTX, PLI/FIR, «говорит». Без HTTP-сервера: транспорт сигнализации, авторизация и пользователи остаются у твоего сервера.
+Встраиваемый SFU для серверов на Kotlin Multiplatform (JVM, macOS, Linux). Аудио (Opus), видео (VP8/H.264), simulcast, NACK/RTX, PLI/FIR, «говорит», сообщения комнаты через data channels. Без HTTP-сервера: транспорт сигнализации, авторизация и пользователи остаются у твоего сервера.
 Архитектура: [ADR-0010](../docs/adr/0010-sfu-before-1.0.md), [ADR-0011](../docs/adr/0011-sfu-kotlin-multiplatform.md), [ADR-0013](../docs/adr/0013-embeddable-sfu.md). Готовое приложение — [krtc-sfu-server](../krtc-sfu-server/README.md).
 
 ## Подключение
@@ -79,10 +79,29 @@ myConnection.onClose { sfu.leave(participant) }
 sfu.kick(userId, "banned")                     // клиенту уходит bye, сессия закрывается
 sfu.setMuted(userId, audio = true)             // сервер перестаёт пересылать его звук
 sfu.rooms(); sfu.room("team"); sfu.participant(userId)
-sfu.metrics()                                  // SfuMetrics: пакеты, байты, ошибки SRTP, DTLS, очереди шардов
+sfu.metrics()                                  // SfuMetrics: пакеты, байты, сообщения, ошибки SRTP, DTLS, очереди шардов
 sfu.linkStats()                                // по участнику: оценка канала до него (transport-cc), потери, слои simulcast
 sfu.close()                                    // bye всем, освобождение порта и потоков
 ```
+
+## Сообщения комнаты (data channels)
+
+Подробности — [ADR-0016](../docs/adr/0016-data-channels.md). SFU держит с каждым участником SCTP поверх DTLS. Клиенты открывают каналы `krtc` (надёжный) и `krtc-lossy` (без повторов), шлют сообщения с темой и, при желании, списком получателей. SFU подставляет id отправителя и рассылает.
+
+```kotlin
+val sfu = Sfu(SfuConfig(
+    dataPolicy = { m ->                                   // поток шарда: не блокировать
+        when {
+            m.topic == "server" -> { myInbox.trySend(m); null }   // сообщение серверу: поглотить
+            m.payload.size > 4096 && m.topic == "chat" -> null    // своя модерация
+            else -> m                                             // как есть (или m.copy(to = ...))
+        }
+    },
+))
+sfu.sendData("team", "Запись началась".encodeToByteArray(), topic = "notice")   // от сервера, всем в комнате
+```
+
+`SfuConfig(dataChannels = false)` убирает SCTP из предложения.
 
 ## Сеть и перегрузка
 

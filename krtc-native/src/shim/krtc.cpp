@@ -19,6 +19,7 @@
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/create_peerconnection_factory.h"
+#include "api/data_channel_interface.h"
 #include "api/environment/environment_factory.h"
 #include "api/jsep.h"
 #include "api/make_ref_counted.h"
@@ -213,13 +214,38 @@ struct krtc_transceiver {
     scoped_refptr<RtpTransceiverInterface> transceiver;
 };
 
+struct krtc_data_channel : public DataChannelObserver {
+    scoped_refptr<DataChannelInterface> dc;
+    std::atomic<krtc_data_channel_event_fn> fn{nullptr};
+    std::atomic<void *> user{nullptr};
+    bool registered = false;
+
+    explicit krtc_data_channel(scoped_refptr<DataChannelInterface> c) : dc(std::move(c)) {}
+    ~krtc_data_channel() override {
+        if (registered) dc->UnregisterObserver();
+    }
+    void OnStateChange() override {
+        if (auto f = fn.load()) f(user.load(), KRTC_DATA_CHANNEL_STATE, static_cast<int>(dc->state()), nullptr, 0);
+    }
+    void OnMessage(const DataBuffer &buffer) override {
+        if (auto f = fn.load()) f(user.load(), KRTC_DATA_CHANNEL_MESSAGE, buffer.binary ? 1 : 0, buffer.data.cdata(), static_cast<int>(buffer.size()));
+    }
+    void OnBufferedAmountChange(uint64_t) override {
+        if (auto f = fn.load()) f(user.load(), KRTC_DATA_CHANNEL_BUFFERED_AMOUNT, 0, nullptr, 0);
+    }
+};
+
 struct krtc_pc : public PeerConnectionObserver {
     krtc_event_fn on_event = nullptr;
     void *user = nullptr;
     scoped_refptr<PeerConnectionInterface> pc;
 
     void OnSignalingChange(PeerConnectionInterface::SignalingState) override {}
-    void OnDataChannel(scoped_refptr<DataChannelInterface>) override {}
+    std::atomic<krtc_data_channel_fn> on_data_channel{nullptr};
+    std::atomic<void *> data_channel_user{nullptr};
+    void OnDataChannel(scoped_refptr<DataChannelInterface> channel) override {
+        if (auto f = on_data_channel.load()) f(data_channel_user.load(), new krtc_data_channel(channel));
+    }
     void OnIceGatheringChange(PeerConnectionInterface::IceGatheringState) override {}
     void OnIceCandidate(const IceCandidate *) override {}
     void OnConnectionChange(PeerConnectionInterface::PeerConnectionState state) override {
@@ -429,6 +455,60 @@ KRTC_API krtc_transceiver *krtc_pc_transceiver_at(krtc_pc *pc, int index) {
 }
 
 KRTC_API void krtc_pc_close(krtc_pc *pc) { pc->pc->Close(); }
+
+KRTC_API krtc_data_channel *krtc_pc_create_data_channel(krtc_pc *pc, const char *label, int ordered, int max_retransmits,
+                                                        int max_packet_lifetime, const char *protocol, int negotiated, int id) {
+    DataChannelInit init;
+    init.ordered = ordered != 0;
+    if (max_retransmits >= 0) init.maxRetransmits = max_retransmits;
+    if (max_packet_lifetime >= 0) init.maxRetransmitTime = max_packet_lifetime;
+    init.protocol = protocol ? protocol : "";
+    init.negotiated = negotiated != 0;
+    init.id = id;
+    auto result = pc->pc->CreateDataChannelOrError(label ? label : "", &init);
+    return result.ok() ? new krtc_data_channel(result.MoveValue()) : nullptr;
+}
+
+KRTC_API void krtc_pc_set_data_channel_handler(krtc_pc *pc, krtc_data_channel_fn fn, void *user) {
+    pc->data_channel_user = user;
+    pc->on_data_channel = fn;
+}
+
+KRTC_API void krtc_data_channel_set_observer(krtc_data_channel *c, krtc_data_channel_event_fn fn, void *user) {
+    if (fn) {
+        c->user = user;
+        c->fn = fn;
+        if (!c->registered) {
+            c->registered = true;
+            c->dc->RegisterObserver(c); // delivers queued messages now
+        }
+    } else {
+        if (c->registered) {
+            c->registered = false;
+            c->dc->UnregisterObserver(); // synchronous: no callbacks after this returns
+        }
+        c->fn = nullptr;
+        c->user = nullptr;
+    }
+}
+
+KRTC_API char *krtc_data_channel_label(krtc_data_channel *c) { return Dup(c->dc->label()); }
+KRTC_API char *krtc_data_channel_protocol(krtc_data_channel *c) { return Dup(c->dc->protocol()); }
+KRTC_API int krtc_data_channel_id(krtc_data_channel *c) { return c->dc->id(); }
+KRTC_API int krtc_data_channel_ordered(krtc_data_channel *c) { return c->dc->ordered() ? 1 : 0; }
+KRTC_API int krtc_data_channel_max_retransmits(krtc_data_channel *c) { return c->dc->maxRetransmitsOpt().value_or(-1); }
+KRTC_API int krtc_data_channel_max_packet_lifetime(krtc_data_channel *c) { return c->dc->maxPacketLifeTime().value_or(-1); }
+KRTC_API int krtc_data_channel_negotiated(krtc_data_channel *c) { return c->dc->negotiated() ? 1 : 0; }
+KRTC_API int krtc_data_channel_state(krtc_data_channel *c) { return static_cast<int>(c->dc->state()); }
+KRTC_API uint64_t krtc_data_channel_buffered_amount(krtc_data_channel *c) { return c->dc->buffered_amount(); }
+
+KRTC_API int krtc_data_channel_send(krtc_data_channel *c, const uint8_t *data, int length, int binary) {
+    if (length < 0) return -1;
+    return c->dc->Send(DataBuffer(CopyOnWriteBuffer(data, static_cast<size_t>(length)), binary != 0)) ? 0 : -1;
+}
+
+KRTC_API void krtc_data_channel_close(krtc_data_channel *c) { c->dc->Close(); }
+KRTC_API void krtc_data_channel_release(krtc_data_channel *c) { delete c; }
 
 KRTC_API void krtc_pc_release(krtc_pc *pc) {
     if (!pc) return;

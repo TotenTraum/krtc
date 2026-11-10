@@ -19,7 +19,7 @@ import kotlin.concurrent.Volatile
  * a video track, and reports what it sends and receives. Same code on every platform:
  *   krtc-native-demo.kexe ws://<sfu>:8092 test native-client 30 [codec|- [flags...]]
  * Flags: `push-video` publishes frames generated here (the push API) instead of the built-in test pattern,
- * `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s. Received video is rendered
+ * `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s, `chat` sends a room message every second (data channels). Received video is rendered
  * through a frame listener and summarized (average colour).
  */
 public suspend fun runDemo(
@@ -56,6 +56,8 @@ public suspend fun runDemo(
     val connected = withTimeout(10_000) { client.state.first { it is RoomState.Connected } } as RoomState.Connected
     println("joined ${connected.room} as ${connected.selfId}")
 
+    // Room messages: print what arrives; with the `chat` flag also send one every second.
+    launch { client.data.collect { m -> println("     data from ${m.from ?: "server"} [${m.topic}${if (m.reliable) "" else ", lossy"}]: ${m.payload.decodeToString()}") } }
     val restartIceAt = if ("restart-ice" in flags) 5 else -1
     val rendered = RenderSummary()
     repeat(seconds) { second ->
@@ -63,6 +65,10 @@ public suspend fun runDemo(
         if (second + 1 == restartIceAt) {
             println("requesting an ICE restart")
             client.restartIce()
+        }
+        if ("chat" in flags && client.dataOpen.value) {
+            client.sendData("hello #${second + 1} from $name".encodeToByteArray(), topic = "chat")
+            client.sendData("${second + 1}".encodeToByteArray(), topic = "tick", reliable = false)
         }
         val pcState = client.connectionState?.value
         val peers = client.participants.value.joinToString { p ->

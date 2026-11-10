@@ -3,6 +3,8 @@ package krtc.native
 import krtc.core.MediaStreamTrack
 import krtc.core.PeerConnectionFactory
 import krtc.core.RTCConfiguration
+import krtc.core.RTCDataChannel
+import krtc.core.RTCDataChannelInit
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpReceiver
@@ -174,12 +176,30 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     private var closed = false
     private val handle: Long = Jni.pcCreate(factory.handle, ::onEvent).also { check(it != 0L) { "peer connection creation failed" } }
 
+    private val channels = mutableListOf<NativeDataChannel>() // guarded by lock
+    private val remoteChannels = MutableSharedFlow<RTCDataChannel>(replay = 16)
+
     override val ontrack: SharedFlow<RTCTrackEvent> get() = tracks
+    override val ondatachannel: SharedFlow<RTCDataChannel> get() = remoteChannels
     override val connectionState: StateFlow<RTCPeerConnectionState> = state.asStateFlow()
+
+    override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
+        require(init.maxRetransmits == null || init.maxPacketLifeTime == null) { "maxRetransmits and maxPacketLifeTime are exclusive" }
+        val h = Jni.pcCreateDataChannel(
+            handle, label, init.ordered, init.maxRetransmits ?: -1, init.maxPacketLifeTime ?: -1, init.protocol, init.negotiated, init.id ?: -1,
+        )
+        require(h != 0L) { "createDataChannel('$label') failed" }
+        return NativeDataChannel(h).also { synchronized(lock) { channels += it } }
+    }
 
     /** On libwebrtc's signaling thread: hand off without blocking. */
     private fun onEvent(event: Int, value: Int, transceiver: Long, track: Long) {
         when (event) {
+            Jni.EVENT_DATA_CHANNEL -> {
+                val dc = NativeDataChannel(transceiver)
+                synchronized(lock) { channels += dc }
+                remoteChannels.tryEmit(dc)
+            }
             EVENT_CONNECTION_STATE -> state.value = RTCPeerConnectionState.entries.getOrElse(value) { RTCPeerConnectionState.FAILED }
             EVENT_TRACK -> {
                 val t = NativeTransceiver(transceiver, NativeTrack(track))
@@ -238,6 +258,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             if (closed) return
             closed = true
         }
+        synchronized(lock) { channels.toList().also { channels.clear() } }.forEach { it.release() }
         Jni.pcRelease(handle)
         synchronized(lock) { transceivers.values.forEach { it.release() }; transceivers.clear() }
         state.value = RTCPeerConnectionState.CLOSED

@@ -6,6 +6,21 @@
 // - Show declarations: true
 
 // Library unique name: <krtc:krtc-core>
+final enum class krtc.core/RTCDataChannelState : kotlin/Enum<krtc.core/RTCDataChannelState> { // krtc.core/RTCDataChannelState|null[0]
+    enum entry CLOSED // krtc.core/RTCDataChannelState.CLOSED|null[0]
+    enum entry CLOSING // krtc.core/RTCDataChannelState.CLOSING|null[0]
+    enum entry CONNECTING // krtc.core/RTCDataChannelState.CONNECTING|null[0]
+    enum entry OPEN // krtc.core/RTCDataChannelState.OPEN|null[0]
+
+    final val entries // krtc.core/RTCDataChannelState.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.core/RTCDataChannelState> // krtc.core/RTCDataChannelState.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // krtc.core/RTCDataChannelState.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.core/RTCDataChannelState.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.core/RTCDataChannelState // krtc.core/RTCDataChannelState.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.core/RTCDataChannelState> // krtc.core/RTCDataChannelState.values|values#static(){}[0]
+}
+
 final enum class krtc.core/RTCPeerConnectionState : kotlin/Enum<krtc.core/RTCPeerConnectionState> { // krtc.core/RTCPeerConnectionState|null[0]
     enum entry CLOSED // krtc.core/RTCPeerConnectionState.CLOSED|null[0]
     enum entry CONNECTED // krtc.core/RTCPeerConnectionState.CONNECTED|null[0]
@@ -71,17 +86,47 @@ abstract interface krtc.core/MediaStreamTrack { // krtc.core/MediaStreamTrack|nu
     abstract fun stop() // krtc.core/MediaStreamTrack.stop|stop(){}[0]
 }
 
+abstract interface krtc.core/RTCDataChannel { // krtc.core/RTCDataChannel|null[0]
+    abstract val bufferedAmount // krtc.core/RTCDataChannel.bufferedAmount|{}bufferedAmount[0]
+        abstract fun <get-bufferedAmount>(): kotlin/Long // krtc.core/RTCDataChannel.bufferedAmount.<get-bufferedAmount>|<get-bufferedAmount>(){}[0]
+    abstract val id // krtc.core/RTCDataChannel.id|{}id[0]
+        abstract fun <get-id>(): kotlin/Int? // krtc.core/RTCDataChannel.id.<get-id>|<get-id>(){}[0]
+    abstract val label // krtc.core/RTCDataChannel.label|{}label[0]
+        abstract fun <get-label>(): kotlin/String // krtc.core/RTCDataChannel.label.<get-label>|<get-label>(){}[0]
+    abstract val maxPacketLifeTime // krtc.core/RTCDataChannel.maxPacketLifeTime|{}maxPacketLifeTime[0]
+        abstract fun <get-maxPacketLifeTime>(): kotlin/Int? // krtc.core/RTCDataChannel.maxPacketLifeTime.<get-maxPacketLifeTime>|<get-maxPacketLifeTime>(){}[0]
+    abstract val maxRetransmits // krtc.core/RTCDataChannel.maxRetransmits|{}maxRetransmits[0]
+        abstract fun <get-maxRetransmits>(): kotlin/Int? // krtc.core/RTCDataChannel.maxRetransmits.<get-maxRetransmits>|<get-maxRetransmits>(){}[0]
+    abstract val negotiated // krtc.core/RTCDataChannel.negotiated|{}negotiated[0]
+        abstract fun <get-negotiated>(): kotlin/Boolean // krtc.core/RTCDataChannel.negotiated.<get-negotiated>|<get-negotiated>(){}[0]
+    abstract val onmessage // krtc.core/RTCDataChannel.onmessage|{}onmessage[0]
+        abstract fun <get-onmessage>(): kotlinx.coroutines.flow/Flow<krtc.core/RTCDataChannelMessage> // krtc.core/RTCDataChannel.onmessage.<get-onmessage>|<get-onmessage>(){}[0]
+    abstract val ordered // krtc.core/RTCDataChannel.ordered|{}ordered[0]
+        abstract fun <get-ordered>(): kotlin/Boolean // krtc.core/RTCDataChannel.ordered.<get-ordered>|<get-ordered>(){}[0]
+    abstract val protocol // krtc.core/RTCDataChannel.protocol|{}protocol[0]
+        abstract fun <get-protocol>(): kotlin/String // krtc.core/RTCDataChannel.protocol.<get-protocol>|<get-protocol>(){}[0]
+    abstract val readyState // krtc.core/RTCDataChannel.readyState|{}readyState[0]
+        abstract fun <get-readyState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCDataChannelState> // krtc.core/RTCDataChannel.readyState.<get-readyState>|<get-readyState>(){}[0]
+
+    abstract fun close() // krtc.core/RTCDataChannel.close|close(){}[0]
+    abstract fun send(kotlin/ByteArray) // krtc.core/RTCDataChannel.send|send(kotlin.ByteArray){}[0]
+    abstract fun send(kotlin/String) // krtc.core/RTCDataChannel.send|send(kotlin.String){}[0]
+}
+
 abstract interface krtc.core/RTCPeerConnection : kotlin/AutoCloseable { // krtc.core/RTCPeerConnection|null[0]
     abstract val connectionState // krtc.core/RTCPeerConnection.connectionState|{}connectionState[0]
         abstract fun <get-connectionState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCPeerConnectionState> // krtc.core/RTCPeerConnection.connectionState.<get-connectionState>|<get-connectionState>(){}[0]
     abstract val localDescription // krtc.core/RTCPeerConnection.localDescription|{}localDescription[0]
         abstract fun <get-localDescription>(): krtc.core/RTCSessionDescription? // krtc.core/RTCPeerConnection.localDescription.<get-localDescription>|<get-localDescription>(){}[0]
+    abstract val ondatachannel // krtc.core/RTCPeerConnection.ondatachannel|{}ondatachannel[0]
+        abstract fun <get-ondatachannel>(): kotlinx.coroutines.flow/Flow<krtc.core/RTCDataChannel> // krtc.core/RTCPeerConnection.ondatachannel.<get-ondatachannel>|<get-ondatachannel>(){}[0]
     abstract val ontrack // krtc.core/RTCPeerConnection.ontrack|{}ontrack[0]
         abstract fun <get-ontrack>(): kotlinx.coroutines.flow/Flow<krtc.core/RTCTrackEvent> // krtc.core/RTCPeerConnection.ontrack.<get-ontrack>|<get-ontrack>(){}[0]
     abstract val remoteDescription // krtc.core/RTCPeerConnection.remoteDescription|{}remoteDescription[0]
         abstract fun <get-remoteDescription>(): krtc.core/RTCSessionDescription? // krtc.core/RTCPeerConnection.remoteDescription.<get-remoteDescription>|<get-remoteDescription>(){}[0]
 
     abstract fun close() // krtc.core/RTCPeerConnection.close|close(){}[0]
+    abstract fun createDataChannel(kotlin/String, krtc.core/RTCDataChannelInit = ...): krtc.core/RTCDataChannel // krtc.core/RTCPeerConnection.createDataChannel|createDataChannel(kotlin.String;krtc.core.RTCDataChannelInit){}[0]
     abstract fun getTransceivers(): kotlin.collections/List<krtc.core/RTCRtpTransceiver> // krtc.core/RTCPeerConnection.getTransceivers|getTransceivers(){}[0]
     abstract suspend fun createAnswer(): krtc.core/RTCSessionDescription // krtc.core/RTCPeerConnection.createAnswer|createAnswer(){}[0]
     abstract suspend fun getStats(): kotlin.collections/Map<kotlin/String, krtc.core/RTCStats> // krtc.core/RTCPeerConnection.getStats|getStats(){}[0]
@@ -125,6 +170,34 @@ final class krtc.core/RTCConfiguration { // krtc.core/RTCConfiguration|null[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCConfiguration.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // krtc.core/RTCConfiguration.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // krtc.core/RTCConfiguration.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCDataChannelInit { // krtc.core/RTCDataChannelInit|null[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Int? = ...) // krtc.core/RTCDataChannelInit.<init>|<init>(kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.String;kotlin.Boolean;kotlin.Int?){}[0]
+
+    final val id // krtc.core/RTCDataChannelInit.id|{}id[0]
+        final fun <get-id>(): kotlin/Int? // krtc.core/RTCDataChannelInit.id.<get-id>|<get-id>(){}[0]
+    final val maxPacketLifeTime // krtc.core/RTCDataChannelInit.maxPacketLifeTime|{}maxPacketLifeTime[0]
+        final fun <get-maxPacketLifeTime>(): kotlin/Int? // krtc.core/RTCDataChannelInit.maxPacketLifeTime.<get-maxPacketLifeTime>|<get-maxPacketLifeTime>(){}[0]
+    final val maxRetransmits // krtc.core/RTCDataChannelInit.maxRetransmits|{}maxRetransmits[0]
+        final fun <get-maxRetransmits>(): kotlin/Int? // krtc.core/RTCDataChannelInit.maxRetransmits.<get-maxRetransmits>|<get-maxRetransmits>(){}[0]
+    final val negotiated // krtc.core/RTCDataChannelInit.negotiated|{}negotiated[0]
+        final fun <get-negotiated>(): kotlin/Boolean // krtc.core/RTCDataChannelInit.negotiated.<get-negotiated>|<get-negotiated>(){}[0]
+    final val ordered // krtc.core/RTCDataChannelInit.ordered|{}ordered[0]
+        final fun <get-ordered>(): kotlin/Boolean // krtc.core/RTCDataChannelInit.ordered.<get-ordered>|<get-ordered>(){}[0]
+    final val protocol // krtc.core/RTCDataChannelInit.protocol|{}protocol[0]
+        final fun <get-protocol>(): kotlin/String // krtc.core/RTCDataChannelInit.protocol.<get-protocol>|<get-protocol>(){}[0]
+
+    final fun component1(): kotlin/Boolean // krtc.core/RTCDataChannelInit.component1|component1(){}[0]
+    final fun component2(): kotlin/Int? // krtc.core/RTCDataChannelInit.component2|component2(){}[0]
+    final fun component3(): kotlin/Int? // krtc.core/RTCDataChannelInit.component3|component3(){}[0]
+    final fun component4(): kotlin/String // krtc.core/RTCDataChannelInit.component4|component4(){}[0]
+    final fun component5(): kotlin/Boolean // krtc.core/RTCDataChannelInit.component5|component5(){}[0]
+    final fun component6(): kotlin/Int? // krtc.core/RTCDataChannelInit.component6|component6(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Int? = ...): krtc.core/RTCDataChannelInit // krtc.core/RTCDataChannelInit.copy|copy(kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.String;kotlin.Boolean;kotlin.Int?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCDataChannelInit.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCDataChannelInit.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCDataChannelInit.toString|toString(){}[0]
 }
 
 final class krtc.core/RTCIceServer { // krtc.core/RTCIceServer|null[0]
@@ -189,6 +262,30 @@ final class krtc.core/RTCTrackEvent { // krtc.core/RTCTrackEvent|null[0]
         final fun <get-track>(): krtc.core/MediaStreamTrack // krtc.core/RTCTrackEvent.track.<get-track>|<get-track>(){}[0]
     final val transceiver // krtc.core/RTCTrackEvent.transceiver|{}transceiver[0]
         final fun <get-transceiver>(): krtc.core/RTCRtpTransceiver // krtc.core/RTCTrackEvent.transceiver.<get-transceiver>|<get-transceiver>(){}[0]
+}
+
+sealed class krtc.core/RTCDataChannelMessage { // krtc.core/RTCDataChannelMessage|null[0]
+    final class Binary : krtc.core/RTCDataChannelMessage { // krtc.core/RTCDataChannelMessage.Binary|null[0]
+        constructor <init>(kotlin/ByteArray) // krtc.core/RTCDataChannelMessage.Binary.<init>|<init>(kotlin.ByteArray){}[0]
+
+        final val data // krtc.core/RTCDataChannelMessage.Binary.data|{}data[0]
+            final fun <get-data>(): kotlin/ByteArray // krtc.core/RTCDataChannelMessage.Binary.data.<get-data>|<get-data>(){}[0]
+
+        final fun toString(): kotlin/String // krtc.core/RTCDataChannelMessage.Binary.toString|toString(){}[0]
+    }
+
+    final class Text : krtc.core/RTCDataChannelMessage { // krtc.core/RTCDataChannelMessage.Text|null[0]
+        constructor <init>(kotlin/String) // krtc.core/RTCDataChannelMessage.Text.<init>|<init>(kotlin.String){}[0]
+
+        final val text // krtc.core/RTCDataChannelMessage.Text.text|{}text[0]
+            final fun <get-text>(): kotlin/String // krtc.core/RTCDataChannelMessage.Text.text.<get-text>|<get-text>(){}[0]
+
+        final fun component1(): kotlin/String // krtc.core/RTCDataChannelMessage.Text.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): krtc.core/RTCDataChannelMessage.Text // krtc.core/RTCDataChannelMessage.Text.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCDataChannelMessage.Text.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.core/RTCDataChannelMessage.Text.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.core/RTCDataChannelMessage.Text.toString|toString(){}[0]
+    }
 }
 
 final object krtc.core/Krtc { // krtc.core/Krtc|null[0]

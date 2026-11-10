@@ -61,7 +61,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private val announced = config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }
     private val tcp: TcpServer? = if (config.iceTcp) TcpServer(udp.localAddresses, udp.localPort, ::onPacket) else null
     private val transports = Transports(udp, tcp)
-    private val offers = OfferBuilder(announced, udp.localPort, identity.fingerprint, udp = config.iceUdp, tcp = tcp != null)
+    private val offers = OfferBuilder(announced, udp.localPort, identity.fingerprint, udp = config.iceUdp, tcp = tcp != null, dataChannels = config.dataChannels)
 
     /** Guards membership: [rooms], room member lists and the address table updates. Never held on the media path. */
     private val lock = SynchronizedObject()
@@ -82,6 +82,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     init {
         for (s in shards) s.every(100) { housekeeping(s) }
         for (s in shards) s.every(MediaPlan.TWCC_FEEDBACK_INTERVAL_MILLIS) { transportFeedback(s) }
+        if (config.dataChannels) for (s in shards) s.every(MediaPlan.SCTP_TICK_MILLIS) { sctpTimers(s) }
         udp.start()
         tcp?.start()
         if (config.simulatedLossPercent > 0) log.warn("Simulating ${config.simulatedLossPercent}% downlink video loss")
@@ -109,7 +110,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val (p, session, others) = synchronized(lock) {
             val room = rooms.getOrPut(roomName) {
                 opened = true
-                Room(roomName, shards[roomName.hashCode().mod(shards.size)], transports, ::announceSpeaking, config.simulatedLossPercent, config.simulatedUplinkLossPercent, config.simulatedDownlinkBps)
+                Room(roomName, shards[roomName.hashCode().mod(shards.size)], transports, ::announceSpeaking, config.simulatedLossPercent, config.simulatedUplinkLossPercent, config.simulatedDownlinkBps, config.dataPolicy)
             }
             val id = allow.participantId ?: ids.incrementAndFetch().toString(36)
             val p = Participant(id, name, room, sink)
@@ -181,6 +182,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             session to remaining
         }
         session.dtls?.close()
+        p.room.shard.execute { p.room.data.detach(p) }
         val left = ServerMessage.PeerLeft(p.id)
         remaining.forEach { it.sink.send(left); sessions[it.id]?.negotiate() }
         eventFlow.tryEmit(SfuEvent.ParticipantLeft(p.room.name, p.id, reason))
@@ -195,6 +197,19 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         p.sink.close(reason)
         leave(p, reason)
         return true
+    }
+
+    /**
+     * Sends a data message to participants of [room] over their data channels (ADR-0016), as the server (the
+     * clients see no sender id). [to] empty means everyone in the room. Not subject to [SfuConfig.dataPolicy].
+     * Returns false if the room does not exist or data channels are off. Delivery is asynchronous; participants
+     * whose data channels are not open yet miss the message.
+     */
+    public fun sendData(room: String, payload: ByteArray, topic: String = "", to: List<String> = emptyList(), reliable: Boolean = true): Boolean {
+        if (!config.dataChannels) return false
+        val r = synchronized(lock) { rooms[room] } ?: return false
+        val message = DataMessage(room, null, topic, payload, reliable, to)
+        return r.shard.execute { r.data.sendFromHost(message) }
     }
 
     /** Server-side mute: stops (or resumes) forwarding a participant's audio and/or video. */
@@ -311,6 +326,12 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         for (room in mine) room.sendTransportFeedback()
     }
 
+    private fun sctpTimers(shard: Shard) {
+        val now = nowMillis()
+        val mine = synchronized(lock) { rooms.values.filter { it.shard === shard } }
+        for (room in mine) room.data.tick(now)
+    }
+
     private fun housekeeping(shard: Shard) {
         val now = nowMillis()
         val mine = synchronized(lock) { rooms.values.filter { it.shard === shard } }
@@ -374,6 +395,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             val videoChanged = synchronized(negotiation) {
                 if (answerVersion != inFlight) return
                 val answer = SessionDescription.parse(sdp)
+                participant.dataNegotiated = answer.media.any { it.mid == MediaPlan.DATA_MID && it.port != 0 }
                 if (dtls == null && !startDtls(answer)) return
                 participant.receiving = inFlightSlots.filterNotNull().map { it.id }.toSet()
                 // New video subscriptions pick a layer and request a key frame on their first packet (Room.forwardVideo).
@@ -402,11 +424,15 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 kick(participant.id, "answer without a sha-256 DTLS fingerprint")
                 return false
             }
-            val endpoint = DtlsEndpoint(
+            val room = participant.room
+            lateinit var endpoint: DtlsEndpoint
+            endpoint = DtlsEndpoint(
                 identity, fp,
                 sender = { buf, off, len -> participant.remote?.let { to -> transports.send(0, buf.copyOfRange(off, off + len), len, to) } },
                 onConnected = { keys ->
                     participant.installKeys(SrtpSessionKeys.forDtlsServer(keys.profile, keys.material))
+                    // The SCTP endpoint is in place before any application record is read (same shard queue).
+                    if (config.dataChannels && participant.dataNegotiated) room.shard.execute { room.data.attach(participant, endpoint::send) }
                     mediaConnected = true
                     metrics.dtlsConnected.incrementAndFetch()
                     eventFlow.tryEmit(SfuEvent.MediaConnected(participant.room.name, participant.id, keys.profile.name))
@@ -418,6 +444,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                     log.info("$participant DTLS failed: $t")
                     kick(participant.id, "media connection failed")
                 },
+                onData = { packet -> room.shard.execute { room.data.onPacket(participant, packet) } },
             )
             dtls = endpoint
             endpoint.start()

@@ -27,6 +27,9 @@ internal class ShardCounters {
     internal val nacksAnswered: AtomicLong = AtomicLong(0)
     internal val nacksSent: AtomicLong = AtomicLong(0)
     internal val rtxRecovered: AtomicLong = AtomicLong(0)
+    internal val dataIn: AtomicLong = AtomicLong(0)
+    internal val dataOut: AtomicLong = AtomicLong(0)
+    internal val dataDropped: AtomicLong = AtomicLong(0)
 }
 
 /**

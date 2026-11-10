@@ -18,6 +18,13 @@ internal object MediaPlan {
     internal const val TRANSPORT_CC_EXT_ID: Int = 5
     internal const val TWCC_FEEDBACK_INTERVAL_MILLIS: Long = 50
 
+    /** The data channel m-line (SCTP over DTLS, RFC 8841), third in every offer when data channels are on. */
+    internal const val DATA_MID: String = "d"
+    internal const val SCTP_PORT: Int = 5000
+
+    /** How often SCTP timers (retransmission, partial reliability, stream reset) run. */
+    internal const val SCTP_TICK_MILLIS: Long = 50
+
     /** Downlink budget kept for each forwarded audio stream when fitting video layers to the estimate. */
     internal const val AUDIO_RESERVE_BPS: Long = 64_000
 

@@ -26,6 +26,11 @@ internal object Jni {
     }
 
     /** Completion of one asynchronous call, on a libwebrtc thread: [result] or [error]. */
+    /** Data channel events (KRTC_DATA_CHANNEL_*): state changes, messages (data set), buffered amount changes. */
+    fun interface DataChannelListener {
+        fun onDataEvent(event: Int, value: Int, data: ByteArray?)
+    }
+
     fun interface Done {
         fun complete(result: String?, error: String?)
     }
@@ -63,6 +68,29 @@ internal object Jni {
     @JvmStatic external fun pcTransceiverAt(pc: Long, index: Int): Long
     @JvmStatic external fun pcClose(pc: Long)
     @JvmStatic external fun pcRelease(pc: Long)
+
+    @JvmStatic external fun pcCreateDataChannel(
+        pc: Long, label: String, ordered: Boolean, maxRetransmits: Int, maxPacketLifetime: Int, protocol: String, negotiated: Boolean, id: Int,
+    ): Long
+    @JvmStatic external fun dataChannelSetObserver(dc: Long, listener: DataChannelListener?): Long
+    @JvmStatic external fun dataChannelSinkRelease(sink: Long)
+    @JvmStatic external fun dataChannelLabel(dc: Long): String
+    @JvmStatic external fun dataChannelProtocol(dc: Long): String
+    @JvmStatic external fun dataChannelId(dc: Long): Int
+    @JvmStatic external fun dataChannelOrdered(dc: Long): Boolean
+    @JvmStatic external fun dataChannelMaxRetransmits(dc: Long): Int
+    @JvmStatic external fun dataChannelMaxPacketLifetime(dc: Long): Int
+    @JvmStatic external fun dataChannelNegotiated(dc: Long): Boolean
+    @JvmStatic external fun dataChannelState(dc: Long): Int
+    @JvmStatic external fun dataChannelBufferedAmount(dc: Long): Long
+    @JvmStatic external fun dataChannelSend(dc: Long, data: ByteArray, binary: Boolean): Int
+    @JvmStatic external fun dataChannelClose(dc: Long)
+    @JvmStatic external fun dataChannelRelease(dc: Long)
+
+    /** Jni.Listener event carrying a data channel the remote side opened (handle in `transceiver`). */
+    const val EVENT_DATA_CHANNEL = 100
+    const val DATA_CHANNEL_STATE = 1
+    const val DATA_CHANNEL_MESSAGE = 2
 
     @JvmStatic external fun transceiverMid(t: Long): String?
     @JvmStatic external fun transceiverDirection(t: Long): Int

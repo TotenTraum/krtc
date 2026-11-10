@@ -5,6 +5,7 @@
 // by global references:
 //   listener.onEvent(int event, int state, long transceiver, long track)   for a peer connection
 //   done.complete(String result, String error)                             once per asynchronous call
+//   channel.onDataEvent(int event, int value, byte[] data)                  for a data channel
 #include <jni.h>
 
 #include <cstdint>
@@ -18,6 +19,10 @@ JavaVM *g_vm = nullptr;
 jmethodID g_on_event = nullptr;
 jmethodID g_complete = nullptr;
 jmethodID g_on_frame = nullptr;
+jmethodID g_on_data = nullptr;
+
+/** Peer connection event for a data channel the remote side opened (the channel handle in the 3rd argument). */
+constexpr int EVENT_DATA_CHANNEL = 100;
 
 JNIEnv *Env() {
     JNIEnv *env = nullptr;
@@ -62,6 +67,34 @@ void OnEvent(void *user, int event, int state, krtc_transceiver *transceiver, kr
     env->CallVoidMethod(static_cast<Pc *>(user)->listener, g_on_event, event, state,
                         static_cast<jlong>(reinterpret_cast<intptr_t>(transceiver)), static_cast<jlong>(reinterpret_cast<intptr_t>(track)));
     if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+void OnRemoteDataChannel(void *user, krtc_data_channel *channel) {
+    JNIEnv *env = Env();
+    env->CallVoidMethod(static_cast<Pc *>(user)->listener, g_on_event, EVENT_DATA_CHANNEL, 0,
+                        static_cast<jlong>(reinterpret_cast<intptr_t>(channel)), static_cast<jlong>(0));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+/** A data channel's Kotlin listener: onDataEvent(int event, int value, byte[] data). */
+struct DataSink {
+    jobject listener = nullptr;
+};
+
+void OnDataChannelEvent(void *user, int event, int value, const uint8_t *data, int length) {
+    JNIEnv *env = Env();
+    jbyteArray bytes = nullptr;
+    if (event == KRTC_DATA_CHANNEL_MESSAGE) {
+        bytes = env->NewByteArray(length);
+        if (!bytes) {
+            env->ExceptionClear();
+            return;
+        }
+        if (length > 0) env->SetByteArrayRegion(bytes, 0, length, reinterpret_cast<const jbyte *>(data));
+    }
+    env->CallVoidMethod(static_cast<DataSink *>(user)->listener, g_on_data, event, value, bytes);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (bytes) env->DeleteLocalRef(bytes);
 }
 
 void OnDone(void *user, const char *result, const char *error) {
@@ -117,11 +150,13 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
     jclass listener = env->FindClass("krtc/native/Jni$Listener");
     jclass done = env->FindClass("krtc/native/Jni$Done");
     jclass frames = env->FindClass("krtc/native/Jni$FrameListener");
-    if (!listener || !done || !frames) return JNI_ERR;
+    jclass data = env->FindClass("krtc/native/Jni$DataChannelListener");
+    if (!listener || !done || !frames || !data) return JNI_ERR;
+    g_on_data = env->GetMethodID(data, "onDataEvent", "(II[B)V");
     g_on_frame = env->GetMethodID(frames, "onFrame", "(II[IJ)V");
     g_on_event = env->GetMethodID(listener, "onEvent", "(IIJJ)V");
     g_complete = env->GetMethodID(done, "complete", "(Ljava/lang/String;Ljava/lang/String;)V");
-    return g_on_event && g_complete && g_on_frame ? JNI_VERSION_1_6 : JNI_ERR;
+    return g_on_event && g_complete && g_on_frame && g_on_data ? JNI_VERSION_1_6 : JNI_ERR;
 }
 
 // Factory.
@@ -187,6 +222,7 @@ KRTC_JNI(jlong, pcCreate)(JNIEnv *env, jclass, jlong f, jobject listener) {
         delete p;
         return 0;
     }
+    krtc_pc_set_data_channel_handler(p->pc, OnRemoteDataChannel, p);
     return J(p);
 }
 KRTC_JNI(void, pcSetRemoteDescription)(JNIEnv *env, jclass, jlong pc, jstring type, jstring sdp, jobject done) {
@@ -210,6 +246,49 @@ KRTC_JNI(void, pcRelease)(JNIEnv *env, jclass, jlong pc) {
     env->DeleteGlobalRef(p->listener);
     delete p;
 }
+
+// Data channels.
+KRTC_JNI(jlong, pcCreateDataChannel)(JNIEnv *env, jclass, jlong pc, jstring label, jboolean ordered, jint maxRetransmits,
+                                     jint maxLifetime, jstring protocol, jboolean negotiated, jint id) {
+    return J(krtc_pc_create_data_channel(H<Pc>(pc)->pc, Utf(env, label).get(), ordered ? 1 : 0, maxRetransmits, maxLifetime,
+                                         Utf(env, protocol).get(), negotiated ? 1 : 0, id));
+}
+/** Installs a listener (null removes); returns the sink to release with dataChannelSinkRelease once removed. */
+KRTC_JNI(jlong, dataChannelSetObserver)(JNIEnv *env, jclass, jlong dc, jobject listener) {
+    if (!listener) {
+        krtc_data_channel_set_observer(H<krtc_data_channel>(dc), nullptr, nullptr);
+        return 0;
+    }
+    auto *sink = new DataSink();
+    sink->listener = env->NewGlobalRef(listener);
+    krtc_data_channel_set_observer(H<krtc_data_channel>(dc), OnDataChannelEvent, sink);
+    return J(sink);
+}
+KRTC_JNI(void, dataChannelSinkRelease)(JNIEnv *env, jclass, jlong handle) {
+    auto *sink = H<DataSink>(handle);
+    env->DeleteGlobalRef(sink->listener);
+    delete sink;
+}
+KRTC_JNI(jstring, dataChannelLabel)(JNIEnv *env, jclass, jlong dc) { return Take(env, krtc_data_channel_label(H<krtc_data_channel>(dc))); }
+KRTC_JNI(jstring, dataChannelProtocol)(JNIEnv *env, jclass, jlong dc) { return Take(env, krtc_data_channel_protocol(H<krtc_data_channel>(dc))); }
+KRTC_JNI(jint, dataChannelId)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_id(H<krtc_data_channel>(dc)); }
+KRTC_JNI(jboolean, dataChannelOrdered)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_ordered(H<krtc_data_channel>(dc)) != 0; }
+KRTC_JNI(jint, dataChannelMaxRetransmits)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_max_retransmits(H<krtc_data_channel>(dc)); }
+KRTC_JNI(jint, dataChannelMaxPacketLifetime)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_max_packet_lifetime(H<krtc_data_channel>(dc)); }
+KRTC_JNI(jboolean, dataChannelNegotiated)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_negotiated(H<krtc_data_channel>(dc)) != 0; }
+KRTC_JNI(jint, dataChannelState)(JNIEnv *, jclass, jlong dc) { return krtc_data_channel_state(H<krtc_data_channel>(dc)); }
+KRTC_JNI(jlong, dataChannelBufferedAmount)(JNIEnv *, jclass, jlong dc) {
+    return static_cast<jlong>(krtc_data_channel_buffered_amount(H<krtc_data_channel>(dc)));
+}
+KRTC_JNI(jint, dataChannelSend)(JNIEnv *env, jclass, jlong dc, jbyteArray data, jboolean binary) {
+    jsize n = env->GetArrayLength(data);
+    jbyte *p = env->GetByteArrayElements(data, nullptr);
+    int r = krtc_data_channel_send(H<krtc_data_channel>(dc), reinterpret_cast<const uint8_t *>(p), n, binary ? 1 : 0);
+    env->ReleaseByteArrayElements(data, p, JNI_ABORT);
+    return r;
+}
+KRTC_JNI(void, dataChannelClose)(JNIEnv *, jclass, jlong dc) { krtc_data_channel_close(H<krtc_data_channel>(dc)); }
+KRTC_JNI(void, dataChannelRelease)(JNIEnv *, jclass, jlong dc) { krtc_data_channel_release(H<krtc_data_channel>(dc)); }
 
 // Transceivers.
 KRTC_JNI(jstring, transceiverMid)(JNIEnv *env, jclass, jlong t) { return Take(env, krtc_transceiver_mid(H<krtc_transceiver>(t))); }

@@ -40,6 +40,10 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
 
     final val connectionState // krtc.client/RoomClient.connectionState|{}connectionState[0]
         final fun <get-connectionState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCPeerConnectionState>? // krtc.client/RoomClient.connectionState.<get-connectionState>|<get-connectionState>(){}[0]
+    final val data // krtc.client/RoomClient.data|{}data[0]
+        final fun <get-data>(): kotlinx.coroutines.flow/SharedFlow<krtc.client/RoomData> // krtc.client/RoomClient.data.<get-data>|<get-data>(){}[0]
+    final val dataOpen // krtc.client/RoomClient.dataOpen|{}dataOpen[0]
+        final fun <get-dataOpen>(): kotlinx.coroutines.flow/StateFlow<kotlin/Boolean> // krtc.client/RoomClient.dataOpen.<get-dataOpen>|<get-dataOpen>(){}[0]
     final val participants // krtc.client/RoomClient.participants|{}participants[0]
         final fun <get-participants>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<krtc.client/RemoteParticipant>> // krtc.client/RoomClient.participants.<get-participants>|<get-participants>(){}[0]
     final val peerConnection // krtc.client/RoomClient.peerConnection|{}peerConnection[0]
@@ -50,11 +54,27 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
         final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<krtc.client/RoomState> // krtc.client/RoomClient.state.<get-state>|<get-state>(){}[0]
 
     final fun leave() // krtc.client/RoomClient.leave|leave(){}[0]
+    final fun sendData(kotlin/ByteArray, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ...): kotlin/Boolean // krtc.client/RoomClient.sendData|sendData(kotlin.ByteArray;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.Boolean){}[0]
     final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
     final suspend fun restartIce() // krtc.client/RoomClient.restartIce|restartIce(){}[0]
     final suspend fun setCamera(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setCamera|setCamera(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setMicrophone(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setMicrophone|setMicrophone(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setVideoQuality(kotlin/String, krtc.client/VideoQuality) // krtc.client/RoomClient.setVideoQuality|setVideoQuality(kotlin.String;krtc.client.VideoQuality){}[0]
+}
+
+final class krtc.client/RoomData { // krtc.client/RoomData|null[0]
+    constructor <init>(kotlin/String?, kotlin/String, kotlin/ByteArray, kotlin/Boolean) // krtc.client/RoomData.<init>|<init>(kotlin.String?;kotlin.String;kotlin.ByteArray;kotlin.Boolean){}[0]
+
+    final val from // krtc.client/RoomData.from|{}from[0]
+        final fun <get-from>(): kotlin/String? // krtc.client/RoomData.from.<get-from>|<get-from>(){}[0]
+    final val payload // krtc.client/RoomData.payload|{}payload[0]
+        final fun <get-payload>(): kotlin/ByteArray // krtc.client/RoomData.payload.<get-payload>|<get-payload>(){}[0]
+    final val reliable // krtc.client/RoomData.reliable|{}reliable[0]
+        final fun <get-reliable>(): kotlin/Boolean // krtc.client/RoomData.reliable.<get-reliable>|<get-reliable>(){}[0]
+    final val topic // krtc.client/RoomData.topic|{}topic[0]
+        final fun <get-topic>(): kotlin/String // krtc.client/RoomData.topic.<get-topic>|<get-topic>(){}[0]
+
+    final fun toString(): kotlin/String // krtc.client/RoomData.toString|toString(){}[0]
 }
 
 sealed class krtc.client/RoomState { // krtc.client/RoomState|null[0]

@@ -21,6 +21,8 @@ internal class DtlsSrtpKeys(public val profile: SrtpProfile, public val material
  *
  * Records arrive through [deliver] (any thread); outgoing records go to `sender`.
  * Exactly one of `onConnected` / `onFailed` is called, from an internal thread.
+ * After the handshake the association carries application data both ways (SCTP for data channels,
+ * RFC 8261): received plaintext goes to `onData` (internal thread), [send] encrypts one record.
  */
 internal expect class DtlsEndpoint(
     identity: DtlsIdentity,
@@ -28,9 +30,13 @@ internal expect class DtlsEndpoint(
     sender: (ByteArray, Int, Int) -> Unit,
     onConnected: (DtlsSrtpKeys) -> Unit,
     onFailed: (Throwable) -> Unit,
+    onData: (ByteArray) -> Unit,
 ) {
     internal fun start()
     internal fun deliver(data: ByteArray)
+
+    /** Sends [data] as one application-data record; any thread. Ignored before the handshake completes. */
+    internal fun send(data: ByteArray)
     internal fun close()
 }
 

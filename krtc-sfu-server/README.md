@@ -60,11 +60,14 @@ JVM:
                              transport-cc от получателя → оценка канала (GCC: задержка + потери)
                              → слои simulcast подбираются под оценку
                     сервер → отправителю: transport-cc каждые 50 мс (его GCC), REMB как потолок, PLI при новом зрителе
+                    DTLS (данные) ─► SCTP + DCEP (шард комнаты) ─► каналы krtc / krtc-lossy:
+                              конверт → политика хоста → получателям, с id отправителя
 ```
 
 Раскладка SDP у каждого участника (сервер всегда отправляет offer):
 - `0` — его микрофон;
 - `1` — его камера; сервер просит simulcast `a=simulcast:recv q;h;f`, и браузер сам отправляет три слоя (¼, ½ и полное разрешение);
+- `d` — data channels (SCTP поверх DTLS, [ADR-0016](../docs/adr/0016-data-channels.md));
 - `2+2i` и `3+2i` — аудио и видео i-го собеседника, или `inactive`: слот свободен или собеседник без видео. Свободные слоты переиспользуются.
 
 ## Протокол сигнализации
@@ -86,6 +89,8 @@ JVM:
 2. У трансиверов `0` (микрофон) и `1` (камера) ставит `direction = 'sendonly'` и `replaceTrack(...)`.
 3. Отвечает `answer`.
 
+Сообщения комнаты идут не через WebSocket, а через data channels. Клиент открывает `krtc` (надёжный) и `krtc-lossy` (`ordered: false, maxRetransmits: 0`). Каждое сообщение — двоичный конверт: `1 | число id | (длина, id)* | длина, тема | данные`. Клиент указывает id получателей (пусто — все), сервер — id отправителя (пусто — сам сервер).
+
 Пример — [index.html](src/commonMain/web/index.html).
 
 ## Метрики
@@ -95,6 +100,7 @@ JVM:
 - `rtpIn`/`rtpOut`, `bytesIn`/`bytesOut`, `rtcpIn`/`rtcpOut`;
 - `srtpFailures`, `droppedOverload`;
 - `keyframeRequests`, `nacksAnswered` (повторы получателям из кэша), `nacksSent` и `rtxRecovered` (потери на входе от отправителя);
+- `dataMessagesIn`, `dataMessagesOut`, `dataMessagesDropped` — сообщения data channels;
 - `stunRequests`, `stunRejected`, `dtlsConnected`, `dtlsFailed`, `unknownSource`;
 - `shardQueueDepth`.
 
@@ -113,6 +119,7 @@ JVM:
 ## Ограничения текущей версии
 
 - SVC (VP9/AV1 с пространственными слоями) не поддерживается, только simulcast.
-- Нет оценки полосы по получателям (TWCC) — отправителю задаётся фиксированный REMB 1,5 Мбит/с.
-- Только IPv4, нет TURN/TCP и авторизации в сигнализации.
+- Нет TURN/TLS на 443 и probing в оценке канала ([ADR-0015](../docs/adr/0015-sfu-transport-and-congestion.md)).
+- Нет авторизации в сигнализации этого приложения (во встраиваемом SFU — `JoinPolicy`).
+- Data channels: без I-DATA и приоритетов каналов ([ADR-0016](../docs/adr/0016-data-channels.md)).
 - Linux-бинари собираются на Linux-хосте с OpenSSL 3.

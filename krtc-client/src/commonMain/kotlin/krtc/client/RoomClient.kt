@@ -12,12 +12,17 @@ import krtc.core.Krtc
 import krtc.core.MediaStreamTrack
 import krtc.core.PeerConnectionFactory
 import krtc.core.RTCConfiguration
+import krtc.core.RTCDataChannel
+import krtc.core.RTCDataChannelInit
+import krtc.core.RTCDataChannelMessage
+import krtc.core.RTCDataChannelState
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpTransceiverDirection
 import krtc.core.RTCSdpType
 import krtc.core.RTCSessionDescription
 import krtc.signaling.ClientMessage
+import krtc.signaling.DataEnvelope
 import krtc.signaling.ServerMessage
 import krtc.signaling.SignalingProtocol
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +31,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -42,6 +50,20 @@ public sealed class RoomState {
     public data object Connecting : RoomState()
     public data class Connected(val room: String, val selfId: String) : RoomState()
     public data class Disconnected(val reason: String?) : RoomState()
+}
+
+/**
+ * A message from the room, received over the SFU's data channels (ADR-0016).
+ * [from] is the sender's participant id, or null when the server (the host application) sent it.
+ */
+public class RoomData(
+    public val from: String?,
+    public val topic: String,
+    public val payload: ByteArray,
+    /** Sent reliably and in order, or best-effort (see [RoomClient.sendData]). */
+    public val reliable: Boolean,
+) {
+    override fun toString(): String = "RoomData(from=$from, topic=$topic, ${payload.size} bytes, reliable=$reliable)"
 }
 
 /** Another member of the room, as seen by this client. */
@@ -77,10 +99,18 @@ public class RoomClient(
     private val stateFlow = MutableStateFlow<RoomState>(RoomState.Idle)
     private val participantsFlow = MutableStateFlow<List<RemoteParticipant>>(emptyList())
     private val selfSpeakingFlow = MutableStateFlow(false)
+    private val dataFlow = MutableSharedFlow<RoomData>(extraBufferCapacity = 256)
+    private val dataOpenFlow = MutableStateFlow(false)
 
     public val state: StateFlow<RoomState> = stateFlow.asStateFlow()
     public val participants: StateFlow<List<RemoteParticipant>> = participantsFlow.asStateFlow()
     public val selfSpeaking: StateFlow<Boolean> = selfSpeakingFlow.asStateFlow()
+
+    /** Messages from other participants and the server ([sendData] on their side, `Sfu.sendData` on the server). */
+    public val data: SharedFlow<RoomData> = dataFlow.asSharedFlow()
+
+    /** Whether [sendData] can send: the reliable data channel to the SFU is open. */
+    public val dataOpen: StateFlow<Boolean> = dataOpenFlow.asStateFlow()
 
     private var session: WebSocketSession? = null
     private var pc: RTCPeerConnection? = null
@@ -88,6 +118,8 @@ public class RoomClient(
     private var camera: MediaStreamTrack? = null
     private var selfId: String? = null
     private var midToPeer: Map<String, String> = emptyMap()
+    private var reliableChannel: RTCDataChannel? = null
+    private var lossyChannel: RTCDataChannel? = null
     private val offers = Channel<ServerMessage.Offer>(Channel.UNLIMITED)
     private var job: Job? = null
 
@@ -151,6 +183,7 @@ public class RoomClient(
     private suspend fun answer(peerConnection: RTCPeerConnection, offer: ServerMessage.Offer) {
         midToPeer = offer.mids
         peerConnection.setRemoteDescription(RTCSessionDescription(RTCSdpType.OFFER, offer.sdp))
+        if (reliableChannel == null && "\nm=application " in offer.sdp) openDataChannels(peerConnection)
         for ((mid, track) in listOf(UPLINK_AUDIO_MID to microphone, UPLINK_VIDEO_MID to camera)) {
             val transceiver = peerConnection.getTransceivers().firstOrNull { it.mid == mid } ?: continue
             if (track != null) {
@@ -169,6 +202,40 @@ public class RoomClient(
         val answer = peerConnection.createAnswer()
         peerConnection.setLocalDescription(answer)
         send(ClientMessage.Answer(offer.version, peerConnection.localDescription?.sdp ?: answer.sdp))
+    }
+
+    /**
+     * The SFU's two channels (DataEnvelope): created once the offer carries the SCTP m-line, so the answer accepts
+     * it; they open when DTLS and SCTP are up.
+     */
+    private fun openDataChannels(peerConnection: RTCPeerConnection) {
+        val reliable = peerConnection.createDataChannel(DataEnvelope.RELIABLE_LABEL)
+        val lossy = peerConnection.createDataChannel(DataEnvelope.LOSSY_LABEL, RTCDataChannelInit(ordered = false, maxRetransmits = 0))
+        reliableChannel = reliable
+        lossyChannel = lossy
+        scope.launch { reliable.readyState.collect { dataOpenFlow.value = it == RTCDataChannelState.OPEN } }
+        for (ch in listOf(reliable, lossy)) scope.launch {
+            ch.onmessage.collect { m ->
+                if (m !is RTCDataChannelMessage.Binary) return@collect
+                val envelope = DataEnvelope.decode(m.data) ?: return@collect
+                dataFlow.emit(RoomData(envelope.ids.firstOrNull(), envelope.topic, envelope.payload, reliable = ch === reliable))
+            }
+        }
+    }
+
+    /**
+     * Sends [payload] to the room through the SFU: to everyone else, or only to the participants in [to].
+     * [reliable] messages arrive complete and in order; otherwise delivery is best-effort (unordered, never
+     * retransmitted), for frequent updates where only the latest matters (cursors, positions).
+     * [topic] (up to 255 bytes) lets receivers tell message kinds apart. Payloads up to about 64 KB.
+     * Returns false if the data channel is not open yet (see [dataOpen]).
+     */
+    public fun sendData(payload: ByteArray, topic: String = "", to: List<String> = emptyList(), reliable: Boolean = true): Boolean {
+        val ch = (if (reliable) reliableChannel else lossyChannel) ?: return false
+        if (ch.readyState.value != RTCDataChannelState.OPEN) return false
+        val message = DataEnvelope.encode(to, topic, payload)
+        require(message.size <= DataEnvelope.MAX_MESSAGE_SIZE) { "message of ${message.size} bytes exceeds ${DataEnvelope.MAX_MESSAGE_SIZE}" }
+        return runCatching { ch.send(message) }.isSuccess
     }
 
     private fun onTrack(mid: String?, track: MediaStreamTrack) {
@@ -227,6 +294,9 @@ public class RoomClient(
         val peer = pc
         pc = null
         session = null
+        reliableChannel = null
+        lossyChannel = null
+        dataOpenFlow.value = false
         // Release media and publish the final state before the socket closes, so observers of
         // `state` never see Disconnected while the peer connection is still open.
         peer?.close()

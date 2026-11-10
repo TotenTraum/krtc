@@ -296,6 +296,29 @@ sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null
     }
 }
 
+final object krtc.signaling/DataEnvelope { // krtc.signaling/DataEnvelope|null[0]
+    final const val LOSSY_LABEL // krtc.signaling/DataEnvelope.LOSSY_LABEL|{}LOSSY_LABEL[0]
+        final fun <get-LOSSY_LABEL>(): kotlin/String // krtc.signaling/DataEnvelope.LOSSY_LABEL.<get-LOSSY_LABEL>|<get-LOSSY_LABEL>(){}[0]
+    final const val MAX_MESSAGE_SIZE // krtc.signaling/DataEnvelope.MAX_MESSAGE_SIZE|{}MAX_MESSAGE_SIZE[0]
+        final fun <get-MAX_MESSAGE_SIZE>(): kotlin/Int // krtc.signaling/DataEnvelope.MAX_MESSAGE_SIZE.<get-MAX_MESSAGE_SIZE>|<get-MAX_MESSAGE_SIZE>(){}[0]
+    final const val RELIABLE_LABEL // krtc.signaling/DataEnvelope.RELIABLE_LABEL|{}RELIABLE_LABEL[0]
+        final fun <get-RELIABLE_LABEL>(): kotlin/String // krtc.signaling/DataEnvelope.RELIABLE_LABEL.<get-RELIABLE_LABEL>|<get-RELIABLE_LABEL>(){}[0]
+
+    final fun decode(kotlin/ByteArray): krtc.signaling/DataEnvelope.Message? // krtc.signaling/DataEnvelope.decode|decode(kotlin.ByteArray){}[0]
+    final fun encode(kotlin.collections/List<kotlin/String>, kotlin/String, kotlin/ByteArray): kotlin/ByteArray // krtc.signaling/DataEnvelope.encode|encode(kotlin.collections.List<kotlin.String>;kotlin.String;kotlin.ByteArray){}[0]
+
+    final class Message { // krtc.signaling/DataEnvelope.Message|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/String>, kotlin/String, kotlin/ByteArray) // krtc.signaling/DataEnvelope.Message.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.String;kotlin.ByteArray){}[0]
+
+        final val ids // krtc.signaling/DataEnvelope.Message.ids|{}ids[0]
+            final fun <get-ids>(): kotlin.collections/List<kotlin/String> // krtc.signaling/DataEnvelope.Message.ids.<get-ids>|<get-ids>(){}[0]
+        final val payload // krtc.signaling/DataEnvelope.Message.payload|{}payload[0]
+            final fun <get-payload>(): kotlin/ByteArray // krtc.signaling/DataEnvelope.Message.payload.<get-payload>|<get-payload>(){}[0]
+        final val topic // krtc.signaling/DataEnvelope.Message.topic|{}topic[0]
+            final fun <get-topic>(): kotlin/String // krtc.signaling/DataEnvelope.Message.topic.<get-topic>|<get-topic>(){}[0]
+    }
+}
+
 final object krtc.signaling/SignalingProtocol { // krtc.signaling/SignalingProtocol|null[0]
     final const val VERSION // krtc.signaling/SignalingProtocol.VERSION|{}VERSION[0]
         final fun <get-VERSION>(): kotlin/Int // krtc.signaling/SignalingProtocol.VERSION.<get-VERSION>|<get-VERSION>(){}[0]

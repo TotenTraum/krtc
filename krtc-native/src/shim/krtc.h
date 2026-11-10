@@ -22,6 +22,7 @@ typedef struct krtc_pc krtc_pc;
 typedef struct krtc_transceiver krtc_transceiver;
 typedef struct krtc_track krtc_track;
 typedef struct krtc_video_source krtc_video_source;
+typedef struct krtc_data_channel krtc_data_channel;
 
 /* Completion of an asynchronous operation. `error` is NULL on success; `sdp` is set by create_answer. */
 typedef void (*krtc_done_fn)(void *user, const char *sdp, const char *error);
@@ -96,6 +97,37 @@ int krtc_pc_transceiver_count(krtc_pc *pc);
 krtc_transceiver *krtc_pc_transceiver_at(krtc_pc *pc, int index);
 void krtc_pc_close(krtc_pc *pc);
 void krtc_pc_release(krtc_pc *pc);
+
+/* Data channels (W3C RTCDataChannel). max_retransmits / max_packet_lifetime: -1 for none; id: -1 to let the
+ * transport pick (in-band DCEP), or the stream id of a negotiated channel. NULL on invalid parameters. */
+krtc_data_channel *krtc_pc_create_data_channel(krtc_pc *pc, const char *label, int ordered, int max_retransmits,
+                                               int max_packet_lifetime, const char *protocol, int negotiated, int id);
+/* Channels the remote side opens (`datachannel` events); the channel is a new reference owned by the callee. */
+typedef void (*krtc_data_channel_fn)(void *user, krtc_data_channel *channel);
+void krtc_pc_set_data_channel_handler(krtc_pc *pc, krtc_data_channel_fn fn, void *user);
+
+enum {
+    KRTC_DATA_CHANNEL_STATE = 1,   /* value: 0 connecting, 1 open, 2 closing, 3 closed */
+    KRTC_DATA_CHANNEL_MESSAGE = 2, /* value: 1 binary, 0 text (UTF-8); data/length valid during the call only */
+    KRTC_DATA_CHANNEL_BUFFERED_AMOUNT = 3,
+};
+typedef void (*krtc_data_channel_event_fn)(void *user, int event, int value, const uint8_t *data, int length);
+/* Messages received before an observer is set are queued and delivered when it is set. NULL removes it; after
+ * that returns no more events arrive. */
+void krtc_data_channel_set_observer(krtc_data_channel *dc, krtc_data_channel_event_fn fn, void *user);
+char *krtc_data_channel_label(krtc_data_channel *dc);
+char *krtc_data_channel_protocol(krtc_data_channel *dc);
+int krtc_data_channel_id(krtc_data_channel *dc); /* -1 until the DTLS role is known */
+int krtc_data_channel_ordered(krtc_data_channel *dc);
+int krtc_data_channel_max_retransmits(krtc_data_channel *dc);     /* -1 if not set */
+int krtc_data_channel_max_packet_lifetime(krtc_data_channel *dc); /* -1 if not set */
+int krtc_data_channel_negotiated(krtc_data_channel *dc);
+int krtc_data_channel_state(krtc_data_channel *dc);
+uint64_t krtc_data_channel_buffered_amount(krtc_data_channel *dc);
+/* 0 on success; -1 if the channel is not open, the send queue is full or the message too large. */
+int krtc_data_channel_send(krtc_data_channel *dc, const uint8_t *data, int length, int binary);
+void krtc_data_channel_close(krtc_data_channel *dc);
+void krtc_data_channel_release(krtc_data_channel *dc);
 
 /* Transceivers. */
 char *krtc_transceiver_mid(krtc_transceiver *t);

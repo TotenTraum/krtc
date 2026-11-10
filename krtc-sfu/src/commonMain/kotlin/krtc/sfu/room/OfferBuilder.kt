@@ -15,6 +15,7 @@ import krtc.protocol.sdp.SessionDescription
  *
  * Layout for a participant:
  * - `0` audio, `1` video — its own uplink (recvonly on the SFU side; video asks for simulcast q/h/f);
+ * - `d` data channels (SCTP), when enabled;
  * - per slot i: `2+2i` audio and `3+2i` video of one other participant (sendonly), or `inactive` when
  *   the slot is free (someone left) or that participant sends no video. Free slots are reused.
  */
@@ -27,6 +28,8 @@ internal class OfferBuilder(
     private val udp: Boolean = true,
     /** Offer passive TCP host candidates (RFC 6544) on the same port. */
     private val tcp: Boolean = false,
+    /** Offer an SCTP association for data channels as the third m-line ([MediaPlan.DATA_MID]). */
+    private val dataChannels: Boolean = false,
 ) {
     internal fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
         val sd = SessionDescription()
@@ -35,10 +38,12 @@ internal class OfferBuilder(
         sd.lines += SdpLine('s', "krtc-sfu")
         sd.lines += SdpLine('t', "0 0")
         sd.attributes += SdpAttribute("ice-lite")
-        sd.attributes += SdpAttribute("group", "BUNDLE " + (0 until 2 + 2 * slots.size).joinToString(" "))
+        val mids = listOf("0", "1") + (if (dataChannels) listOf(MediaPlan.DATA_MID) else emptyList()) + (2 until 2 + 2 * slots.size).map { "$it" }
+        sd.attributes += SdpAttribute("group", "BUNDLE " + mids.joinToString(" "))
         sd.attributes += SdpAttribute("msid-semantic", " WMS *")
         sd.media += audio(p, mid = "0", direction = Direction.RECVONLY, publisher = null)
         sd.media += video(p, mid = "1", direction = Direction.RECVONLY, publisher = null)
+        if (dataChannels) sd.media += application(p)
         slots.forEachIndexed { i, publisher ->
             sd.media += audio(p, "${2 + 2 * i}", if (publisher == null) Direction.INACTIVE else Direction.SENDONLY, publisher)
             val sendsVideo = publisher != null && publisher.publishesVideo
@@ -63,6 +68,15 @@ internal class OfferBuilder(
         }
         a += SdpAttribute("end-of-candidates")
         a += SdpAttribute("mid", mid)
+    }
+
+    /** RFC 8841: SCTP over DTLS, bundled with the media; the browser is the DTLS client, so it uses even stream ids. */
+    private fun application(p: Participant): MediaDescription {
+        val m = MediaDescription("application", port, "UDP/DTLS/SCTP", mutableListOf("webrtc-datachannel"))
+        transport(p, m, MediaPlan.DATA_MID)
+        m.attributes += SdpAttribute("sctp-port", "${MediaPlan.SCTP_PORT}")
+        m.attributes += SdpAttribute("max-message-size", "${krtc.signaling.DataEnvelope.MAX_MESSAGE_SIZE}")
+        return m
     }
 
     private fun audio(p: Participant, mid: String, direction: Direction, publisher: Participant?): MediaDescription {

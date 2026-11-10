@@ -29,6 +29,76 @@ public final class krtc/core/RTCConfiguration {
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract interface class krtc/core/RTCDataChannel {
+	public abstract fun close ()V
+	public abstract fun getBufferedAmount ()J
+	public abstract fun getId ()Ljava/lang/Integer;
+	public abstract fun getLabel ()Ljava/lang/String;
+	public abstract fun getMaxPacketLifeTime ()Ljava/lang/Integer;
+	public abstract fun getMaxRetransmits ()Ljava/lang/Integer;
+	public abstract fun getNegotiated ()Z
+	public abstract fun getOnmessage ()Lkotlinx/coroutines/flow/Flow;
+	public abstract fun getOrdered ()Z
+	public abstract fun getProtocol ()Ljava/lang/String;
+	public abstract fun getReadyState ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun send (Ljava/lang/String;)V
+	public abstract fun send ([B)V
+}
+
+public final class krtc/core/RTCDataChannelInit {
+	public fun <init> ()V
+	public fun <init> (ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;ZLjava/lang/Integer;)V
+	public synthetic fun <init> (ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;ZLjava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Ljava/lang/Integer;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Z
+	public final fun component6 ()Ljava/lang/Integer;
+	public final fun copy (ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;ZLjava/lang/Integer;)Lkrtc/core/RTCDataChannelInit;
+	public static synthetic fun copy$default (Lkrtc/core/RTCDataChannelInit;ZLjava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;ZLjava/lang/Integer;ILjava/lang/Object;)Lkrtc/core/RTCDataChannelInit;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/Integer;
+	public final fun getMaxPacketLifeTime ()Ljava/lang/Integer;
+	public final fun getMaxRetransmits ()Ljava/lang/Integer;
+	public final fun getNegotiated ()Z
+	public final fun getOrdered ()Z
+	public final fun getProtocol ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class krtc/core/RTCDataChannelMessage {
+}
+
+public final class krtc/core/RTCDataChannelMessage$Binary : krtc/core/RTCDataChannelMessage {
+	public fun <init> ([B)V
+	public final fun getData ()[B
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/core/RTCDataChannelMessage$Text : krtc/core/RTCDataChannelMessage {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lkrtc/core/RTCDataChannelMessage$Text;
+	public static synthetic fun copy$default (Lkrtc/core/RTCDataChannelMessage$Text;Ljava/lang/String;ILjava/lang/Object;)Lkrtc/core/RTCDataChannelMessage$Text;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class krtc/core/RTCDataChannelState : java/lang/Enum {
+	public static final field CLOSED Lkrtc/core/RTCDataChannelState;
+	public static final field CLOSING Lkrtc/core/RTCDataChannelState;
+	public static final field CONNECTING Lkrtc/core/RTCDataChannelState;
+	public static final field OPEN Lkrtc/core/RTCDataChannelState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/core/RTCDataChannelState;
+	public static fun values ()[Lkrtc/core/RTCDataChannelState;
+}
+
 public final class krtc/core/RTCIceServer {
 	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
 	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -48,14 +118,21 @@ public final class krtc/core/RTCIceServer {
 public abstract interface class krtc/core/RTCPeerConnection : java/lang/AutoCloseable {
 	public abstract fun close ()V
 	public abstract fun createAnswer (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun createDataChannel (Ljava/lang/String;Lkrtc/core/RTCDataChannelInit;)Lkrtc/core/RTCDataChannel;
+	public static synthetic fun createDataChannel$default (Lkrtc/core/RTCPeerConnection;Ljava/lang/String;Lkrtc/core/RTCDataChannelInit;ILjava/lang/Object;)Lkrtc/core/RTCDataChannel;
 	public abstract fun getConnectionState ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getLocalDescription ()Lkrtc/core/RTCSessionDescription;
+	public abstract fun getOndatachannel ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getOntrack ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getRemoteDescription ()Lkrtc/core/RTCSessionDescription;
 	public abstract fun getStats (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getTransceivers ()Ljava/util/List;
 	public abstract fun setLocalDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun setRemoteDescription (Lkrtc/core/RTCSessionDescription;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class krtc/core/RTCPeerConnection$DefaultImpls {
+	public static synthetic fun createDataChannel$default (Lkrtc/core/RTCPeerConnection;Ljava/lang/String;Lkrtc/core/RTCDataChannelInit;ILjava/lang/Object;)Lkrtc/core/RTCDataChannel;
 }
 
 public final class krtc/core/RTCPeerConnectionState : java/lang/Enum {

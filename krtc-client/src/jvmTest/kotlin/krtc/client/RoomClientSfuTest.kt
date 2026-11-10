@@ -9,6 +9,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import krtc.sfu.ktor.krtcSfu
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -106,6 +107,45 @@ class RoomClientSfuTest {
             client.leave()
             client.state.first { it is RoomState.Disconnected }
             assertTrue(pc.closed)
+        }
+    }
+
+    @Test
+    fun dataChannelsFollowTheOfferAndCarryTheEnvelope(): Unit = runBlocking {
+        withTimeout(10_000) {
+            val factory = FakeFactory()
+            val client = RoomClient(url, factory)
+            client.join("data", "Dana")
+            val pc = factory.created.let { while (it.isEmpty()) kotlinx.coroutines.delay(10); it.single() }
+            while (pc.localDescription == null) kotlinx.coroutines.delay(20)
+            assertTrue(pc.localDescription!!.sdp.contains("m=application 9 UDP/DTLS/SCTP webrtc-datachannel"), "the answer accepts the SCTP m-line")
+            val (reliable, lossy) = pc.dataChannels
+            assertEquals(krtc.signaling.DataEnvelope.RELIABLE_LABEL, reliable.label)
+            assertEquals(krtc.signaling.DataEnvelope.LOSSY_LABEL, lossy.label)
+            assertEquals(false, lossy.ordered)
+            assertEquals(0, lossy.maxRetransmits)
+
+            assertEquals(false, client.sendData("early".encodeToByteArray()), "not open yet")
+            reliable.state.value = krtc.core.RTCDataChannelState.OPEN
+            lossy.state.value = krtc.core.RTCDataChannelState.OPEN
+            client.dataOpen.first { it }
+            assertTrue(client.sendData("hi".encodeToByteArray(), topic = "chat", to = listOf("7")))
+            assertTrue(client.sendData(byteArrayOf(1), topic = "cursor", reliable = false))
+            val sent = krtc.signaling.DataEnvelope.decode((reliable.sent.single() as krtc.core.RTCDataChannelMessage.Binary).data)!!
+            assertEquals(listOf("7"), sent.ids)
+            assertEquals("chat", sent.topic)
+            assertEquals("hi", sent.payload.decodeToString())
+            assertEquals(1, lossy.sent.size)
+
+            val received = async { client.data.first() }
+            kotlinx.coroutines.yield()
+            while (reliable.incoming.subscriptionCount.value == 0) kotlinx.coroutines.delay(10)
+            reliable.incoming.emit(krtc.core.RTCDataChannelMessage.Binary(krtc.signaling.DataEnvelope.encode(listOf("3"), "chat", "yo".encodeToByteArray())))
+            val m = received.await()
+            assertEquals("3", m.from)
+            assertEquals("yo", m.payload.decodeToString())
+            assertTrue(m.reliable)
+            client.leave()
         }
     }
 

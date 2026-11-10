@@ -76,8 +76,11 @@ internal actual class DtlsEndpoint actual constructor(
     private val sender: (ByteArray, Int, Int) -> Unit,
     private val onConnected: (DtlsSrtpKeys) -> Unit,
     private val onFailed: (Throwable) -> Unit,
+    private val onData: (ByteArray) -> Unit,
 ) {
     private val log = krtc.sfu.platform.logger("krtc.sfu.dtls")
+    @Volatile private var transport: org.bouncycastle.tls.DTLSTransport? = null
+    private val sendLock = Any()
     private val inbox = LinkedBlockingQueue<ByteArray>(256)
 
     @Volatile
@@ -91,6 +94,17 @@ internal actual class DtlsEndpoint actual constructor(
     /** Called from the UDP thread with a DTLS record (RFC 7983 range 20..63). */
     internal actual fun deliver(data: ByteArray) {
         if (!closed) inbox.offer(data)
+    }
+
+    internal actual fun send(data: ByteArray) {
+        val t = transport ?: return
+        if (closed) return
+        // BouncyCastle's record layer keeps separate read and write state; writers only exclude each other.
+        try {
+            synchronized(sendLock) { t.send(data, 0, data.size) }
+        } catch (e: java.io.IOException) {
+            log.debug("DTLS send failed: $e")
+        }
     }
 
     internal actual fun close() {
@@ -122,11 +136,13 @@ internal actual class DtlsEndpoint actual constructor(
             val server = SrtpTlsServer()
             val dtls = DTLSServerProtocol().accept(server, transport)
             onConnected(server.keys ?: throw IllegalStateException("no keying material"))
-            // Keep servicing the association: retransmits our final flight if the client
-            // resends its own, and notices close_notify.
+            this.transport = dtls
+            // Keep servicing the association: application data (SCTP), our final flight again if the
+            // client resends its own, and close_notify.
             val buf = ByteArray(1500)
             while (!closed) {
-                if (dtls.receive(buf, 0, buf.size, 1000) < -1) break
+                val n = dtls.receive(buf, 0, buf.size, 1000)
+                if (n > 0) onData(buf.copyOf(n)) else if (n < -1) break
             }
         } catch (t: Throwable) {
             if (!closed) {

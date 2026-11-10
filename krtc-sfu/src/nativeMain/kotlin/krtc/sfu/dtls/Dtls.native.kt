@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import krtc.sfu.openssl.BIO
 import krtc.sfu.openssl.BIO_write
@@ -33,6 +34,7 @@ import krtc.sfu.openssl.SSL_do_handshake
 import krtc.sfu.openssl.SSL_free
 import krtc.sfu.openssl.SSL_get_error
 import krtc.sfu.openssl.SSL_read
+import krtc.sfu.openssl.SSL_write
 import krtc.sfu.openssl.X509
 import krtc.sfu.openssl.krtc_cert_sha256
 import krtc.sfu.openssl.krtc_dtls_ctx
@@ -88,9 +90,12 @@ internal actual class DtlsEndpoint actual constructor(
     private val sender: (ByteArray, Int, Int) -> Unit,
     private val onConnected: (DtlsSrtpKeys) -> Unit,
     private val onFailed: (Throwable) -> Unit,
+    private val onData: (ByteArray) -> Unit,
 ) {
     private val log = logger("krtc.sfu.dtls")
     private val inbox = Channel<ByteArray>(64)
+    private val outbox = Channel<ByteArray>(256)
+    @Volatile private var connected = false
     private var job: Job? = null
 
     @Volatile private var closed = false
@@ -103,9 +108,14 @@ internal actual class DtlsEndpoint actual constructor(
         if (!closed) inbox.trySend(data)
     }
 
+    internal actual fun send(data: ByteArray) {
+        if (connected && !closed) outbox.trySend(data) // full: dropped, SCTP retransmits
+    }
+
     internal actual fun close() {
         closed = true
         inbox.close()
+        outbox.close()
     }
 
     internal fun emit(data: ByteArray) {
@@ -124,6 +134,7 @@ internal actual class DtlsEndpoint actual constructor(
             handshake(ssl, rbio)
             val keys = exportKeys(ssl)
             onConnected(keys)
+            connected = true
             service(ssl, rbio)
         } catch (t: Throwable) {
             if (!closed) {
@@ -169,12 +180,35 @@ internal actual class DtlsEndpoint actual constructor(
         return DtlsSrtpKeys(profile, material)
     }
 
+    /**
+     * After the handshake: incoming records (application data → [onData], our final flight again if the client
+     * resends its own, close_notify) and outgoing application data, both on this coroutine, which owns the SSL.
+     */
     private suspend fun service(ssl: CPointer<SSL>, rbio: CPointer<BIO>) {
         val buf = ByteArray(1500)
-        for (record in inbox) {
-            record.withPointer { BIO_write(rbio, it, record.size) }
+        while (true) {
+            val stop = select {
+                inbox.onReceiveCatching { r ->
+                    val record = r.getOrNull() ?: return@onReceiveCatching true
+                    record.withPointer { BIO_write(rbio, it, record.size) }
+                    readAll(ssl, buf)
+                }
+                outbox.onReceiveCatching { r ->
+                    val data = r.getOrNull() ?: return@onReceiveCatching true
+                    data.withPointer { SSL_write(ssl, it, data.size) }
+                    false
+                }
+            }
+            if (stop) return
+        }
+    }
+
+    /** Reads every application record buffered in [ssl]; true on close_notify. */
+    private fun readAll(ssl: CPointer<SSL>, buf: ByteArray): Boolean {
+        while (true) {
             val n = buf.withPointer { SSL_read(ssl, it, buf.size) }
-            if (n <= 0 && SSL_get_error(ssl, n) == SSL_ERROR_ZERO_RETURN) return // close_notify
+            if (n <= 0) return SSL_get_error(ssl, n) == SSL_ERROR_ZERO_RETURN
+            onData(buf.copyOf(n))
         }
     }
 

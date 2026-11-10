@@ -77,6 +77,60 @@ public class RTCStats(public val id: String, public val type: String, public val
     override fun toString(): String = "RTCStats($type $id $members)"
 }
 
+/** [W3C RTCDataChannelState](https://w3c.github.io/webrtc-pc/#dom-rtcdatachannelstate) */
+public enum class RTCDataChannelState(public val value: String) { CONNECTING("connecting"), OPEN("open"), CLOSING("closing"), CLOSED("closed") }
+
+/** [W3C RTCDataChannelInit](https://w3c.github.io/webrtc-pc/#dom-rtcdatachannelinit) */
+public data class RTCDataChannelInit(
+    val ordered: Boolean = true,
+    /** Milliseconds a message may take to be delivered; at most one of this and [maxRetransmits]. */
+    val maxPacketLifeTime: Int? = null,
+    val maxRetransmits: Int? = null,
+    val protocol: String = "",
+    /** Negotiated out of band: both sides create the channel with the same [id], no in-band open message. */
+    val negotiated: Boolean = false,
+    val id: Int? = null,
+)
+
+/** The `data` of a data channel's [W3C MessageEvent](https://html.spec.whatwg.org/multipage/comms.html#messageevent): a string or binary. */
+public sealed class RTCDataChannelMessage {
+    public data class Text(val text: String) : RTCDataChannelMessage()
+
+    public class Binary(public val data: ByteArray) : RTCDataChannelMessage() {
+        override fun toString(): String = "Binary(${data.size} bytes)"
+    }
+}
+
+/** [W3C RTCDataChannel](https://w3c.github.io/webrtc-pc/#dom-rtcdatachannel) */
+public interface RTCDataChannel {
+    public val label: String
+    public val ordered: Boolean
+    public val maxPacketLifeTime: Int?
+    public val maxRetransmits: Int?
+    public val protocol: String
+    public val negotiated: Boolean
+
+    /** The SCTP stream id; null until the transport's DTLS role is known. */
+    public val id: Int?
+
+    /** `readyState` together with the `open`, `closing` and `close` events. */
+    public val readyState: StateFlow<RTCDataChannelState>
+
+    /** Bytes queued by [send] and not yet handed to the network. */
+    public val bufferedAmount: Long
+
+    /** `message` events. */
+    public val onmessage: Flow<RTCDataChannelMessage>
+
+    /** Sends a text message. @throws IllegalStateException unless [readyState] is OPEN (W3C InvalidStateError). */
+    public fun send(data: String)
+
+    /** Sends a binary message. @throws IllegalStateException unless [readyState] is OPEN (W3C InvalidStateError). */
+    public fun send(data: ByteArray)
+
+    public fun close()
+}
+
 /** [W3C RTCPeerConnection](https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection) (subset) */
 public interface RTCPeerConnection : AutoCloseable {
     public suspend fun setRemoteDescription(description: RTCSessionDescription)
@@ -91,6 +145,12 @@ public interface RTCPeerConnection : AutoCloseable {
 
     /** `track` events. */
     public val ontrack: Flow<RTCTrackEvent>
+
+    /** [W3C createDataChannel()](https://w3c.github.io/webrtc-pc/#dom-peerconnection-createdatachannel) */
+    public fun createDataChannel(label: String, init: RTCDataChannelInit = RTCDataChannelInit()): RTCDataChannel
+
+    /** `datachannel` events: channels the remote side opened. */
+    public val ondatachannel: Flow<RTCDataChannel>
 
     /** `connectionState` together with its `connectionstatechange` event. */
     public val connectionState: StateFlow<RTCPeerConnectionState>

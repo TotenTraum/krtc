@@ -48,6 +48,13 @@ public data class SfuConfig(
     val joinPolicy: JoinPolicy = JoinPolicy.AllowAll,
     /** Capacity of [Sfu.events]; when a slow collector falls behind, the oldest events are dropped. */
     val eventBufferSize: Int = 1024,
+    /**
+     * Offer a data channel transport (SCTP over DTLS) so participants can exchange messages through the SFU
+     * (ADR-0016); see [Sfu.sendData] and [dataPolicy].
+     */
+    val dataChannels: Boolean = true,
+    /** Decides what happens to each data message a participant sends. Defaults to relaying it unchanged. */
+    val dataPolicy: DataPolicy = DataPolicy.Relay,
     /** Testing only: percentage of downlink video packets to drop, to exercise NACK/RTX recovery. */
     val simulatedLossPercent: Int = 0,
     /** Testing only: percentage of incoming video packets to drop, to exercise upstream NACK/RTX recovery. */
@@ -55,6 +62,50 @@ public data class SfuConfig(
     /** Testing only: cap every subscriber's downlink at this many bits per second (token bucket, drops the excess). */
     val simulatedDownlinkBps: Long = 0,
 )
+
+/**
+ * A room message on the participants' data channels (ADR-0016), as seen by [DataPolicy] and sent by [Sfu.sendData].
+ * The SFU does not look into [payload].
+ */
+public class DataMessage(
+    public val room: String,
+    /** The sending participant's id; null when the host sent it with [Sfu.sendData]. */
+    public val from: String?,
+    /** Application-defined label, up to 255 bytes of UTF-8 (e.g. "chat", "cursor"). */
+    public val topic: String,
+    public val payload: ByteArray,
+    /** Reliable and ordered, or best-effort: unordered, never retransmitted (cursors, telemetry). */
+    public val reliable: Boolean,
+    /** Recipient participant ids; empty means everyone in the room except the sender. */
+    public val to: List<String>,
+) {
+    public fun copy(
+        topic: String = this.topic,
+        payload: ByteArray = this.payload,
+        reliable: Boolean = this.reliable,
+        to: List<String> = this.to,
+    ): DataMessage = DataMessage(room, from, topic, payload, reliable, to)
+
+    override fun toString(): String = "DataMessage(room=$room, from=$from, topic=$topic, ${payload.size} bytes, reliable=$reliable, to=$to)"
+}
+
+/**
+ * The host's control over data messages: called for every message a participant sends, before the SFU relays it.
+ * Runs on the SFU's media thread: it must not block (hand slow work to another thread). Return the message to
+ * relay, changed if needed (e.g. other recipients), or null to drop it, for example after consuming a message
+ * meant for the server.
+ */
+public fun interface DataPolicy {
+    public fun filter(message: DataMessage): DataMessage?
+
+    public companion object {
+        /** Relay every message as the sender addressed it. */
+        public val Relay: DataPolicy = DataPolicy { it }
+
+        /** Relay nothing: data channels stay available to [Sfu.sendData] only. */
+        public val ServerOnly: DataPolicy = DataPolicy { null }
+    }
+}
 
 /** What a client asks for when joining. [credentials] is opaque to the SFU (e.g. a token for the host's auth). */
 public data class JoinRequest(
@@ -114,7 +165,6 @@ public data class ParticipantInfo(
 
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)
 
-/** A snapshot of the SFU's counters (cumulative since start, except the gauges). */
 /**
  * Congestion-control view of one participant's transport (a snapshot; values come from the media thread).
  * [downlinkEstimateBps] is the SFU's estimate of what it can send to this participant (transport-cc), 0 when
@@ -130,6 +180,7 @@ public data class SfuLinkStats(
     val videoLayers: Map<String, Int>,
 )
 
+/** A snapshot of the SFU's counters (cumulative since start, except the gauges). */
 public data class SfuMetrics(
     val participants: Int,
     val rooms: Int,
@@ -148,6 +199,12 @@ public data class SfuMetrics(
     val nacksSent: Long,
     /** Packets restored from publishers' RTX retransmissions. */
     val rtxRecovered: Long,
+    /** Data channel messages received from participants. */
+    val dataMessagesIn: Long,
+    /** Data channel messages delivered to participants (one per recipient). */
+    val dataMessagesOut: Long,
+    /** Data messages not delivered: a recipient's queue was full or its channel missing, or the message was malformed. */
+    val dataMessagesDropped: Long,
     val stunRequests: Long,
     val stunRejected: Long,
     val dtlsConnected: Long,

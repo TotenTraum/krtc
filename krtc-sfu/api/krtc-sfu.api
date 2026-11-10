@@ -1,3 +1,26 @@
+public final class krtc/sfu/DataMessage {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BZLjava/util/List;)V
+	public final fun copy (Ljava/lang/String;[BZLjava/util/List;)Lkrtc/sfu/DataMessage;
+	public static synthetic fun copy$default (Lkrtc/sfu/DataMessage;Ljava/lang/String;[BZLjava/util/List;ILjava/lang/Object;)Lkrtc/sfu/DataMessage;
+	public final fun getFrom ()Ljava/lang/String;
+	public final fun getPayload ()[B
+	public final fun getReliable ()Z
+	public final fun getRoom ()Ljava/lang/String;
+	public final fun getTo ()Ljava/util/List;
+	public final fun getTopic ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class krtc/sfu/DataPolicy {
+	public static final field Companion Lkrtc/sfu/DataPolicy$Companion;
+	public abstract fun filter (Lkrtc/sfu/DataMessage;)Lkrtc/sfu/DataMessage;
+}
+
+public final class krtc/sfu/DataPolicy$Companion {
+	public final fun getRelay ()Lkrtc/sfu/DataPolicy;
+	public final fun getServerOnly ()Lkrtc/sfu/DataPolicy;
+}
+
 public abstract class krtc/sfu/JoinDecision {
 }
 
@@ -117,18 +140,22 @@ public final class krtc/sfu/Sfu : java/lang/AutoCloseable {
 	public final fun participant (Ljava/lang/String;)Lkrtc/sfu/ParticipantInfo;
 	public final fun room (Ljava/lang/String;)Lkrtc/sfu/RoomInfo;
 	public final fun rooms ()Ljava/util/List;
+	public final fun sendData (Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Z)Z
+	public static synthetic fun sendData$default (Lkrtc/sfu/Sfu;Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;ZILjava/lang/Object;)Z
 	public final fun setMuted (Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Boolean;)Z
 	public static synthetic fun setMuted$default (Lkrtc/sfu/Sfu;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Boolean;ILjava/lang/Object;)Z
 }
 
 public final class krtc/sfu/SfuConfig {
 	public fun <init> ()V
-	public fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IIIJ)V
-	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IIIJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IZLkrtc/sfu/DataPolicy;IIJ)V
+	public synthetic fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IZLkrtc/sfu/DataPolicy;IIJILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()I
-	public final fun component10 ()I
-	public final fun component11 ()I
-	public final fun component12 ()J
+	public final fun component10 ()Z
+	public final fun component11 ()Lkrtc/sfu/DataPolicy;
+	public final fun component12 ()I
+	public final fun component13 ()I
+	public final fun component14 ()J
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/util/List;
@@ -137,12 +164,14 @@ public final class krtc/sfu/SfuConfig {
 	public final fun component7 ()I
 	public final fun component8 ()Lkrtc/sfu/JoinPolicy;
 	public final fun component9 ()I
-	public final fun copy (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IIIJ)Lkrtc/sfu/SfuConfig;
-	public static synthetic fun copy$default (Lkrtc/sfu/SfuConfig;ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IIIJILjava/lang/Object;)Lkrtc/sfu/SfuConfig;
+	public final fun copy (ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IZLkrtc/sfu/DataPolicy;IIJ)Lkrtc/sfu/SfuConfig;
+	public static synthetic fun copy$default (Lkrtc/sfu/SfuConfig;ILjava/lang/String;Ljava/lang/String;Ljava/util/List;ZZILkrtc/sfu/JoinPolicy;IZLkrtc/sfu/DataPolicy;IIJILjava/lang/Object;)Lkrtc/sfu/SfuConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAnnouncedAddress ()Ljava/lang/String;
 	public final fun getAnnouncedAddresses ()Ljava/util/List;
 	public final fun getBindAddress ()Ljava/lang/String;
+	public final fun getDataChannels ()Z
+	public final fun getDataPolicy ()Lkrtc/sfu/DataPolicy;
 	public final fun getEventBufferSize ()I
 	public final fun getIceTcp ()Z
 	public final fun getIceUdp ()Z
@@ -294,7 +323,7 @@ public final class krtc/sfu/SfuLinkStats {
 }
 
 public final class krtc/sfu/SfuMetrics {
-	public fun <init> (IIJJJJJJJJJJJJJJJJJLjava/util/List;)V
+	public fun <init> (IIJJJJJJJJJJJJJJJJJJJJLjava/util/List;)V
 	public final fun component1 ()I
 	public final fun component10 ()J
 	public final fun component11 ()J
@@ -307,7 +336,10 @@ public final class krtc/sfu/SfuMetrics {
 	public final fun component18 ()J
 	public final fun component19 ()J
 	public final fun component2 ()I
-	public final fun component20 ()Ljava/util/List;
+	public final fun component20 ()J
+	public final fun component21 ()J
+	public final fun component22 ()J
+	public final fun component23 ()Ljava/util/List;
 	public final fun component3 ()J
 	public final fun component4 ()J
 	public final fun component5 ()J
@@ -315,11 +347,14 @@ public final class krtc/sfu/SfuMetrics {
 	public final fun component7 ()J
 	public final fun component8 ()J
 	public final fun component9 ()J
-	public final fun copy (IIJJJJJJJJJJJJJJJJJLjava/util/List;)Lkrtc/sfu/SfuMetrics;
-	public static synthetic fun copy$default (Lkrtc/sfu/SfuMetrics;IIJJJJJJJJJJJJJJJJJLjava/util/List;ILjava/lang/Object;)Lkrtc/sfu/SfuMetrics;
+	public final fun copy (IIJJJJJJJJJJJJJJJJJJJJLjava/util/List;)Lkrtc/sfu/SfuMetrics;
+	public static synthetic fun copy$default (Lkrtc/sfu/SfuMetrics;IIJJJJJJJJJJJJJJJJJJJJLjava/util/List;ILjava/lang/Object;)Lkrtc/sfu/SfuMetrics;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBytesIn ()J
 	public final fun getBytesOut ()J
+	public final fun getDataMessagesDropped ()J
+	public final fun getDataMessagesIn ()J
+	public final fun getDataMessagesOut ()J
 	public final fun getDroppedOverload ()J
 	public final fun getDtlsConnected ()J
 	public final fun getDtlsFailed ()J

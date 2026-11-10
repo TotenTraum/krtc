@@ -69,7 +69,7 @@ internal fun SfuMetrics.toJson(): String = buildString {
         "participants" to participants, "rooms" to rooms, "rtpIn" to rtpIn, "rtpOut" to rtpOut,
         "bytesIn" to bytesIn, "bytesOut" to bytesOut, "rtcpIn" to rtcpIn, "rtcpOut" to rtcpOut,
         "srtpFailures" to srtpFailures, "droppedOverload" to droppedOverload, "keyframeRequests" to keyframeRequests,
-        "nacksAnswered" to nacksAnswered, "nacksSent" to nacksSent, "rtxRecovered" to rtxRecovered, "stunRequests" to stunRequests, "stunRejected" to stunRejected,
+        "nacksAnswered" to nacksAnswered, "nacksSent" to nacksSent, "rtxRecovered" to rtxRecovered, "dataMessagesIn" to dataMessagesIn, "dataMessagesOut" to dataMessagesOut, "dataMessagesDropped" to dataMessagesDropped, "stunRequests" to stunRequests, "stunRejected" to stunRejected,
         "dtlsConnected" to dtlsConnected, "dtlsFailed" to dtlsFailed, "unknownSource" to unknownSource,
     )
     fields.forEach { (k, v) -> append('"').append(k).append("\":").append(v).append(',') }

@@ -2,6 +2,10 @@ package krtc.client
 
 import krtc.core.MediaStreamTrack
 import krtc.core.PeerConnectionFactory
+import krtc.core.RTCDataChannel
+import krtc.core.RTCDataChannelInit
+import krtc.core.RTCDataChannelMessage
+import krtc.core.RTCDataChannelState
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpReceiver
@@ -58,6 +62,7 @@ class FakePeerConnection : RTCPeerConnection {
         remoteDescription = description
         for (m in SessionDescription.parse(description.sdp).media) {
             val mid = m.mid ?: continue
+            if (m.type == "application") continue // data channels have no transceiver
             val t = transceivers.firstOrNull { it.mid == mid } ?: FakeTransceiver(mid, m.type).also { transceivers += it }
             val wasSending = t.remoteDirection == Direction.SENDONLY || t.remoteDirection == Direction.SENDRECV
             t.remoteDirection = m.direction
@@ -71,6 +76,12 @@ class FakePeerConnection : RTCPeerConnection {
         val offer = SessionDescription.parse(requireNotNull(remoteDescription).sdp)
         val lines = mutableListOf("v=0", "o=- 1 1 IN IP4 127.0.0.1", "s=-", "t=0 0", "a=group:BUNDLE " + offer.media.joinToString(" ") { it.mid!! })
         for (m in offer.media) {
+            if (m.type == "application") {
+                lines += "m=application 9 UDP/DTLS/SCTP webrtc-datachannel"
+                lines += "a=mid:${m.mid}"
+                lines += "a=sctp-port:5000"
+                continue
+            }
             val t = transceivers.first { it.mid == m.mid }
             val wantsSend = t.direction == RTCRtpTransceiverDirection.SENDONLY || t.direction == RTCRtpTransceiverDirection.SENDRECV
             val wantsRecv = t.direction == RTCRtpTransceiverDirection.RECVONLY || t.direction == RTCRtpTransceiverDirection.SENDRECV
@@ -101,12 +112,36 @@ class FakePeerConnection : RTCPeerConnection {
 
     override fun getTransceivers(): List<RTCRtpTransceiver> = transceivers.toList()
 
+    val dataChannels = mutableListOf<FakeDataChannel>()
+    override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel =
+        FakeDataChannel(label, init).also { dataChannels += it }
+    override val ondatachannel: SharedFlow<RTCDataChannel> = MutableSharedFlow()
+
     override suspend fun getStats(): Map<String, krtc.core.RTCStats> = emptyMap()
 
     override fun close() {
         closed = true
         state.value = RTCPeerConnectionState.CLOSED
     }
+}
+
+/** Records what is sent; the test opens it and injects received messages. */
+class FakeDataChannel(override val label: String, init: RTCDataChannelInit) : RTCDataChannel {
+    override val ordered = init.ordered
+    override val maxPacketLifeTime = init.maxPacketLifeTime
+    override val maxRetransmits = init.maxRetransmits
+    override val protocol = init.protocol
+    override val negotiated = init.negotiated
+    override val id: Int? = init.id
+    val state = MutableStateFlow(RTCDataChannelState.CONNECTING)
+    override val readyState: StateFlow<RTCDataChannelState> get() = state
+    override val bufferedAmount: Long = 0
+    val incoming = MutableSharedFlow<RTCDataChannelMessage>(extraBufferCapacity = 64)
+    override val onmessage: SharedFlow<RTCDataChannelMessage> get() = incoming
+    val sent = mutableListOf<RTCDataChannelMessage>()
+    override fun send(data: String) { check(state.value == RTCDataChannelState.OPEN); sent += RTCDataChannelMessage.Text(data) }
+    override fun send(data: ByteArray) { check(state.value == RTCDataChannelState.OPEN); sent += RTCDataChannelMessage.Binary(data) }
+    override fun close() { state.value = RTCDataChannelState.CLOSED }
 }
 
 class FakeFactory : PeerConnectionFactory {
