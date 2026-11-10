@@ -7,3 +7,7 @@ linkerOpts.osx = -ObjC -lc++ -framework Foundation -framework AVFoundation -fram
   -framework CoreVideo -framework OpenGL -framework Metal -framework MetalKit -framework QuartzCore -framework IOKit \
   -framework IOSurface -framework ScreenCaptureKit
 linkerOpts.linux = -ldl -lpthread -lm
+linkerOpts.ios = -ObjC -lc++ -framework Foundation -framework AVFoundation -framework Security -framework CoreAudio \
+  -framework AudioToolbox -framework UIKit -framework CoreMedia -framework CoreGraphics -framework VideoToolbox \
+  -framework CoreVideo -framework Metal -framework MetalKit -framework QuartzCore -framework GLKit -framework OpenGLES \
+  -framework Network

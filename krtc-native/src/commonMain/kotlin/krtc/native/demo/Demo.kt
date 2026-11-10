@@ -6,15 +6,14 @@ import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 /**
- * Demo: a native macOS client built on krtc-client + krtc-core + libwebrtc joins a krtc-sfu room, publishes a
- * test tone and a synthetic video track, and reports what it sends and receives.
- *   krtc-native-demo.kexe ws://127.0.0.1:8092 test native-client 30 [video/H264]
+ * Demo: a client built on krtc-client + krtc-core + libwebrtc joins a krtc-sfu room, publishes a test tone and
+ * a synthetic video track, and reports what it sends and receives. Same code on every platform:
+ *   krtc-native-demo.kexe ws://<sfu>:8092 test native-client 30 [video/H264]
  */
-public fun main(args: Array<String>): Unit = runBlocking {
+public suspend fun runDemo(args: Array<String>) {
     val url = args.getOrElse(0) { "ws://127.0.0.1:8080" }
     val room = args.getOrElse(1) { "test" }
     val name = args.getOrElse(2) { "native-client" }

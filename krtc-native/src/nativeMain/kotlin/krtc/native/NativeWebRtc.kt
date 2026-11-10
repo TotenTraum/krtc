@@ -14,17 +14,6 @@ import kotlinx.cinterop.toKString
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -90,87 +79,77 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Where a factory's audio comes from and goes to. */
-public enum class AudioDevice {
-    /** No sound hardware: the app pushes PCM (or a test tone is sent) and can pull the decoded mix. */
-    SYNTHETIC,
-
-    /** The system microphone and speaker (asks for microphone permission). */
-    PLATFORM,
-}
 
 /**
  * krtc-core backend on libwebrtc via the krtc C shim. One factory owns libwebrtc's threads.
  * [platformVideoCodecs] enables hardware codecs (VideoToolbox H.264/H.265 on Apple); [preferredVideoCodec]
  * (e.g. "video/H264") is moved to the front of every video transceiver's codec list when answering.
  */
-public class NativePeerConnectionFactory(
-    public val audioDevice: AudioDevice = AudioDevice.SYNTHETIC,
-    platformVideoCodecs: Boolean = true,
-    public val preferredVideoCodec: String? = null,
+public actual class NativePeerConnectionFactory actual constructor(
+    public actual val audioDevice: AudioDevice,
+    platformVideoCodecs: Boolean,
+    public actual val preferredVideoCodec: String?,
 ) : PeerConnectionFactory, AutoCloseable {
     internal val handle: CPointer<krtc_factory> =
         krtc_factory_create_with(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
             ?: error("libwebrtc factory creation failed")
 
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
-    public val videoCodecs: List<String>
+    public actual val videoCodecs: List<String>
         get() = krtc_factory_video_codecs(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }.split(' ').filter { it.isNotEmpty() }
 
     /** Synthetic audio: send a pulsed 440 Hz tone when the app pushes no PCM. */
-    public fun setTestTone(enabled: Boolean) {
+    public actual fun setTestTone(enabled: Boolean) {
         krtc_factory_set_test_tone(handle, if (enabled) 1 else 0)
     }
 
     /** Synthetic audio: queues 48 kHz mono PCM as the microphone; returns how many samples were accepted. */
-    public fun pushAudio(samples: ShortArray): Int = samples.usePinned { krtc_factory_push_audio(handle, it.addressOf(0), samples.size) }
+    public actual fun pushAudio(samples: ShortArray): Int = samples.usePinned { krtc_factory_push_audio(handle, it.addressOf(0), samples.size) }
 
     /** Synthetic audio: takes up to [out].size samples of the decoded remote mix (48 kHz mono). */
-    public fun pullAudio(out: ShortArray): Int = out.usePinned { krtc_factory_pull_audio(handle, it.addressOf(0), out.size) }
+    public actual fun pullAudio(out: ShortArray): Int = out.usePinned { krtc_factory_pull_audio(handle, it.addressOf(0), out.size) }
 
     /** Synthetic audio: RMS level (0..1) of the remote mix over the last 10 ms. */
-    public val outputLevel: Double get() = krtc_factory_output_level(handle)
+    public actual val outputLevel: Double get() = krtc_factory_output_level(handle)
 
-    override fun createPeerConnection(configuration: RTCConfiguration): RTCPeerConnection = NativePeerConnection(this)
+    actual override fun createPeerConnection(configuration: RTCConfiguration): RTCPeerConnection = NativePeerConnection(this)
 
     /** A microphone-less audio track (the factory uses a dummy audio device). */
-    public fun createAudioTrack(id: String = "audio"): NativeTrack =
+    public actual fun createAudioTrack(id: String): NativeTrack =
         NativeTrack(krtc_factory_create_audio_track(handle, id) ?: error("audio track creation failed"))
 
     /** A synthetic video track (moving square), so no camera access is needed. */
-    public fun createTestVideoTrack(id: String = "video", width: Int = 640, height: Int = 360, fps: Int = 15): NativeTrack =
+    public actual fun createTestVideoTrack(id: String, width: Int, height: Int, fps: Int): NativeTrack =
         NativeTrack(krtc_factory_create_test_video_track(handle, id, width, height, fps) ?: error("video track creation failed"))
 
-    override fun close() {
+    actual override fun close() {
         krtc_factory_release(handle)
     }
 }
 
-public class NativeTrack internal constructor(internal val handle: CPointer<krtc_track>) : MediaStreamTrack {
-    override val id: String = krtc_track_id(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }
-    override val kind: String = if (krtc_track_is_video(handle) != 0) "video" else "audio"
-    override var enabled: Boolean
+public actual class NativeTrack internal constructor(internal val handle: CPointer<krtc_track>) : MediaStreamTrack {
+    actual override val id: String = krtc_track_id(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }
+    actual override val kind: String = if (krtc_track_is_video(handle) != 0) "video" else "audio"
+    actual override var enabled: Boolean
         get() = krtc_track_enabled(handle) != 0
         set(value) = krtc_track_set_enabled(handle, if (value) 1 else 0)
 
-    override fun stop() {
+    actual override fun stop() {
         enabled = false
     }
 
     /** For received video: frames delivered so far and the last frame size. */
-    public fun videoStats(): VideoStats = memScoped {
+    public actual fun videoStats(): NativeVideoStats = memScoped {
         val frames = alloc<LongVar>()
         val w = alloc<IntVar>()
         val h = alloc<IntVar>()
         krtc_track_video_stats(handle, frames.ptr, w.ptr, h.ptr)
-        VideoStats(frames.value, w.value, h.value)
+        NativeVideoStats(frames.value, w.value, h.value)
     }
 
-    public fun release() {
+    public actual fun release() {
         krtc_track_release(handle)
     }
-
-    public data class VideoStats(val frames: Long, val width: Int, val height: Int)
 }
 
 private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpSender {
@@ -216,13 +195,6 @@ private val eventCallback = staticCFunction { user: COpaquePointer?, event: Int,
     user!!.asStableRef<NativePeerConnection>().get().onEvent(event, state, transceiver, track)
 }
 
-private fun JsonElement.toKotlin(): Any? = when (this) {
-    is JsonNull -> null
-    is JsonPrimitive -> if (isString) content else booleanOrNull ?: longOrNull ?: doubleOrNull ?: content
-    is JsonArray -> map { it.toKotlin() }
-    is JsonObject -> mapValues { it.value.toKotlin() }
-}
-
 internal class NativePeerConnection(private val factory: NativePeerConnectionFactory) : RTCPeerConnection {
     private val self = StableRef.create(this)
     private val handle: CPointer<krtc_pc> = krtc_pc_create(factory.handle, eventCallback, self.asCPointer()) ?: error("peer connection creation failed")
@@ -263,22 +235,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
 
     override suspend fun getStats(): Map<String, RTCStats> {
         val json = call { krtc_pc_get_stats(handle, doneCallback, it) } ?: return emptyMap()
-        // libwebrtc's RTCStatsReport::ToJson() is an array of stats objects; accept an id-keyed object too.
-        val root = Json.parseToJsonElement(json)
-        val objects = when (root) {
-            is JsonArray -> root.map { it.jsonObject }
-            is JsonObject -> root.map { (id, v) -> JsonObject(v.jsonObject + ("id" to JsonPrimitive(id))) }
-            else -> emptyList()
-        }
-        return objects.associate { o ->
-            val id = o["id"]?.jsonPrimitive?.content ?: ""
-            id to RTCStats(
-                id = id,
-                type = o["type"]?.jsonPrimitive?.content ?: "",
-                timestamp = o["timestamp"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-                members = o.filterKeys { it != "id" && it != "type" && it != "timestamp" }.mapValues { (_, v) -> v.toKotlin() },
-            )
-        }
+        return parseStatsReport(json)
     }
 
     override suspend fun createAnswer(): RTCSessionDescription =

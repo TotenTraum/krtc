@@ -1,6 +1,6 @@
 # ADR-0014. Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc
 
-- Статус: Принято для macOS arm64 и Linux arm64: звонок нативного клиента с Chrome через `krtc-sfu` работает (см. «Звонок» и «Linux»). Windows, iOS и Android не проверены
+- Статус: Принято для macOS arm64, Linux arm64 и x64, iOS (симулятор; устройство — только сборка), desktop JVM и Android arm64: звонок с Chrome через `krtc-sfu` работает на каждой (см. «Звонок», «Linux», «iOS», «JVM и Android»). Windows не проверен
 - Дата: 2026-11-10
 - Проверяет: [ADR-0001](0001-engine-libwebrtc.md), [ADR-0002](0002-binding-c-abi-shim.md), [ADR-0008](0008-libwebrtc-versioning.md), [ADR-0012](0012-kmp-client.md)
 
@@ -59,9 +59,9 @@
 
 ## Linux
 
-Linux arm64 проверен в Docker на маке (2026-11-10): сборка LiveKit `webrtc-linux-arm64-release.zip` (164 МБ, SHA-256 `e87dff71…b5d13c5f`).
+Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сборки LiveKit `webrtc-linux-arm64-release.zip` (164 МБ, SHA-256 `e87dff71…b5d13c5f`) и `webrtc-linux-x64-release.zip` (148 МБ, SHA-256 `2ece73b9…443ac0bd`). x64 собирается и запускается в amd64-контейнере (эмуляция); прослойка компилируется ~4 минуты, исполняемый файл кросс-компилирует Kotlin/Native.
 
-**Сборка прослойки.** В контейнере `krtc-native/docker/Dockerfile` (Debian bookworm, clang 21 с apt.llvm.org) скриптом `docker-build-shim.sh`. Кодеки — `krtc_linux.cpp`: VP8 и VP9 (libvpx), H.264 (OpenH264 и FFmpeg), AV1 (libaom и dav1d).
+**Сборка прослойки.** В контейнере `krtc-native/docker/Dockerfile` (Debian bookworm, clang 21 с apt.llvm.org) скриптом `docker-build-shim.sh`. Кодеки — `krtc_software.cpp`: VP8 и VP9 (libvpx), H.264 (OpenH264 и FFmpeg), AV1 (libaom и dav1d).
 
 **Три проблемы линковки с Kotlin/Native и их решения:**
 
@@ -78,16 +78,37 @@ Linux arm64 проверен в Docker на маке (2026-11-10): сборка 
 | Направление | Результат |
 |---|---|
 | Соединение | ICE и DTLS-SRTP прошли через NAT Docker (кандидат peer-reflexive) |
-| Linux → Chrome | H.264 (OpenH264) 640×360, 15 кадров/с, потерь 0; тон доходит, RMS в Chrome ~0,15–0,23 |
+| Linux → Chrome | arm64 и x64: H.264 (OpenH264) 640×360, 14–15 кадров/с, потерь 0; тон доходит, RMS в Chrome ~0,15–0,3 |
 | Chrome → Linux | Видео 640×360, затем 1280×720, ~15 кадров/с; Opus ~37 пакетов/с, уровень ~0,1 |
 
 Выход: изоляция символов, задуманная «для продукта», понадобилась уже сейчас. На macOS её стоит сделать тем же способом (`ld -r` + `-exported_symbols_list`), тогда клиент и нативный SFU можно будет линковать в один бинарь.
+
+## iOS
+
+Сборки LiveKit `webrtc-ios-simulator-arm64-release.zip` (SHA-256 `3a1e245f…7d8d240a`) и `webrtc-ios-device-arm64-release.zip` (`a4297461…d86428a3`), обе с системной `libc++`, как на macOS. Прослойка — тот же `krtc_apple.mm` (VideoToolbox), `build-shim.sh … ios-simulator | ios`; таргеты `iosSimulatorArm64` и `iosArm64`, фреймворки iOS в `linkerOpts.ios`.
+
+- Единственная правка: в iOS-сборке `AudioDeviceModule::GetPlayoutAudioParameters`/`GetRecordAudioParameters` — чисто виртуальные (`#if WEBRTC_IOS`), синтетическое устройство их реализует.
+- Демо — исполняемый файл Kotlin/Native, запускается в симуляторе через `xcrun simctl spawn` без приложения.
+- Звонок из симулятора (iPhone 17 Pro, iOS 26): H.264 через VideoToolbox 640×360, ~14 кадров/с, потерь 0; тон доходит; видео Chrome 1280×720 и Opus принимаются.
+- `iosArm64` (устройство) собирается и линкуется, на телефоне не запускался.
+
+## JVM и Android
+
+По ADR-0002 — один JNI-слой поверх того же `krtc.h`: `krtc_jni.cpp` (C++) и `Jni.kt` + `JniWebRtc.kt` в общем source set `jvmAndAndroidMain`. Публичный API общий для всех платформ: `NativePeerConnectionFactory` и `NativeTrack` объявлены `expect` в `commonMain`, поэтому приложение создаёт бэкенд прямо из общего кода. Демо (`runDemo`) тоже общее.
+
+- **Библиотека** `libkrtc_jni` (`build-jni.sh`) экспортирует только `Java_krtc_native_*` и `JNI_OnLoad`; libwebrtc, её C++-рантайм и BoringSSL остаются внутри — это и есть изоляция символов на macOS для JVM.
+- **Desktop JVM (macOS arm64):** dylib лежит в jar (`krtc/native/macos-arm64/`) и распаковывается при загрузке. Звонок: H.264 (VideoToolbox) 640×360 без потерь, тон доходит, видео Chrome 1280×720 принимается.
+- **Android arm64:** сборка LiveKit `webrtc-android-arm64-release.zip` (SHA-256 `1e481a9b…5b5b68f3`) собрана с `libc++` NDK; прослойка и `.so` — NDK r29, `libc++_static`, AAR несёт `jni/arm64-v8a/libkrtc_jni.so` (21 МБ). Кодеки — программные из `krtc_software.cpp`: в этой сборке только VP8 и AV1 (H.264 и VP9 у LiveKit на Android рассчитаны на MediaCodec через Java-классы `org.webrtc`, их пока не подключали).
+- **Совместимость `libc++`:** libwebrtc для Android собрана против более новой `libc++` из Chromium и ссылается на `std::__ndk1::__hash_memory`, которого нет в NDK r29. Прослойка определяет его тем же алгоритмом, что и запасной вариант в новых заголовках (`krtc_android.cpp`); `.so` линкуется с `--no-undefined`, так что других пропусков нет.
+- **Звонок** из эмулятора (Android 16, arm64, `krtc-native-android-demo`): VP8 640×360, 15 кадров/с, потерь 0; тон доходит (RMS в Chrome ~0,13–0,17); видео Chrome 1280×720 и Opus принимаются, уровень ~0,106.
+- **Пакет `krtc.native`:** `native` — ключевое слово Java. Kotlin и JNI это не мешает, но из Java классы недоступны и такое имя нельзя взять namespace Android-приложения. Перед публикацией пакет стоит переименовать.
 
 ## Что не проверено
 
 - **Системное аудиоустройство** (`AudioDevice.PLATFORM`): собирается, в звонке не проверялось, чтобы не шуметь.
 - **Simulcast H.264 через VideoToolbox**: идёт только один слой из трёх; не разбирались.
-- **Linux x64** (сборка LiveKit есть, путь тот же), **Windows, iOS, Android.**
+- **Windows**; **iOS на устройстве**; **desktop JVM на Linux и Windows** (нужны `libkrtc_jni` под них).
+- **Android:** MediaCodec (H.264, аппаратные кодеки), камера, системное аудио (Java-классы `org.webrtc`), ABI кроме arm64-v8a.
 - **Системное аудио на Linux** (PulseAudio/ALSA).
 
 ## Решения по итогам
@@ -98,5 +119,7 @@ Linux arm64 проверен в Docker на маке (2026-11-10): сборка 
    - выключен экспорт символов libwebrtc;
    - на Linux прослойка собирается тем же clang и встроенной `libc++`.
 3. **Следующие шаги для клиента:**
-   - изоляция символов и на macOS;
-   - Linux x64, затем iOS и Android на тех же готовых сборках.
+   - изоляция символов и для Kotlin/Native на macOS/iOS (как на Linux);
+   - Android: MediaCodec и камера через Java-классы `org.webrtc`, остальные ABI;
+   - Windows (сборки LiveKit `win-x64`/`win-arm64` есть);
+   - переименовать пакет `krtc.native`.

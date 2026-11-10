@@ -91,6 +91,11 @@ public:
     int32_t MicrophoneMuteIsAvailable(bool *a) override { *a = false; return 0; }
     int32_t SetMicrophoneMute(bool) override { return -1; }
     int32_t MicrophoneMute(bool *) const override { return -1; }
+#if defined(WEBRTC_IOS)
+    // Pure virtual only on iOS; libwebrtc asks for them when it configures its audio session.
+    int GetPlayoutAudioParameters(AudioParameters *params) const override { *params = AudioParameters(kRate, 1, kRate / 100); return 0; }
+    int GetRecordAudioParameters(AudioParameters *params) const override { *params = AudioParameters(kRate, 1, kRate / 100); return 0; }
+#endif
     int32_t StereoPlayoutIsAvailable(bool *a) const override { *a = false; return 0; }
     int32_t SetStereoPlayout(bool enable) override { return enable ? -1 : 0; }
     int32_t StereoPlayout(bool *e) const override { *e = false; return 0; }

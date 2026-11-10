@@ -4,6 +4,6 @@ set -eu
 ARCH="$1"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM=linux/$( [ "$ARCH" = x64 ] && echo amd64 || echo arm64 )
-docker build -q --platform "$PLATFORM" -t krtc-linux-toolchain "$DIR/docker" >/dev/null
-docker run --rm --platform "$PLATFORM" -v "$DIR:/krtc-native" -w /krtc-native krtc-linux-toolchain \
+docker build -q --platform "$PLATFORM" -t "krtc-linux-toolchain:$ARCH" "$DIR/docker" >/dev/null
+docker run --rm --platform "$PLATFORM" -v "$DIR:/krtc-native" -w /krtc-native "krtc-linux-toolchain:$ARCH" \
     ./build-shim.sh ".deps/linux-$ARCH/linux-$ARCH-release" ".deps/build/linux-$ARCH"
