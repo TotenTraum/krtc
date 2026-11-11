@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+#include "api/audio/audio_processing.h"
+#include "api/audio/builtin_audio_processing_builder.h"
 #include "api/audio/create_audio_device_module.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
@@ -170,9 +172,41 @@ std::unique_ptr<SessionDescriptionInterface> Parse(const char *type, const char 
 struct krtc_factory {
     std::unique_ptr<Thread> network, worker, signaling;
     scoped_refptr<AudioDeviceModule> adm;
+    scoped_refptr<AudioProcessing> apm;
     bool synthetic_audio = false;
+    std::atomic<bool> echo_cancellation{true}, noise_suppression{true}, auto_gain_control{true};
     scoped_refptr<PeerConnectionFactoryInterface> factory;
 };
+
+namespace {
+/** Audio options for new microphone tracks; libwebrtc applies them to the processing when the track starts sending. */
+AudioOptions MicrophoneOptions(const krtc_factory *f) {
+    AudioOptions o;
+    o.echo_cancellation = f->echo_cancellation.load();
+    o.noise_suppression = f->noise_suppression.load();
+    o.auto_gain_control = f->auto_gain_control.load();
+    o.highpass_filter = true;
+    return o;
+}
+
+/**
+ * The adaptive digital gain (AGC2) follows the speech level whatever the device does; the voice engine sets
+ * echo cancellation, noise suppression and the analog AGC from the track's options, and leaves AGC2 alone.
+ */
+void ApplyProcessing(krtc_factory *f) {
+    if (!f->apm) return;
+    AudioProcessing::Config c = f->apm->GetConfig();
+    c.echo_canceller.enabled = f->echo_cancellation.load();
+    c.noise_suppression.enabled = f->noise_suppression.load();
+    c.noise_suppression.level = AudioProcessing::Config::NoiseSuppression::kHigh;
+    const bool agc = f->auto_gain_control.load();
+    c.gain_controller1.enabled = agc;
+    c.gain_controller2.enabled = agc;
+    c.gain_controller2.adaptive_digital.enabled = agc;
+    c.high_pass_filter.enabled = true;
+    f->apm->ApplyConfig(c);
+}
+}  // namespace
 
 namespace {
 class StatsCallback : public RTCStatsCollectorCallback {
@@ -287,14 +321,16 @@ KRTC_API krtc_factory *krtc_factory_create_with(int audio_mode, int platform_vid
     std::unique_ptr<VideoDecoderFactory> decoders = platform_video_codecs ? krtc::PlatformVideoDecoderFactory() : nullptr;
     if (!encoders) encoders = std::make_unique<VideoEncoderFactoryTemplate<LibvpxVp8EncoderTemplateAdapter>>();
     if (!decoders) decoders = std::make_unique<VideoDecoderFactoryTemplate<LibvpxVp8DecoderTemplateAdapter>>();
+    k->apm = BuiltinAudioProcessingBuilder().Build(CreateEnvironment());
     k->factory = CreatePeerConnectionFactory(
         k->network.get(), k->worker.get(), k->signaling.get(), k->adm,
         CreateBuiltinAudioEncoderFactory(), CreateBuiltinAudioDecoderFactory(),
-        std::move(encoders), std::move(decoders), nullptr, nullptr);
+        std::move(encoders), std::move(decoders), nullptr, k->apm);
     if (!k->factory) {
         delete k;
         return nullptr;
     }
+    ApplyProcessing(k);
     return k;
 }
 
@@ -302,6 +338,7 @@ KRTC_API void krtc_factory_release(krtc_factory *factory) {
     if (!factory) return;
     factory->factory = nullptr;
     factory->adm = nullptr;
+    factory->apm = nullptr;
     delete factory;
 }
 
@@ -331,8 +368,15 @@ KRTC_API char *krtc_factory_video_codecs(krtc_factory *f) {
     return Dup(out);
 }
 
+KRTC_API void krtc_factory_set_audio_processing(krtc_factory *f, int echo_cancellation, int noise_suppression, int auto_gain_control) {
+    f->echo_cancellation = echo_cancellation != 0;
+    f->noise_suppression = noise_suppression != 0;
+    f->auto_gain_control = auto_gain_control != 0;
+    ApplyProcessing(f);
+}
+
 KRTC_API krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *id) {
-    scoped_refptr<AudioSourceInterface> source = factory->factory->CreateAudioSource(AudioOptions());
+    scoped_refptr<AudioSourceInterface> source = factory->factory->CreateAudioSource(MicrophoneOptions(factory));
     scoped_refptr<AudioTrackInterface> track = factory->factory->CreateAudioTrack(id, source.get());
     return track ? new krtc_track{track, nullptr} : nullptr;
 }
@@ -748,6 +792,12 @@ KRTC_API int krtc_track_is_video(krtc_track *track) {
 KRTC_API int krtc_track_enabled(krtc_track *track) { return track->track->enabled() ? 1 : 0; }
 
 KRTC_API void krtc_track_set_enabled(krtc_track *track, int enabled) { track->track->set_enabled(enabled != 0); }
+
+KRTC_API void krtc_track_set_volume(krtc_track *track, double volume) {
+    if (track->track->kind() != MediaStreamTrackInterface::kAudioKind) return;
+    AudioSourceInterface *source = static_cast<AudioTrackInterface *>(track->track.get())->GetSource();
+    if (source) source->SetVolume(std::clamp(volume, 0.0, 10.0));
+}
 
 KRTC_API void krtc_track_video_stats(krtc_track *track, int64_t *frames, int *width, int *height) {
     if (track->track->kind() != MediaStreamTrackInterface::kVideoKind) {

@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** What the user picked on the join screen. */
@@ -32,6 +35,17 @@ sealed class CameraChoice {
     /** A camera by index in [MediaPlatform.cameras]; [id] is the platform's own id where it has one (Camera2). */
     data class Device(val index: Int, val name: String, val id: String = "") : CameraChoice()
 }
+
+/** Processing of the microphone (krtc-native `setAudioProcessing`); all on by default. */
+data class AudioProcessing(
+    val echoCancellation: Boolean = true,
+    val noiseSuppression: Boolean = true,
+    /** Adaptive input: keeps quiet and loud voices at one level. */
+    val autoGainControl: Boolean = true,
+)
+
+/** A chat line; [from] is null for the server, [mine] for this user's own lines. */
+data class ChatMessage(val from: String?, val text: String, val mine: Boolean = false)
 
 sealed class CallPhase {
     data object Idle : CallPhase()
@@ -60,6 +74,29 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
     val selfSpeaking: StateFlow<Boolean> = selfSpeakingFlow.asStateFlow()
     var settings: JoinSettings? = null
         private set
+
+    private val screenFlow = MutableStateFlow<MediaStreamTrack?>(null)
+    private val chatFlow = MutableStateFlow<List<ChatMessage>>(emptyList())
+    private val unreadFlow = MutableStateFlow(0)
+    private val chatOpenFlow = MutableStateFlow(false)
+    private val noticeFlow = MutableStateFlow<String?>(null)
+    private val volumesFlow = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private val processingFlow = MutableStateFlow(AudioProcessing())
+
+    /** This user's screen share, while it runs. */
+    val screen: StateFlow<MediaStreamTrack?> = screenFlow.asStateFlow()
+    val chat: StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
+
+    /** Chat lines that arrived while the chat was closed. */
+    val unread: StateFlow<Int> = unreadFlow.asStateFlow()
+    val chatOpen: StateFlow<Boolean> = chatOpenFlow.asStateFlow()
+
+    /** A short message for the user (e.g. a screen share that could not start); cleared by [dismissNotice]. */
+    val notice: StateFlow<String?> = noticeFlow.asStateFlow()
+
+    /** Playout volume per participant ([volumeKey]): 1 as received, 0 silent, up to [MAX_VOLUME]. */
+    val volumes: StateFlow<Map<String, Float>> = volumesFlow.asStateFlow()
+    val audioProcessing: StateFlow<AudioProcessing> = processingFlow.asStateFlow()
 
     // Where the platform allows it, system audio lives as long as the app: it lists the devices before a call, and
     // the chosen microphone and speakers stay chosen across calls. Otherwise (Android, test audio) every call gets a
@@ -113,22 +150,30 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
     private var factory: NativePeerConnectionFactory? = null
     private var callFactory: NativePeerConnectionFactory? = null // test audio only; closed when the call ends
     private var client: RoomClient? = null
+
+    /** The room client of the current call (tests and diagnostics). */
+    internal val roomClient: RoomClient? get() = client
     private var mic: NativeTrack? = null
     private var camera: NativeTrack? = null
     private var openedCamera: OpenedCamera? = null
     private var audioPlumbing: AutoCloseable? = null
     private var watch: Job? = null
+    private var joining: Job? = null
+    private var openedScreen: OpenedScreen? = null
+    private var screenTrack: NativeTrack? = null
+    private var screenAudioTrack: NativeTrack? = null
 
     fun join(settings: JoinSettings) {
         if (phaseFlow.value is CallPhase.Joining || phaseFlow.value is CallPhase.InCall) return
         this.settings = settings
         phaseFlow.value = CallPhase.Joining
-        scope.launch {
+        joining = scope.launch {
             try {
                 val shared = !settings.testAudio && platform.sharedSystemAudio
                 val f = if (shared) platform() else platform.createFactory(settings.testAudio).also { callFactory = it }
                 factory = f
                 if (settings.testAudio) f.setTestTone(true)
+                applyProcessing(f, processingFlow.value)
                 audioPlumbing = platform.startAudio(f, settings.testAudio)
                 mic = f.createAudioTrack("mic")
                 camera = when (val c = settings.camera) {
@@ -144,10 +189,25 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                 cameraOnFlow.value = camera != null
                 val c = RoomClient(settings.server, f)
                 client = c
+                c.setMediaState(audioMuted = false, videoMuted = camera == null)
                 c.join(settings.room, settings.name, microphone = mic, camera = camera)
                 watch = scope.launch {
-                    launch { c.participants.collect { participantsFlow.value = it } }
+                    val watched = HashSet<String>()
+                    launch {
+                        c.participants.collect { list ->
+                            participantsFlow.value = list
+                            for (p in list) if (watched.add(p.id)) launch { applyVolumes(p) }
+                        }
+                    }
                     launch { c.selfSpeaking.collect { selfSpeakingFlow.value = it } }
+                    launch {
+                        c.data.collect { d ->
+                            if (d.topic != CHAT_TOPIC || !d.reliable) return@collect
+                            val name = d.from?.let { id -> c.participants.value.firstOrNull { it.id == id }?.name ?: id }
+                            chatFlow.update { it + ChatMessage(name, d.payload.decodeToString()) }
+                            if (!chatOpenFlow.value) unreadFlow.update { it + 1 }
+                        }
+                    }
                     c.state.collectLatest { s ->
                         when (s) {
                             is RoomState.Connected -> phaseFlow.value = CallPhase.InCall(s.room)
@@ -156,6 +216,8 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                         }
                     }
                 }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c // the call ended while joining: end() released everything
             } catch (t: Throwable) {
                 end(t.message ?: t.toString())
             }
@@ -166,13 +228,139 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         val track = mic ?: return
         track.enabled = !track.enabled
         micOnFlow.value = track.enabled
+        announceMediaState()
     }
 
     fun toggleCamera() {
         val track = camera ?: return
-        track.enabled = !track.enabled // a disabled track sends black frames
+        track.enabled = !track.enabled // a disabled track sends black frames; the others show the camera as off
         cameraOnFlow.value = track.enabled
+        announceMediaState()
     }
+
+    private fun announceMediaState() {
+        val c = client ?: return
+        scope.launch { runCatching { c.setMediaState(audioMuted = !micOnFlow.value, videoMuted = camera == null || !cameraOnFlow.value) } }
+    }
+
+    // ---------------------------------------------------------------- screen share
+
+    /** Displays and windows to share. */
+    fun screens(): List<ScreenChoice> = platform.screens()
+
+    /** Shares [choice] (with the system's sound if [withAudio]); replaces a running share. */
+    fun startScreen(choice: ScreenChoice, withAudio: Boolean) {
+        val f = factory ?: return
+        val c = client ?: return
+        scope.launch {
+            val opened = runCatching { platform.openScreen(f, choice, withAudio) }.getOrNull()
+            if (opened == null) {
+                noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
+                return@launch
+            }
+            if (client !== c) return@launch opened.close() // the call ended meanwhile
+            val video = f.createVideoTrack(opened.video, "screen")
+            val audio = opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
+            if (withAudio && audio == null) noticeFlow.value = "Звук экрана на этой платформе недоступен, показ без звука"
+            runCatching { c.setScreen(video, audio) }.onFailure {
+                video.release(); audio?.release(); opened.close()
+                noticeFlow.value = "Не удалось начать показ экрана: ${it.message}"
+                return@launch
+            }
+            releaseScreen()
+            openedScreen = opened
+            screenTrack = video
+            screenAudioTrack = audio
+            screenFlow.value = video
+        }
+    }
+
+    fun stopScreen() {
+        val c = client
+        scope.launch {
+            runCatching { c?.setScreen(null) }
+            releaseScreen()
+        }
+    }
+
+    private fun releaseScreen() {
+        screenFlow.value = null
+        screenTrack?.release()
+        screenTrack = null
+        screenAudioTrack?.release()
+        screenAudioTrack = null
+        openedScreen?.close()
+        openedScreen = null
+    }
+
+    /** Starts or stops receiving [participant]'s screen share; while off it costs no bandwidth. */
+    fun setScreenSubscribed(participant: RemoteParticipant, enabled: Boolean) {
+        val c = client ?: return
+        scope.launch { runCatching { c.setSubscribed(participant.id, enabled) } }
+    }
+
+    // ---------------------------------------------------------------- chat
+
+    fun sendChat(text: String): Boolean {
+        val line = text.trim()
+        if (line.isEmpty()) return false
+        val c = client ?: return false
+        if (!c.sendData(line.encodeToByteArray(), CHAT_TOPIC)) {
+            noticeFlow.value = "Чат ещё не подключён"
+            return false
+        }
+        chatFlow.update { it + ChatMessage(settings?.name, line, mine = true) }
+        return true
+    }
+
+    fun setChatOpen(open: Boolean) {
+        chatOpenFlow.value = open
+        if (open) unreadFlow.value = 0
+    }
+
+    fun dismissNotice() {
+        noticeFlow.value = null
+    }
+
+    // ---------------------------------------------------------------- volume and processing
+
+    /** Sets the playout volume of a participant's voice, or of its screen's sound with [screen]. */
+    fun setVolume(participant: RemoteParticipant, volume: Float, screen: Boolean = false) {
+        volumesFlow.update { it + (volumeKey(participant.id, screen) to volume.coerceIn(0f, MAX_VOLUME)) }
+    }
+
+    /** Applies the chosen volumes to the participant's tracks, now and whenever they change. */
+    private suspend fun applyVolumes(p: RemoteParticipant) {
+        kotlinx.coroutines.coroutineScope {
+            for (screen in listOf(false, true)) launch {
+                val key = volumeKey(p.id, screen)
+                combine(if (screen) p.screenAudio else p.audio, volumesFlow.map { it[key] ?: 1f }) { t, v -> t to v }
+                    .collect { (t, v) -> (t as? NativeTrack)?.setVolume(v.toDouble()) }
+            }
+        }
+    }
+
+    /**
+     * Changes the microphone processing. Applies at once; during a call the microphone track is also recreated, so
+     * libwebrtc takes the new options for good.
+     */
+    fun setAudioProcessing(processing: AudioProcessing) {
+        processingFlow.value = processing
+        platformFactory?.let { applyProcessing(it, processing) }
+        val f = factory ?: return
+        applyProcessing(f, processing)
+        val c = client ?: return
+        val old = mic ?: return
+        val fresh = f.createAudioTrack("mic").also { it.enabled = old.enabled }
+        mic = fresh
+        scope.launch {
+            runCatching { c.setMicrophone(fresh) }
+            old.release()
+        }
+    }
+
+    private fun applyProcessing(f: NativePeerConnectionFactory, p: AudioProcessing) =
+        f.setAudioProcessing(p.echoCancellation, p.noiseSuppression, p.autoGainControl)
 
     fun leave() = end("left")
 
@@ -183,11 +371,18 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
 
     private fun end(reason: String?) {
         phaseFlow.value = CallPhase.Ended(reason)
+        joining?.cancel() // stops at its next suspension, before it uses what is released below
+        joining = null
         watch?.cancel()
         watch = null
         client?.leave()
         client = null
+        releaseScreen()
         participantsFlow.value = emptyList()
+        chatFlow.value = emptyList()
+        unreadFlow.value = 0
+        volumesFlow.value = emptyMap()
+        noticeFlow.value = null
         localVideoFlow.value = null
         openedCamera?.close()
         openedCamera = null
@@ -200,5 +395,13 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         factory = null
         callFactory?.close()
         callFactory = null
+    }
+
+    companion object {
+        /** Data channel topic of chat lines: UTF-8 text, sent reliably. */
+        const val CHAT_TOPIC: String = "chat"
+        const val MAX_VOLUME: Float = 3f
+
+        fun volumeKey(participantId: String, screen: Boolean): String = if (screen) "$participantId/screen" else participantId
     }
 }

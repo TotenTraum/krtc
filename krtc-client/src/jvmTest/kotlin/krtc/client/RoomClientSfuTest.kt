@@ -50,6 +50,31 @@ class RoomClientSfuTest {
     }
 
     @Test
+    fun mutedStateIsSeenByOthers(): Unit = runBlocking {
+        withTimeout(15_000) {
+            val alice = RoomClient(url, FakeFactory())
+            val bob = RoomClient(url, FakeFactory())
+            alice.setMediaState(audioMuted = true, videoMuted = false) // before joining: sent once connected
+            alice.join("mute", "Alice", microphone = FakeTrack("audio"))
+            alice.state.first { it is RoomState.Connected }
+            alice.selfAudioMuted.first { it }
+            bob.join("mute", "Bob", microphone = FakeTrack("audio"))
+            val aliceAtBob = bob.participants.first { it.size == 1 }.single()
+            aliceAtBob.audioMuted.first { it }
+            alice.setMediaState(audioMuted = false, videoMuted = true)
+            aliceAtBob.audioMuted.first { !it }
+            aliceAtBob.videoMuted.first { it }
+
+            // Unsubscribing from a screen share is accepted and reflected locally.
+            val bobAtAlice = alice.participants.first { it.size == 1 }.single()
+            alice.setSubscribed(bobAtAlice.id, enabled = false)
+            assertEquals(false, bobAtAlice.screenSubscribed.value)
+            alice.leave()
+            bob.leave()
+        }
+    }
+
+    @Test
     fun twoClientsSeeEachOthersMedia(): Unit = runBlocking {
         withTimeout(15_000) {
             val alice = RoomClient(url, FakeFactory())

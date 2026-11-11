@@ -1,11 +1,14 @@
 public final class krtc/client/RemoteParticipant {
 	public final fun getAudio ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getAudioMuted ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getId ()Ljava/lang/String;
 	public final fun getName ()Ljava/lang/String;
 	public final fun getScreen ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getScreenAudio ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getScreenSubscribed ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSpeaking ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getVideo ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getVideoMuted ()Lkotlinx/coroutines/flow/StateFlow;
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -17,7 +20,9 @@ public final class krtc/client/RoomClient {
 	public final fun getDataOpen ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getParticipants ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getPeerConnection ()Lkrtc/core/RTCPeerConnection;
+	public final fun getSelfAudioMuted ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSelfSpeaking ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getSelfVideoMuted ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun join (Ljava/lang/String;Ljava/lang/String;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun join$default (Lkrtc/client/RoomClient;Ljava/lang/String;Ljava/lang/String;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -26,9 +31,12 @@ public final class krtc/client/RoomClient {
 	public final fun sendData ([BLjava/lang/String;Ljava/util/List;Z)Z
 	public static synthetic fun sendData$default (Lkrtc/client/RoomClient;[BLjava/lang/String;Ljava/util/List;ZILjava/lang/Object;)Z
 	public final fun setCamera (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun setMediaState (ZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setMicrophone (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setScreen (Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun setScreen$default (Lkrtc/client/RoomClient;Lkrtc/core/MediaStreamTrack;Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun setSubscribed (Ljava/lang/String;ZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun setSubscribed$default (Lkrtc/client/RoomClient;Ljava/lang/String;ZZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun setVideoQuality (Ljava/lang/String;Lkrtc/client/VideoQuality;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

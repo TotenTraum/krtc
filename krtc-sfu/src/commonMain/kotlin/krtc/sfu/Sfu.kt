@@ -121,7 +121,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             Triple(p, session, room.add(p))
         }
         if (opened) eventFlow.tryEmit(SfuEvent.RoomOpened(roomName))
-        sink.send(ServerMessage.Welcome(p.id, roomName, others.map { PeerInfo(it.id, it.name) }))
+        sink.send(ServerMessage.Welcome(p.id, roomName, others.map { PeerInfo(it.id, it.name, it.announcedAudioMuted, it.announcedVideoMuted) }))
         val joined = ServerMessage.PeerJoined(p.id, p.name)
         others.forEach { it.sink.send(joined) }
         session.negotiate()
@@ -142,6 +142,19 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             }
             ClientMessage.RestartIce -> restartIce(p)
             ClientMessage.Renegotiate -> sessions[p.id]?.takeIf { it.participant === p }?.negotiate()
+            is ClientMessage.MediaState -> {
+                p.selfAudioMuted = message.audioMuted
+                p.selfVideoMuted = message.videoMuted
+                announceMediaState(p)
+            }
+            is ClientMessage.Subscribe -> {
+                val feedKey = when (message.feed) {
+                    ClientMessage.Subscribe.FEED_CAMERA -> message.peer
+                    ClientMessage.Subscribe.FEED_SCREEN -> message.peer + "/screen"
+                    else -> return
+                }
+                p.room.shard.execute { p.room.setPaused(p, feedKey, !message.enabled) }
+            }
         }
     }
 
@@ -184,7 +197,10 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             session to remaining
         }
         session.dtls?.close()
-        p.room.shard.execute { p.room.data.detach(p) }
+        p.room.shard.execute {
+            p.room.data.detach(p)
+            for (other in remaining) other.paused.removeAll(p.feeds.map { it.key }) // a later session with this id starts subscribed
+        }
         val left = ServerMessage.PeerLeft(p.id)
         remaining.forEach { it.sink.send(left); sessions[it.id]?.negotiate() }
         eventFlow.tryEmit(SfuEvent.ParticipantLeft(p.room.name, p.id, reason))
@@ -217,9 +233,11 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     /** Server-side mute: stops (or resumes) forwarding a participant's audio, camera video and/or screen share. */
     public fun setMuted(participantId: String, audio: Boolean? = null, video: Boolean? = null, screen: Boolean? = null): Boolean {
         val p = sessions[participantId]?.participant ?: return false
+        val before = p.announcedAudioMuted to p.announcedVideoMuted
         audio?.let { p.audioMuted = it }
         video?.let { p.videoMuted = it }
         screen?.let { p.screen.muted = it; p.screenAudioMuted = it }
+        if (before != (p.announcedAudioMuted to p.announcedVideoMuted)) announceMediaState(p)
         return true
     }
 
@@ -256,7 +274,19 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     private fun info(s: PeerSession): ParticipantInfo {
         val p = s.participant
-        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking, p.screen.publishing, p.screen.muted, p.screenAudioPublishing)
+        return ParticipantInfo(
+            p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking,
+            p.screen.publishing, p.screen.muted, p.screenAudioPublishing, p.selfAudioMuted, p.selfVideoMuted,
+        )
+    }
+
+    /** Tells the room (the participant included) whether [p]'s microphone and camera are muted. */
+    private fun announceMediaState(p: Participant) {
+        val audio = p.announcedAudioMuted
+        val video = p.announcedVideoMuted
+        val msg = ServerMessage.PeerState(p.id, audio, video)
+        p.room.members.forEach { it.sink.send(msg) }
+        eventFlow.tryEmit(SfuEvent.MediaStateChanged(p.room.name, p.id, audio, video))
     }
 
     private fun announceSpeaking(p: Participant, speaking: Boolean) {
@@ -386,7 +416,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 pub.feeds.filter { it.publishing && (it.kind == VideoKind.CAMERA || config.screenShare) }.map { it.key }
             }.toSet()
             inFlightScreenAudio = if (config.screenShare) inFlightSlots.filterNotNull().filter { it.screenAudioPublishing }.map { it.id }.toSet() else emptySet()
-            val sdp = offers.build(participant, sessionId, version, inFlightSlots).toString()
+            val sdp = offers.build(participant, sessionId, version, inFlightSlots, inFlightVideo, inFlightScreenAudio).toString()
             val screens = ArrayList<String>()
             val mids = buildMap {
                 inFlightSlots.forEachIndexed { i, pub ->

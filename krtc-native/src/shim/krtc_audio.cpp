@@ -48,7 +48,11 @@ public:
 
     // --- AudioDeviceModule ---
     int32_t ActiveAudioLayer(AudioLayer *layer) const override { *layer = kDummyAudio; return 0; }
-    int32_t RegisterAudioCallback(AudioTransport *cb) override { transport_ = cb; return 0; }
+    int32_t RegisterAudioCallback(AudioTransport *cb) override {
+        std::lock_guard<std::mutex> lock(callback_mu_);
+        transport_ = cb;
+        return 0;
+    }
     int32_t Init() override { initialized_ = true; return 0; }
     int32_t Terminate() override { StopThread(); initialized_ = false; return 0; }
     bool Initialized() const override { return initialized_; }
@@ -67,10 +71,11 @@ public:
     int32_t InitRecording() override { recording_init_ = true; return 0; }
     bool RecordingIsInitialized() const override { return recording_init_; }
     int32_t StartPlayout() override { playing_ = true; StartThread(); return 0; }
-    int32_t StopPlayout() override { playing_ = false; return 0; }
+    // libwebrtc may tear down what the callbacks use once Stop* returns: wait for a callback in progress.
+    int32_t StopPlayout() override { playing_ = false; std::lock_guard<std::mutex> lock(callback_mu_); return 0; }
     bool Playing() const override { return playing_; }
     int32_t StartRecording() override { recording_ = true; StartThread(); return 0; }
-    int32_t StopRecording() override { recording_ = false; return 0; }
+    int32_t StopRecording() override { recording_ = false; std::lock_guard<std::mutex> lock(callback_mu_); return 0; }
     bool Recording() const override { return recording_; }
     int32_t InitSpeaker() override { return 0; }
     bool SpeakerIsInitialized() const override { return true; }
@@ -136,6 +141,7 @@ private:
         int64_t sample = 0;
         while (running_) {
             next += std::chrono::milliseconds(10);
+            std::unique_lock<std::mutex> callback_lock(callback_mu_);
             AudioTransport *t = transport_;
             if (t && recording_) {
                 bool filled = false;
@@ -168,6 +174,7 @@ private:
                     while (played_.size() > kMaxBuffered) played_.pop_front();
                 }
             }
+            callback_lock.unlock();
             std::this_thread::sleep_until(next);
         }
     }
@@ -177,6 +184,7 @@ private:
     std::atomic<bool> playing_{false}, recording_{false}, running_{false}, tone_{false};
     std::atomic<double> level_{0};
     std::mutex mu_;
+    std::mutex callback_mu_; // held while the loop calls the transport
     std::deque<int16_t> captured_, played_;
     std::thread thread_;
 };

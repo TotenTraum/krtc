@@ -1,5 +1,7 @@
 package krtc.sfu
 
+import krtc.signaling.ClientMessage
+import krtc.signaling.PeerInfo
 import krtc.signaling.ServerMessage
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -37,6 +39,28 @@ class EmbeddingTest {
             assertEquals("alice", alice.id)
             assertEquals("r", alice.roomName)
             assertEquals(listOf("alice"), sfu.room("r")!!.participants.map { it.id })
+        }
+    }
+
+    @Test
+    fun mediaStateReachesTheRoom() = runTest {
+        Sfu(SfuConfig(udpPort = 0, shards = 1)).use { sfu ->
+            val aSink = Sink()
+            val bSink = Sink()
+            val a = sfu.join(JoinRequest("r", "a"), aSink)
+            val b = sfu.join(JoinRequest("r", "b"), bSink)
+            sfu.onMessage(a, ClientMessage.MediaState(audioMuted = true, videoMuted = false))
+            assertEquals(ServerMessage.PeerState(a.id, audioMuted = true, videoMuted = false), bSink.messages.filterIsInstance<ServerMessage.PeerState>().last())
+            assertEquals(ServerMessage.PeerState(a.id, audioMuted = true, videoMuted = false), aSink.messages.filterIsInstance<ServerMessage.PeerState>().last())
+            assertTrue(sfu.participant(a.id)!!.audioMutedByClient)
+
+            // The host's mute is announced too, and a newcomer learns the state in its welcome.
+            sfu.setMuted(b.id, video = true)
+            assertEquals(ServerMessage.PeerState(b.id, audioMuted = false, videoMuted = true), aSink.messages.filterIsInstance<ServerMessage.PeerState>().last())
+            val cSink = Sink()
+            sfu.join(JoinRequest("r", "c"), cSink)
+            val welcome = cSink.messages.filterIsInstance<ServerMessage.Welcome>().single()
+            assertEquals(setOf(PeerInfo(a.id, "a", audioMuted = true), PeerInfo(b.id, "b", videoMuted = true)), welcome.peers.toSet())
         }
     }
 
@@ -81,6 +105,7 @@ class EmbeddingTest {
                     SfuEvent.RoomOpened("room"),
                     SfuEvent.ParticipantJoined("room", a.id, "a"),
                     SfuEvent.ParticipantJoined("room", b.id, "b"),
+                    SfuEvent.MediaStateChanged("room", a.id, audioMuted = true, videoMuted = true),
                     SfuEvent.ParticipantLeft("room", b.id, "rule violation"),
                     SfuEvent.ParticipantLeft("room", a.id, "left"),
                     SfuEvent.RoomClosed("room"),

@@ -52,6 +52,9 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setAudioInput(index: Int): Boolean = Jni.factorySetAudioDevice(handle, false, index) == 0
     public actual fun setAudioOutput(index: Int): Boolean = Jni.factorySetAudioDevice(handle, true, index) == 0
 
+    public actual fun setAudioProcessing(echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean): Unit =
+        Jni.factorySetAudioProcessing(handle, echoCancellation, noiseSuppression, autoGainControl)
+
     public actual val videoCodecs: List<String> get() = Jni.factoryVideoCodecs(handle).split(' ').filter { it.isNotEmpty() }
 
     /** Synthetic audio: send a pulsed 440 Hz tone when the app pushes no PCM. */
@@ -168,11 +171,16 @@ public actual class NativeVideoSource internal constructor(internal val handle: 
 }
 
 public actual class NativeTrack internal constructor(internal val handle: Long) : MediaStreamTrack {
+    private val guard = Guarded(handle)
     actual override val id: String = Jni.trackId(handle)
     actual override val kind: String = if (Jni.trackIsVideo(handle)) "video" else "audio"
+
+    // After release (e.g. the call ended while a view still shows the track) these do nothing.
     actual override var enabled: Boolean
-        get() = Jni.trackEnabled(handle)
-        set(value) = Jni.trackSetEnabled(handle, value)
+        get() = guard.useOr(false) { Jni.trackEnabled(it) }
+        set(value) = guard.useOr(Unit) { Jni.trackSetEnabled(it, value) }
+
+    public actual fun setVolume(volume: Double): Unit = guard.useOr(Unit) { Jni.trackSetVolume(it, volume) }
 
     actual override fun stop() {
         enabled = false
@@ -181,7 +189,7 @@ public actual class NativeTrack internal constructor(internal val handle: Long) 
     /** For received video: frames delivered so far and the last frame size. */
     public actual fun videoStats(): NativeVideoStats {
         val out = LongArray(3)
-        Jni.trackVideoStats(handle, out)
+        guard.useOr(Unit) { Jni.trackVideoStats(it, out) }
         return NativeVideoStats(out[0], out[1].toInt(), out[2].toInt())
     }
 
@@ -189,15 +197,17 @@ public actual class NativeTrack internal constructor(internal val handle: Long) 
 
     @Synchronized
     public actual fun setFrameListener(listener: ((VideoFrame) -> Unit)?) {
-        val old = frameSink
-        // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
-        frameSink = Jni.trackSetFrameSink(handle, listener?.let { l -> Jni.FrameListener { w, h, argb, ts -> l(VideoFrame(w, h, argb, ts)) } })
-        if (old != 0L) Jni.frameSinkRelease(old)
+        guard.useOr(Unit) { h ->
+            val old = frameSink
+            // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
+            frameSink = Jni.trackSetFrameSink(h, listener?.let { l -> Jni.FrameListener { w, hh, argb, ts -> l(VideoFrame(w, hh, argb, ts)) } })
+            if (old != 0L) Jni.frameSinkRelease(old)
+        }
     }
 
     public actual fun release() {
         setFrameListener(null)
-        Jni.trackRelease(handle)
+        guard.release { Jni.trackRelease(it) }
     }
 }
 
@@ -205,7 +215,7 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
     @Volatile override var track: MediaStreamTrack? = null
 
     override suspend fun replaceTrack(withTrack: MediaStreamTrack?) {
-        check(Jni.transceiverSetSenderTrack(transceiver.handle, (withTrack as NativeTrack?)?.handle ?: 0L) == 0) { "replaceTrack failed" }
+        check(transceiver.guard.use { Jni.transceiverSetSenderTrack(it, (withTrack as NativeTrack?)?.handle ?: 0L) } == 0) { "replaceTrack failed" }
         track = withTrack
     }
 }
@@ -213,17 +223,18 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
 private class NativeReceiver(override val track: MediaStreamTrack) : RTCRtpReceiver
 
 internal class NativeTransceiver(internal val handle: Long, receiverTrack: NativeTrack) : RTCRtpTransceiver {
-    override val mid: String? get() = Jni.transceiverMid(handle)
+    internal val guard = Guarded(handle)
+    override val mid: String? get() = guard.useOr(null) { Jni.transceiverMid(it) }
     override var direction: RTCRtpTransceiverDirection
-        get() = RTCRtpTransceiverDirection.entries[Jni.transceiverDirection(handle)]
+        get() = RTCRtpTransceiverDirection.entries[guard.use { Jni.transceiverDirection(it) }]
         set(value) {
-            check(Jni.transceiverSetDirection(handle, value.ordinal) == 0) { "setDirection($value) failed" }
+            check(guard.use { Jni.transceiverSetDirection(it, value.ordinal) } == 0) { "setDirection($value) failed" }
         }
     override val sender: RTCRtpSender = NativeSender(this)
     override val receiver: RTCRtpReceiver = NativeReceiver(receiverTrack)
 
     fun release() {
-        Jni.transceiverRelease(handle)
+        guard.release { Jni.transceiverRelease(it) }
         (receiver.track as NativeTrack).release()
     }
 }
@@ -231,10 +242,14 @@ internal class NativeTransceiver(internal val handle: Long, receiverTrack: Nativ
 internal class NativePeerConnection(private val factory: NativePeerConnectionFactory) : RTCPeerConnection {
     private val lock = Any()
     private val transceivers = mutableMapOf<String, NativeTransceiver>() // by mid; guarded by lock
+
+    // Replaced by a newer OnTrack for the same mid. Released in close(), not on the signaling thread, which would wait
+    // for a caller that holds the old one while waiting for the signaling thread. Guarded by lock.
+    private val retired = mutableListOf<NativeTransceiver>()
     private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
     private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     private var closed = false
-    private val handle: Long = Jni.pcCreate(factory.handle, ::onEvent).also { check(it != 0L) { "peer connection creation failed" } }
+    private val guard = Guarded(Jni.pcCreate(factory.handle, ::onEvent).also { check(it != 0L) { "peer connection creation failed" } })
 
     private val channels = mutableListOf<NativeDataChannel>() // guarded by lock
     private val remoteChannels = MutableSharedFlow<RTCDataChannel>(replay = 16)
@@ -245,9 +260,9 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
 
     override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
         require(init.maxRetransmits == null || init.maxPacketLifeTime == null) { "maxRetransmits and maxPacketLifeTime are exclusive" }
-        val h = Jni.pcCreateDataChannel(
+        val h = guard.use { handle -> Jni.pcCreateDataChannel(
             handle, label, init.ordered, init.maxRetransmits ?: -1, init.maxPacketLifeTime ?: -1, init.protocol, init.negotiated, init.id ?: -1,
-        )
+        ) }
         require(h != 0L) { "createDataChannel('$label') failed" }
         return NativeDataChannel(h).also { synchronized(lock) { channels += it } }
     }
@@ -264,7 +279,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             EVENT_TRACK -> {
                 val t = NativeTransceiver(transceiver, NativeTrack(track))
                 val mid = t.mid
-                if (mid != null) synchronized(lock) { transceivers[mid]?.release(); transceivers[mid] = t }
+                if (mid != null) synchronized(lock) { transceivers.put(mid, t)?.let { retired += it } }
                 tracks.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
             }
         }
@@ -275,32 +290,32 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     }
 
     override suspend fun setRemoteDescription(description: RTCSessionDescription) {
-        call { Jni.pcSetRemoteDescription(handle, description.type.value, description.sdp, it) }
+        call { done -> guard.use { Jni.pcSetRemoteDescription(it, description.type.value, description.sdp, done) } }
         factory.preferredVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
-                if (t.receiver.track.kind == "video") Jni.transceiverPreferCodec(factory.handle, (t as NativeTransceiver).handle, mime)
+                if (t.receiver.track.kind == "video") (t as NativeTransceiver).guard.useOr(Unit) { Jni.transceiverPreferCodec(factory.handle, it, mime) }
             }
         }
     }
 
-    override suspend fun getStats(): Map<String, RTCStats> = call { Jni.pcGetStats(handle, it) }?.let(::parseStatsReport).orEmpty()
+    override suspend fun getStats(): Map<String, RTCStats> = call { done -> guard.use { Jni.pcGetStats(it, done) } }?.let(::parseStatsReport).orEmpty()
 
-    override suspend fun createAnswer(): RTCSessionDescription = RTCSessionDescription(RTCSdpType.ANSWER, call { Jni.pcCreateAnswer(handle, it) }!!)
+    override suspend fun createAnswer(): RTCSessionDescription = RTCSessionDescription(RTCSdpType.ANSWER, call { done -> guard.use { Jni.pcCreateAnswer(it, done) } }!!)
 
     override suspend fun setLocalDescription(description: RTCSessionDescription) {
-        call { Jni.pcSetLocalDescription(handle, description.type.value, description.sdp, it) }
+        call { done -> guard.use { Jni.pcSetLocalDescription(it, description.type.value, description.sdp, done) } }
         // As answerer libwebrtc sends with the offer's first codec; pick the preferred one explicitly.
         factory.preferredVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
-                if (t.receiver.track.kind == "video" && t.sender.track != null) Jni.transceiverSetSendCodec((t as NativeTransceiver).handle, mime)
+                if (t.receiver.track.kind == "video" && t.sender.track != null) (t as NativeTransceiver).guard.useOr(Unit) { Jni.transceiverSetSendCodec(it, mime) }
             }
         }
     }
 
-    override val localDescription: RTCSessionDescription? get() = Jni.pcLocalDescription(handle)?.let { RTCSessionDescription(RTCSdpType.ANSWER, it) }
-    override val remoteDescription: RTCSessionDescription? get() = Jni.pcRemoteDescription(handle)?.let { RTCSessionDescription(RTCSdpType.OFFER, it) }
+    override val localDescription: RTCSessionDescription? get() = guard.useOr(null) { Jni.pcLocalDescription(it) }?.let { RTCSessionDescription(RTCSdpType.ANSWER, it) }
+    override val remoteDescription: RTCSessionDescription? get() = guard.useOr(null) { Jni.pcRemoteDescription(it) }?.let { RTCSessionDescription(RTCSdpType.OFFER, it) }
 
-    override fun getTransceivers(): List<RTCRtpTransceiver> = synchronized(lock) {
+    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle -> synchronized(lock) {
         (0 until Jni.pcTransceiverCount(handle)).mapNotNull { i ->
             val h = Jni.pcTransceiverAt(handle, i).takeIf { it != 0L } ?: return@mapNotNull null
             val mid = Jni.transceiverMid(h)
@@ -311,7 +326,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             transceivers[mid]?.also { Jni.transceiverRelease(h) }
                 ?: NativeTransceiver(h, NativeTrack(Jni.transceiverReceiverTrack(h))).also { transceivers[mid] = it }
         }
-    }
+    } }
 
     override fun close() {
         synchronized(lock) {
@@ -319,8 +334,8 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             closed = true
         }
         synchronized(lock) { channels.toList().also { channels.clear() } }.forEach { it.release() }
-        Jni.pcRelease(handle)
-        synchronized(lock) { transceivers.values.forEach { it.release() }; transceivers.clear() }
+        guard.release { Jni.pcRelease(it) } // waits for calls in flight; later ones fail instead of touching freed memory
+        synchronized(lock) { (transceivers.values + retired).toList().also { transceivers.clear(); retired.clear() } }.forEach { it.release() }
         state.value = RTCPeerConnectionState.CLOSED
     }
 }

@@ -78,6 +78,9 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setAudioInput(index: Int): Boolean = krtc_factory_set_audio_device(handle, 0, index) == 0
     public actual fun setAudioOutput(index: Int): Boolean = krtc_factory_set_audio_device(handle, 1, index) == 0
 
+    public actual fun setAudioProcessing(echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean): Unit =
+        krtc_factory_set_audio_processing(handle, if (echoCancellation) 1 else 0, if (noiseSuppression) 1 else 0, if (autoGainControl) 1 else 0)
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public actual val videoCodecs: List<String>
         get() = krtc_factory_video_codecs(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }.split(' ').filter { it.isNotEmpty() }
@@ -220,12 +223,41 @@ private val frameCallback = staticCFunction { user: COpaquePointer?, width: Int,
     sink.listener(VideoFrame(width, height, sink.pixels, timestampUs))
 }
 
+/**
+ * A native handle that one thread may release while others still use it (leaving a call while an offer is being
+ * answered, a view detaching from a track): calls and [release] are mutually exclusive, so no call ever reaches freed
+ * memory. After release, [use] throws and [useOr] returns its default.
+ */
+internal class Guarded<T : kotlinx.cinterop.CPointed>(private val value: CPointer<T>) {
+    private val lock = SynchronizedObject()
+    private var released = false
+
+    fun <R> use(block: (CPointer<T>) -> R): R = synchronized(lock) {
+        check(!released) { "already closed" }
+        block(value)
+    }
+
+    fun <R> useOr(default: R, block: (CPointer<T>) -> R): R = synchronized(lock) { if (released) default else block(value) }
+
+    fun release(block: (CPointer<T>) -> Unit): Boolean = synchronized(lock) {
+        if (released) return false
+        released = true
+        block(value)
+        true
+    }
+}
+
 public actual class NativeTrack internal constructor(internal val handle: CPointer<krtc_track>) : MediaStreamTrack {
+    private val guard = Guarded(handle)
     actual override val id: String = krtc_track_id(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }
     actual override val kind: String = if (krtc_track_is_video(handle) != 0) "video" else "audio"
+
+    // After release (e.g. the call ended while a view still shows the track) these do nothing.
     actual override var enabled: Boolean
-        get() = krtc_track_enabled(handle) != 0
-        set(value) = krtc_track_set_enabled(handle, if (value) 1 else 0)
+        get() = guard.useOr(false) { krtc_track_enabled(it) != 0 }
+        set(value) = guard.useOr(Unit) { krtc_track_set_enabled(it, if (value) 1 else 0) }
+
+    public actual fun setVolume(volume: Double): Unit = guard.useOr(Unit) { krtc_track_set_volume(it, volume) }
 
     actual override fun stop() {
         enabled = false
@@ -236,23 +268,25 @@ public actual class NativeTrack internal constructor(internal val handle: CPoint
         val frames = alloc<LongVar>()
         val w = alloc<IntVar>()
         val h = alloc<IntVar>()
-        krtc_track_video_stats(handle, frames.ptr, w.ptr, h.ptr)
+        guard.useOr(Unit) { krtc_track_video_stats(it, frames.ptr, w.ptr, h.ptr) }
         NativeVideoStats(frames.value, w.value, h.value)
     }
 
     private var frameSink: StableRef<FrameSink>? = null
 
     public actual fun setFrameListener(listener: ((VideoFrame) -> Unit)?) {
-        val old = frameSink
-        frameSink = listener?.let { StableRef.create(FrameSink(it)) }
-        // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
-        krtc_track_set_frame_sink(handle, if (frameSink != null) frameCallback else null, frameSink?.asCPointer())
-        old?.dispose()
+        guard.useOr(Unit) { h ->
+            val old = frameSink
+            frameSink = listener?.let { StableRef.create(FrameSink(it)) }
+            // Replacing the sink is synchronous in libwebrtc: the old one gets no frames after this call.
+            krtc_track_set_frame_sink(h, if (frameSink != null) frameCallback else null, frameSink?.asCPointer())
+            old?.dispose()
+        }
     }
 
     public actual fun release() {
         setFrameListener(null)
-        krtc_track_release(handle)
+        guard.release { krtc_track_release(it) }
     }
 }
 
@@ -261,25 +295,26 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
 
     override suspend fun replaceTrack(withTrack: MediaStreamTrack?) {
         val native = withTrack as NativeTrack?
-        check(krtc_transceiver_set_sender_track(transceiver.handle, native?.handle) == 0) { "replaceTrack failed" }
+        check(transceiver.guard.use { krtc_transceiver_set_sender_track(it, native?.handle) } == 0) { "replaceTrack failed" }
         track = withTrack
     }
 }
 
 private class NativeReceiver(override val track: MediaStreamTrack) : RTCRtpReceiver
 
-internal class NativeTransceiver(internal val handle: CPointer<krtc_transceiver>, receiverTrack: NativeTrack) : RTCRtpTransceiver {
-    override val mid: String? get() = krtc_transceiver_mid(handle)?.let { p -> p.toKString().also { krtc_free(p) } }
+internal class NativeTransceiver(handle: CPointer<krtc_transceiver>, receiverTrack: NativeTrack) : RTCRtpTransceiver {
+    internal val guard = Guarded(handle)
+    override val mid: String? get() = guard.useOr(null) { krtc_transceiver_mid(it) }?.let { p -> p.toKString().also { krtc_free(p) } }
     override var direction: RTCRtpTransceiverDirection
-        get() = RTCRtpTransceiverDirection.entries[krtc_transceiver_direction(handle)]
+        get() = RTCRtpTransceiverDirection.entries[guard.use { krtc_transceiver_direction(it) }]
         set(value) {
-            check(krtc_transceiver_set_direction(handle, value.ordinal) == 0) { "setDirection($value) failed" }
+            check(guard.use { krtc_transceiver_set_direction(it, value.ordinal) } == 0) { "setDirection($value) failed" }
         }
     override val sender: RTCRtpSender = NativeSender(this)
     override val receiver: RTCRtpReceiver = NativeReceiver(receiverTrack)
 
     fun release() {
-        krtc_transceiver_release(handle)
+        guard.release { krtc_transceiver_release(it) }
         (receiver.track as NativeTrack).release()
     }
 }
@@ -306,8 +341,13 @@ private val eventCallback = staticCFunction { user: COpaquePointer?, event: Int,
 internal class NativePeerConnection(private val factory: NativePeerConnectionFactory) : RTCPeerConnection {
     private val self = StableRef.create(this)
     private val handle: CPointer<krtc_pc> = krtc_pc_create(factory.handle, eventCallback, self.asCPointer()) ?: error("peer connection creation failed")
+    private val guard = Guarded(handle)
     private val lock = SynchronizedObject()
     private val transceivers = mutableMapOf<String, NativeTransceiver>() // by mid; guarded by lock
+
+    // Replaced by a newer OnTrack for the same mid. Released in close(), not on the signaling thread, which would wait
+    // for a caller that holds the old one while waiting for the signaling thread. Guarded by lock.
+    private val retired = mutableListOf<NativeTransceiver>()
     private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
     private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     private var closed = false
@@ -323,10 +363,10 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
 
     override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
         require(init.maxRetransmits == null || init.maxPacketLifeTime == null) { "maxRetransmits and maxPacketLifeTime are exclusive" }
-        val h = krtc_pc_create_data_channel(
+        val h = guard.use { handle -> krtc_pc_create_data_channel(
             handle, label, if (init.ordered) 1 else 0, init.maxRetransmits ?: -1, init.maxPacketLifeTime ?: -1,
             init.protocol, if (init.negotiated) 1 else 0, init.id ?: -1,
-        ) ?: throw IllegalArgumentException("createDataChannel('$label') failed")
+        ) } ?: throw IllegalArgumentException("createDataChannel('$label') failed")
         return NativeDataChannel(h).also { synchronized(lock) { channels += it } }
     }
 
@@ -345,7 +385,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             KRTC_EVENT_TRACK.toInt() -> {
                 val t = NativeTransceiver(transceiver!!, NativeTrack(track!!))
                 val mid = t.mid
-                if (mid != null) synchronized(lock) { transceivers[mid]?.release(); transceivers[mid] = t }
+                if (mid != null) synchronized(lock) { transceivers.put(mid, t)?.let { retired += it } }
                 tracks.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
             }
         }
@@ -356,40 +396,40 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     }
 
     override suspend fun setRemoteDescription(description: RTCSessionDescription) {
-        call { krtc_pc_set_remote_description(handle, description.type.value, description.sdp, doneCallback, it) }
+        call { done -> guard.use { krtc_pc_set_remote_description(it, description.type.value, description.sdp, doneCallback, done) } }
         factory.preferredVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
-                if (t.receiver.track.kind == "video") krtc_transceiver_prefer_codec(factory.handle, (t as NativeTransceiver).handle, mime)
+                if (t.receiver.track.kind == "video") (t as NativeTransceiver).guard.useOr(Unit) { krtc_transceiver_prefer_codec(factory.handle, it, mime) }
             }
         }
     }
 
     override suspend fun getStats(): Map<String, RTCStats> {
-        val json = call { krtc_pc_get_stats(handle, doneCallback, it) } ?: return emptyMap()
+        val json = call { done -> guard.use { krtc_pc_get_stats(it, doneCallback, done) } } ?: return emptyMap()
         return parseStatsReport(json)
     }
 
     override suspend fun createAnswer(): RTCSessionDescription =
-        RTCSessionDescription(RTCSdpType.ANSWER, call { krtc_pc_create_answer(handle, doneCallback, it) }!!)
+        RTCSessionDescription(RTCSdpType.ANSWER, call { done -> guard.use { krtc_pc_create_answer(it, doneCallback, done) } }!!)
 
     override suspend fun setLocalDescription(description: RTCSessionDescription) {
-        call { krtc_pc_set_local_description(handle, description.type.value, description.sdp, doneCallback, it) }
+        call { done -> guard.use { krtc_pc_set_local_description(it, description.type.value, description.sdp, doneCallback, done) } }
         // As answerer libwebrtc sends with the offer's first codec; pick the preferred one explicitly
         // (RTCRtpEncodingParameters.codec). Not negotiated -> keep the default.
         factory.preferredVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
-                if (t.receiver.track.kind == "video" && t.sender.track != null) krtc_transceiver_set_send_codec((t as NativeTransceiver).handle, mime)
+                if (t.receiver.track.kind == "video" && t.sender.track != null) (t as NativeTransceiver).guard.useOr(Unit) { krtc_transceiver_set_send_codec(it, mime) }
             }
         }
     }
 
     override val localDescription: RTCSessionDescription?
-        get() = krtc_pc_local_description(handle)?.let { p -> RTCSessionDescription(RTCSdpType.ANSWER, p.toKString().also { krtc_free(p) }) }
+        get() = guard.useOr(null) { krtc_pc_local_description(it) }?.let { p -> RTCSessionDescription(RTCSdpType.ANSWER, p.toKString().also { krtc_free(p) }) }
 
     override val remoteDescription: RTCSessionDescription?
-        get() = krtc_pc_remote_description(handle)?.let { p -> RTCSessionDescription(RTCSdpType.OFFER, p.toKString().also { krtc_free(p) }) }
+        get() = guard.useOr(null) { krtc_pc_remote_description(it) }?.let { p -> RTCSessionDescription(RTCSdpType.OFFER, p.toKString().also { krtc_free(p) }) }
 
-    override fun getTransceivers(): List<RTCRtpTransceiver> = synchronized(lock) {
+    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle -> synchronized(lock) {
         val count = krtc_pc_transceiver_count(handle)
         (0 until count).mapNotNull { i ->
             val h = krtc_pc_transceiver_at(handle, i) ?: return@mapNotNull null
@@ -401,7 +441,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             transceivers[mid]?.also { krtc_transceiver_release(h) }
                 ?: NativeTransceiver(h, NativeTrack(krtc_transceiver_receiver_track(h)!!)).also { transceivers[mid] = it }
         }
-    }
+    } }
 
     override fun close() {
         synchronized(lock) {
@@ -410,8 +450,8 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
         }
         krtc_pc_set_data_channel_handler(handle, null, null)
         synchronized(lock) { channels.toList().also { channels.clear() } }.forEach { it.release() }
-        krtc_pc_release(handle)
-        synchronized(lock) { transceivers.values.forEach { it.release() }; transceivers.clear() }
+        guard.release { krtc_pc_release(it) } // waits for calls in flight; later ones fail instead of touching freed memory
+        synchronized(lock) { (transceivers.values + retired).toList().also { transceivers.clear(); retired.clear() } }.forEach { it.release() }
         self.dispose()
         state.value = RTCPeerConnectionState.CLOSED
     }

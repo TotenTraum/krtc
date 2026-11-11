@@ -80,6 +80,14 @@ public expect class NativePeerConnectionFactory(
     /** Switches the speakers or headphones ([audioOutputs] index); playout restarts on them. False if it failed. */
     public fun setAudioOutput(index: Int): Boolean
 
+    /**
+     * Processing of the microphone, all on by default: echo cancellation, noise suppression and automatic gain
+     * control (an adaptive digital gain that keeps quiet and loud voices at one level, plus the OS input volume on
+     * desktop). Applies at once and to microphone tracks created afterwards (with [AudioDevice.SYNTHETIC], to the
+     * pushed PCM).
+     */
+    public fun setAudioProcessing(echoCancellation: Boolean = true, noiseSuppression: Boolean = true, autoGainControl: Boolean = true)
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public val videoCodecs: List<String>
 
@@ -218,6 +226,9 @@ public expect class NativeTrack : MediaStreamTrack {
      * Null stops the frames.
      */
     public fun setFrameListener(listener: ((VideoFrame) -> Unit)?)
+
+    /** Received audio: playout volume from 0 (silent) to 10; 1 plays it as received. Ignored for other tracks. */
+    public fun setVolume(volume: Double)
 
     public fun release()
 }

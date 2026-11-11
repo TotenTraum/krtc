@@ -225,6 +225,12 @@ internal class DownlinkVideo {
     private val histTsOffset = LongArray(historySize)
     private val histPicOffsets = IntArray(historySize) // picIdOffset shl 8 or tl0Offset (low byte)
 
+    /** Forgets the layer, so forwarding resumes at the next key frame (after a pause); numbering stays continuous. */
+    internal fun restart() {
+        current = -1
+        target = -1
+    }
+
     /** Switches to [layer] at a key frame whose first packet has these source values. */
     internal fun switchTo(layer: Int, h: RtpHeader, d: Vp8.Descriptor?) {
         current = layer
@@ -292,6 +298,14 @@ internal class Participant(
 
     /** Server-side mute: the SFU stops forwarding this participant's audio / video. */
     @Volatile internal var audioMuted: Boolean = false
+
+    /** What the client says about itself (ClientMessage.MediaState): it muted its microphone / camera. */
+    @Volatile internal var selfAudioMuted: Boolean = false
+    @Volatile internal var selfVideoMuted: Boolean = false
+
+    /** The state the others see: muted by the client or by the server. */
+    internal val announcedAudioMuted: Boolean get() = audioMuted || selfAudioMuted
+    internal val announcedVideoMuted: Boolean get() = videoMuted || selfVideoMuted
 
     // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char). Replaced on ICE restart;
     // the previous pair stays valid until the client's checks switch to the new one.
@@ -367,6 +381,9 @@ internal class Participant(
     internal var uplinkScreenAudioSsrc = -1L
     internal val layers: Array<VideoLayer> get() = camera.layers
     internal val downlinks = HashMap<String, DownlinkVideo>() // by feed key
+
+    /** Feeds ([VideoFeed.key]) this participant stopped receiving (ClientMessage.Subscribe); a screen with its sound. */
+    internal val paused = HashSet<String>()
     private val feedBySsrc = HashMap<Long, VideoFeed>()
 
     /** Uplink transport-cc: arrival times of this participant's packets, fed back to it. */

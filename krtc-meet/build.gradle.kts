@@ -43,6 +43,11 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${libs.versions.coroutines.get()}")
         }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(project(":krtc-sfu-ktor"))
+            implementation(libs.ktor.server.cio)
+        }
     }
 }
 

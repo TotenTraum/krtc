@@ -135,7 +135,7 @@ internal class Room(
         val sendMicros = nowMicros()
         val out = shard.out
         for (sub in members) {
-            if (sub === from || from.id !in sub.receivingScreenAudio) continue
+            if (sub === from || from.id !in sub.receivingScreenAudio || from.screen.key in sub.paused) continue
             val k = sub.keys ?: continue
             val to = sub.remote ?: continue
             stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
@@ -165,7 +165,7 @@ internal class Room(
 
         val out = shard.out
         for (sub in members) {
-            if (sub === from || feed.key !in sub.receivingVideo) continue
+            if (sub === from || feed.key !in sub.receivingVideo || feed.key in sub.paused) continue
             val k = sub.keys ?: continue
             val to = sub.remote ?: continue
             val down = sub.downlinkFrom(feed.key)
@@ -194,6 +194,15 @@ internal class Room(
         val down = subscriber.downlinkFrom(feedKey)
         down.preferred = layer.coerceIn(0, MediaPlan.TOP_LAYER)
         down.target = -1 // re-evaluated on the next packet
+    }
+
+    /** Stops or resumes forwarding a feed ([VideoFeed.key]) to [subscriber]; it resumes at a key frame. */
+    internal fun setPaused(subscriber: Participant, feedKey: String, paused: Boolean) {
+        if (paused) {
+            if (subscriber.paused.add(feedKey)) subscriber.downlinks[feedKey]?.restart()
+        } else {
+            subscriber.paused.remove(feedKey)
+        }
     }
 
     /** Gives a packet to [sub] its own transport-wide sequence number (and remembers when it went out). */
@@ -444,7 +453,7 @@ internal class Room(
         val pubs = ArrayList<VideoFeed>()
         val downs = ArrayList<DownlinkVideo>()
         for ((feedKey, down) in sub.downlinks) {
-            if (feedKey !in sub.receivingVideo) continue
+            if (feedKey !in sub.receivingVideo || feedKey in sub.paused) continue
             pubs += feedByKey(snapshot, feedKey) ?: continue
             downs += down
         }

@@ -70,6 +70,11 @@ int krtc_factory_set_audio_device(krtc_factory *factory, int output, int index);
 /* The device in use (-1 if unknown, e.g. the OS default). */
 int krtc_factory_audio_device(krtc_factory *factory, int output);
 
+/* Processing of the microphone (all on by default): echo cancellation, noise suppression, and automatic gain
+ * control (adaptive digital gain, plus the OS input volume on desktop platforms). Applies at once and to
+ * microphone tracks created afterwards. */
+void krtc_factory_set_audio_processing(krtc_factory *factory, int echo_cancellation, int noise_suppression, int auto_gain_control);
+
 /* Video codecs this factory can send, as "video/VP8 video/H264 ..." (free with krtc_free). */
 char *krtc_factory_video_codecs(krtc_factory *factory);
 
@@ -183,6 +188,8 @@ char *krtc_track_id(krtc_track *track);
 int krtc_track_is_video(krtc_track *track);
 int krtc_track_enabled(krtc_track *track);
 void krtc_track_set_enabled(krtc_track *track, int enabled);
+/* Received audio tracks: playout volume, 0 (silent) to 10; 1 plays it as received. */
+void krtc_track_set_volume(krtc_track *track, double volume);
 /* Video tracks: frames delivered so far and the last frame size (attaches a counting sink on first use). */
 void krtc_track_video_stats(krtc_track *track, int64_t *frames, int *width, int *height);
 /* Video tracks: every frame, rotated upright, as ARGB (0xAARRGGBB ints, width × height, rows contiguous), on a

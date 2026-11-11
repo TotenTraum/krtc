@@ -118,6 +118,8 @@ internal object Jni {
     @JvmStatic external fun trackIsVideo(track: Long): Boolean
     @JvmStatic external fun trackEnabled(track: Long): Boolean
     @JvmStatic external fun trackSetEnabled(track: Long, enabled: Boolean)
+    @JvmStatic external fun trackSetVolume(track: Long, volume: Double)
+    @JvmStatic external fun factorySetAudioProcessing(factory: Long, echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean)
     @JvmStatic external fun trackVideoStats(track: Long, out: LongArray)
     @JvmStatic external fun trackSetFrameSink(track: Long, listener: FrameListener?): Long
     @JvmStatic external fun frameSinkRelease(sink: Long)

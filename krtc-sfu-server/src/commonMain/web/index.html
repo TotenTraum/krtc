@@ -51,7 +51,7 @@
   </form>
   <section id="call" class="card" hidden>
     <p id="status">Подключение…</p>
-    <p><button type="button" id="share">Показать экран</button></p>
+    <p><button type="button" id="share">Показать экран</button> <button type="button" id="mic">Выключить микрофон</button></p>
     <div id="grid"></div>
     <div id="chat">
       <div id="log"></div>
@@ -223,6 +223,20 @@ function tile(id, name, layers = true) {
   return el;
 }
 
+// Mute state (media-state / peer-state): the others see that a microphone or camera is off.
+function showState(id) {
+  const p = state.peers.get(id);
+  const el = document.querySelector('#tile-' + id + ' .who');
+  if (!p || !el) return;
+  el.textContent = p.name + (p.audioMuted ? ' · микрофон выключен' : '') + (p.videoMuted ? ' · камера выключена' : '');
+}
+$('mic').onclick = () => {
+  if (!state.audio) return;
+  state.audio.enabled = !state.audio.enabled;
+  $('mic').textContent = state.audio.enabled ? 'Выключить микрофон' : 'Включить микрофон';
+  state.ws.send(JSON.stringify({ type: 'media-state', audioMuted: !state.audio.enabled, videoMuted: !state.video }));
+};
+
 function setLayer(peer, rid) {
   state.ws.send(JSON.stringify({ type: 'layer', peer, layer: rid }));
   document.querySelectorAll(`#tile-${peer} .layers button`).forEach((b) => b.classList.toggle('on', b.textContent === rid));
@@ -353,12 +367,17 @@ $('join').onsubmit = async (e) => {
         state.myId = msg.id;
         const me = tile(msg.id, name + ' (вы)');
         if (state.video) me.querySelector('video').srcObject = new MediaStream([state.video]);
-        msg.peers.forEach((p) => { state.peers.set(p.id, p); tile(p.id, p.name); });
+        msg.peers.forEach((p) => { state.peers.set(p.id, p); tile(p.id, p.name); showState(p.id); });
         break;
       }
       case 'peer-joined': state.peers.set(msg.id, msg); tile(msg.id, msg.name); break;
       case 'peer-left': state.peers.delete(msg.id); $('tile-' + msg.id)?.remove(); $('tile-' + msg.id + '-screen')?.remove(); break;
       case 'speaking': setSpeaking(msg.id, msg.speaking); break;
+      case 'peer-state': {
+        const p = state.peers.get(msg.id);
+        if (p) { p.audioMuted = msg.audioMuted; p.videoMuted = msg.videoMuted; showState(msg.id); }
+        break;
+      }
       case 'offer': await onOffer(msg); break;
     }
   };

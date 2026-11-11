@@ -1,15 +1,30 @@
 package krtc.meet
 
 import krtc.native.AudioDevice
+import krtc.native.NativeAudioSource
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeVideoSource
+import krtc.native.ScreenSource
 import krtc.native.nativeCameras
+import krtc.native.nativeScreenSources
 
 /** A camera opened for a call: its source, and whatever else must be closed with it (e.g. Android's Camera2 capture). */
 class OpenedCamera(val source: NativeVideoSource, private val capture: AutoCloseable? = null) : AutoCloseable {
     override fun close() {
         capture?.close()
         source.close()
+    }
+}
+
+/** Something to share: a display or a window ([source]), or null where the platform asks the user itself. */
+class ScreenChoice(val label: String, val source: ScreenSource? = null)
+
+/** A running screen capture: its picture, its sound if asked for and available, and the capture itself. */
+class OpenedScreen(val video: NativeVideoSource, val audio: NativeAudioSource?, private val capture: AutoCloseable? = null) : AutoCloseable {
+    override fun close() {
+        capture?.close()
+        video.close()
+        audio?.close()
     }
 }
 
@@ -31,6 +46,15 @@ interface MediaPlatform {
 
     /** Opens [camera] at about 1280 × 720; null if it cannot be opened (or the user denied access). */
     fun openCamera(factory: NativePeerConnectionFactory, camera: CameraChoice.Device): OpenedCamera?
+
+    /** Displays and windows to share; a single choice without a source where the platform asks itself. */
+    fun screens(): List<ScreenChoice>
+
+    /**
+     * Starts capturing [choice], with the system's sound if [withAudio] and the platform has it; null if the capture
+     * cannot start (no permission, or the user declined).
+     */
+    suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean): OpenedScreen?
 }
 
 /** Desktop and iOS: libwebrtc's own audio devices and camera capture (krtc-native). */
@@ -44,4 +68,18 @@ object NativeMediaPlatform : MediaPlatform {
 
     override fun openCamera(factory: NativePeerConnectionFactory, camera: CameraChoice.Device): OpenedCamera? =
         factory.createCameraSource(camera.index, 1280, 720, 30)?.let(::OpenedCamera)
+
+    override fun screens(): List<ScreenChoice> {
+        val sources = nativeScreenSources()
+        if (sources.isEmpty()) return listOf(ScreenChoice("Весь экран")) // macOS before Screen Recording is permitted: asks
+        var display = 0
+        return sources.map { s ->
+            ScreenChoice(if (s.isWindow) "Окно: ${s.title.ifBlank { s.id.toString() }}" else s.title.ifBlank { "Экран ${++display}" }, s)
+        }
+    }
+
+    override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean): OpenedScreen? {
+        val video = factory.createScreenSource(choice.source, fps = 15) ?: return null
+        return OpenedScreen(video, if (withAudio) factory.createSystemAudioSource() else null)
+    }
 }

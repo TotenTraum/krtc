@@ -245,6 +245,9 @@ KRTC_JNI(jstring, factoryAudioDeviceName)(JNIEnv *env, jclass, jlong f, jboolean
 KRTC_JNI(jint, factorySetAudioDevice)(JNIEnv *, jclass, jlong f, jboolean output, jint index) {
     return krtc_factory_set_audio_device(H<krtc_factory>(f), output ? 1 : 0, index);
 }
+KRTC_JNI(void, factorySetAudioProcessing)(JNIEnv *, jclass, jlong f, jboolean echo, jboolean noise, jboolean agc) {
+    krtc_factory_set_audio_processing(H<krtc_factory>(f), echo ? 1 : 0, noise ? 1 : 0, agc ? 1 : 0);
+}
 
 // Peer connection.
 KRTC_JNI(jlong, pcCreate)(JNIEnv *env, jclass, jlong f, jobject listener) {
@@ -345,6 +348,7 @@ KRTC_JNI(jstring, trackId)(JNIEnv *env, jclass, jlong t) { return Take(env, krtc
 KRTC_JNI(jboolean, trackIsVideo)(JNIEnv *, jclass, jlong t) { return krtc_track_is_video(H<krtc_track>(t)) != 0; }
 KRTC_JNI(jboolean, trackEnabled)(JNIEnv *, jclass, jlong t) { return krtc_track_enabled(H<krtc_track>(t)) != 0; }
 KRTC_JNI(void, trackSetEnabled)(JNIEnv *, jclass, jlong t, jboolean on) { krtc_track_set_enabled(H<krtc_track>(t), on ? 1 : 0); }
+KRTC_JNI(void, trackSetVolume)(JNIEnv *, jclass, jlong t, jdouble volume) { krtc_track_set_volume(H<krtc_track>(t), volume); }
 KRTC_JNI(void, trackVideoStats)(JNIEnv *env, jclass, jlong t, jlongArray out) {
     int64_t frames = 0;
     int w = 0, h = 0;

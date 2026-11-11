@@ -35,7 +35,19 @@ internal class OfferBuilder(
     /** Offer a screen share uplink ([MediaPlan.UPLINK_SCREEN_MID]) and a screen m-line in every slot. */
     private val screenShare: Boolean = false,
 ) {
-    internal fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
+    /**
+     * [video] (feed keys) and [screenAudio] (publisher ids) say what each slot sends: decided once by the caller,
+     * which lists the same in the offer's `mids`. Reading the publishers' state here again could disagree with it
+     * when an answer lands in between, and the client would get a track it cannot map.
+     */
+    internal fun build(
+        p: Participant,
+        sessionId: Long,
+        version: Long,
+        slots: List<Participant?>,
+        video: Set<String> = slots.filterNotNull().flatMap { pub -> pub.feeds.filter { it.publishing }.map { it.key } }.toSet(),
+        screenAudio: Set<String> = slots.filterNotNull().filter { it.screenAudioPublishing }.map { it.id }.toSet(),
+    ): SessionDescription {
         val sd = SessionDescription()
         sd.lines += SdpLine('v', "0")
         sd.lines += SdpLine('o', "- $sessionId $version IN IP4 0.0.0.0")
@@ -72,12 +84,12 @@ internal class OfferBuilder(
             sd.media += audio(p, "${2 + 2 * i}", if (publisher == null) Direction.INACTIVE else Direction.SENDONLY, publisher, screen = false)
             val kinds = if (screenShare) listOf(VideoKind.CAMERA, VideoKind.SCREEN) else listOf(VideoKind.CAMERA)
             for (kind in kinds) {
-                val feed = (if (kind == VideoKind.CAMERA) publisher?.camera else publisher?.screen)?.takeIf { it.publishing }
+                val feed = (if (kind == VideoKind.CAMERA) publisher?.camera else publisher?.screen)?.takeIf { it.key in video }
                 val mid = if (kind == VideoKind.CAMERA) "${3 + 2 * i}" else MediaPlan.screenMid(i)
                 sd.media += video(p, mid, if (feed != null) Direction.SENDONLY else Direction.INACTIVE, feed, simulcast = false)
             }
             if (screenShare) {
-                val sound = publisher?.takeIf { it.screenAudioPublishing }
+                val sound = publisher?.takeIf { it.id in screenAudio }
                 sd.media += audio(p, MediaPlan.screenAudioMid(i), if (sound != null) Direction.SENDONLY else Direction.INACTIVE, sound, screen = true)
             }
         }

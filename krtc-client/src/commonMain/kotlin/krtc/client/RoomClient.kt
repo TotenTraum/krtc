@@ -42,6 +42,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 /** Video quality a subscriber asks the SFU for; maps to the simulcast layers `q`, `h`, `f`. */
 public enum class VideoQuality(public val rid: String) { LOW("q"), MEDIUM("h"), HIGH("f") }
@@ -68,12 +73,15 @@ public class RoomData(
 }
 
 /** Another member of the room, as seen by this client. */
-public class RemoteParticipant internal constructor(public val id: String, public val name: String) {
+public class RemoteParticipant internal constructor(public val id: String, public val name: String, audioMuted: Boolean = false, videoMuted: Boolean = false) {
     internal val audioState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val videoState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val screenState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val screenAudioState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val speakingState = MutableStateFlow(false)
+    internal val audioMutedState = MutableStateFlow(audioMuted)
+    internal val videoMutedState = MutableStateFlow(videoMuted)
+    internal val screenSubscribedState = MutableStateFlow(true)
 
     public val audio: StateFlow<MediaStreamTrack?> = audioState.asStateFlow()
     public val video: StateFlow<MediaStreamTrack?> = videoState.asStateFlow()
@@ -84,6 +92,13 @@ public class RemoteParticipant internal constructor(public val id: String, publi
     /** The sound of its screen share (system or tab audio), while it shares one with sound. */
     public val screenAudio: StateFlow<MediaStreamTrack?> = screenAudioState.asStateFlow()
     public val speaking: StateFlow<Boolean> = speakingState.asStateFlow()
+
+    /** It muted its microphone or camera (or the server did): show it as muted rather than silent or frozen. */
+    public val audioMuted: StateFlow<Boolean> = audioMutedState.asStateFlow()
+    public val videoMuted: StateFlow<Boolean> = videoMutedState.asStateFlow()
+
+    /** Whether this client receives its screen share ([RoomClient.setSubscribed]); true by default. */
+    public val screenSubscribed: StateFlow<Boolean> = screenSubscribedState.asStateFlow()
 
     override fun toString(): String = "RemoteParticipant($id, $name)"
 }
@@ -115,6 +130,13 @@ public class RoomClient(
     public val participants: StateFlow<List<RemoteParticipant>> = participantsFlow.asStateFlow()
     public val selfSpeaking: StateFlow<Boolean> = selfSpeakingFlow.asStateFlow()
 
+    private val selfAudioMutedFlow = MutableStateFlow(false)
+    private val selfVideoMutedFlow = MutableStateFlow(false)
+
+    /** How the others see this client's microphone and camera: muted by [setMediaState] or by the server. */
+    public val selfAudioMuted: StateFlow<Boolean> = selfAudioMutedFlow.asStateFlow()
+    public val selfVideoMuted: StateFlow<Boolean> = selfVideoMutedFlow.asStateFlow()
+
     /** Messages from other participants and the server ([sendData] on their side, `Sfu.sendData` on the server). */
     public val data: SharedFlow<RoomData> = dataFlow.asSharedFlow()
 
@@ -122,6 +144,7 @@ public class RoomClient(
     public val dataOpen: StateFlow<Boolean> = dataOpenFlow.asStateFlow()
 
     private var session: WebSocketSession? = null
+    @kotlin.concurrent.Volatile private var left = false
     private var pc: RTCPeerConnection? = null
     private var microphone: MediaStreamTrack? = null
     private var camera: MediaStreamTrack? = null
@@ -169,7 +192,14 @@ public class RoomClient(
         val peerConnection = factory.createPeerConnection(configuration)
         pc = peerConnection
         val url = serverUrl.trimEnd('/') + "/ws?room=" + roomName.encodeURLParameter() + "&name=" + displayName.encodeURLParameter()
-        val ws = http.webSocketSession(url)
+        // Not cancellable: a handshake that completes as the caller gives up would leave an open socket nobody closes,
+        // and the SFU would keep a ghost participant. Closed here instead if the caller left or was cancelled.
+        val ws = withContext(NonCancellable) { http.webSocketSession(url) }
+        if (left || !currentCoroutineContext().isActive) {
+            withContext(NonCancellable) { runCatching { ws.close() } }
+            currentCoroutineContext().ensureActive()
+            return
+        }
         session = ws
         job = scope.launch {
             launch { peerConnection.ontrack.collect { ev -> onTrack(ev.transceiver.mid, ev.track) } }
@@ -192,13 +222,22 @@ public class RoomClient(
         when (message) {
             is ServerMessage.Welcome -> {
                 selfId = message.id
-                participantsFlow.value = message.peers.map { RemoteParticipant(it.id, it.name) }
+                participantsFlow.value = message.peers.map { RemoteParticipant(it.id, it.name, it.audioMuted, it.videoMuted) }
                 stateFlow.value = RoomState.Connected(message.room, message.id)
+                if (mediaState.audioMuted || mediaState.videoMuted) scope.launch { send(mediaState) }
             }
             is ServerMessage.PeerJoined -> participantsFlow.update { list ->
                 if (list.any { it.id == message.id }) list else list + RemoteParticipant(message.id, message.name)
             }
             is ServerMessage.PeerLeft -> participantsFlow.update { list -> list.filterNot { it.id == message.id } }
+            is ServerMessage.PeerState ->
+                if (message.id == selfId) {
+                    selfAudioMutedFlow.value = message.audioMuted
+                    selfVideoMutedFlow.value = message.videoMuted
+                } else participant(message.id)?.let {
+                    it.audioMutedState.value = message.audioMuted
+                    it.videoMutedState.value = message.videoMuted
+                }
             is ServerMessage.Speaking ->
                 if (message.id == selfId) selfSpeakingFlow.value = message.speaking
                 else participant(message.id)?.speakingState?.value = message.speaking
@@ -359,6 +398,29 @@ public class RoomClient(
         if (renegotiate) send(ClientMessage.Renegotiate)
     }
 
+    private var mediaState = ClientMessage.MediaState(audioMuted = false, videoMuted = false)
+
+    /**
+     * Tells the others that this client muted (or unmuted) its microphone or camera, so they show it as muted
+     * ([RemoteParticipant.audioMuted]). Only the state: stop the media itself too, e.g. by disabling the track.
+     * May be called before [join]; the state is sent once joined.
+     */
+    public suspend fun setMediaState(audioMuted: Boolean, videoMuted: Boolean) {
+        mediaState = ClientMessage.MediaState(audioMuted, videoMuted)
+        if (stateFlow.value is RoomState.Connected) send(mediaState)
+    }
+
+    /**
+     * Starts or stops receiving [participantId]'s screen share (with its sound), or its camera with [screen] false.
+     * The SFU stops forwarding while unsubscribed, so it costs no bandwidth; the track stays and resumes at a key
+     * frame. Everything is received by default.
+     */
+    public suspend fun setSubscribed(participantId: String, enabled: Boolean, screen: Boolean = true) {
+        if (screen) participant(participantId)?.screenSubscribedState?.value = enabled
+        val feed = if (screen) ClientMessage.Subscribe.FEED_SCREEN else ClientMessage.Subscribe.FEED_CAMERA
+        send(ClientMessage.Subscribe(participantId, feed, enabled))
+    }
+
     /** Asks the SFU for a simulcast layer of [participantId]'s video. */
     public suspend fun setVideoQuality(participantId: String, quality: VideoQuality) {
         send(ClientMessage.Layer(participantId, quality.rid))
@@ -370,6 +432,7 @@ public class RoomClient(
 
     /** Leaves the room and releases the peer connection. Local tracks stay owned by the caller. */
     public fun leave() {
+        left = true
         val ws = session
         val peer = pc
         pc = null

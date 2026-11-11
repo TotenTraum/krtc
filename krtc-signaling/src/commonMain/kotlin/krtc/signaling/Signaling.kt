@@ -31,8 +31,9 @@ public object SignalingProtocol {
     public fun decodeClient(text: String): ClientMessage? = runCatching { json.decodeFromString(ClientMessage.serializer(), text) }.getOrNull()
 }
 
+/** Another participant: its id, name and whether its microphone and camera are muted (by itself or by the server). */
 @Serializable
-public data class PeerInfo(val id: String, val name: String)
+public data class PeerInfo(val id: String, val name: String, val audioMuted: Boolean = false, val videoMuted: Boolean = false)
 
 /** Server → client. */
 @Serializable
@@ -62,6 +63,13 @@ public sealed class ServerMessage {
 
     @Serializable @SerialName("peer-left")
     public data class PeerLeft(val id: String) : ServerMessage()
+
+    /**
+     * A participant muted or unmuted its microphone or camera ([ClientMessage.MediaState]), or the server did.
+     * Sent to everyone in the room, the participant itself included.
+     */
+    @Serializable @SerialName("peer-state")
+    public data class PeerState(val id: String, val audioMuted: Boolean, val videoMuted: Boolean) : ServerMessage()
 
     @Serializable @SerialName("speaking")
     public data class Speaking(val id: String, val speaking: Boolean) : ServerMessage()
@@ -94,4 +102,21 @@ public sealed class ClientMessage {
      */
     @Serializable @SerialName("renegotiate")
     public data object Renegotiate : ClientMessage()
+
+    /** The client muted or unmuted its microphone or camera; the server tells the others ([ServerMessage.PeerState]). */
+    @Serializable @SerialName("media-state")
+    public data class MediaState(val audioMuted: Boolean, val videoMuted: Boolean) : ClientMessage()
+
+    /**
+     * Starts or stops receiving one participant's [feed] ([FEED_CAMERA] or [FEED_SCREEN]; the screen with its sound).
+     * The m-lines stay negotiated: the server just stops forwarding, and resumes with a key frame. Everything is
+     * received by default.
+     */
+    @Serializable @SerialName("subscribe")
+    public data class Subscribe(val peer: String, val feed: String, val enabled: Boolean) : ClientMessage() {
+        public companion object {
+            public const val FEED_CAMERA: String = "camera"
+            public const val FEED_SCREEN: String = "screen"
+        }
+    }
 }

@@ -153,6 +153,9 @@ public sealed class SfuEvent {
     public data class SpeakingChanged(override val room: String, val participantId: String, val speaking: Boolean) : SfuEvent()
     public data class VideoPublishingChanged(override val room: String, val participantId: String, val publishing: Boolean) : SfuEvent()
     public data class ScreenShareChanged(override val room: String, val participantId: String, val sharing: Boolean) : SfuEvent()
+
+    /** What the others see of a participant's microphone and camera changed: muted by its client or by the host. */
+    public data class MediaStateChanged(override val room: String, val participantId: String, val audioMuted: Boolean, val videoMuted: Boolean) : SfuEvent()
 }
 
 public data class ParticipantInfo(
@@ -168,6 +171,9 @@ public data class ParticipantInfo(
     val screenMuted: Boolean = false,
     /** Its screen share carries sound (system or tab audio). */
     val sharesScreenAudio: Boolean = false,
+    /** The participant muted its microphone / camera itself (its client said so); [audioMuted] and [videoMuted] are the host's mute. */
+    val audioMutedByClient: Boolean = false,
+    val videoMutedByClient: Boolean = false,
 )
 
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)
