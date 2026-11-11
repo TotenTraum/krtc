@@ -22,7 +22,11 @@ subprojects {
             // Public API dumps under api/; `checkKotlinAbi` fails the build on unintended API changes.
             extensions.configure<KotlinMultiplatformExtension> {
                 @OptIn(ExperimentalAbiValidation::class)
-                abiValidation { }
+                abiValidation {
+                    // Hosts that cannot build every target (CI checks on Linux, without Apple targets) keep the
+                    // reference dumps of those targets instead of dropping them.
+                    keepLocallyUnsupportedTargets.set(true)
+                }
             }
         }
     }
