@@ -1,6 +1,6 @@
 # krtc-sfu
 
-Встраиваемый SFU для серверов на Kotlin Multiplatform (JVM, macOS, Linux). Аудио (Opus), видео (VP8/H.264), simulcast, NACK/RTX, PLI/FIR, «говорит», сообщения комнаты через data channels. Без HTTP-сервера: транспорт сигнализации, авторизация и пользователи остаются у твоего сервера.
+Встраиваемый SFU для серверов на Kotlin Multiplatform (JVM, macOS, Linux). Аудио (Opus), видео (VP8/H.264), simulcast, NACK/RTX, PLI/FIR, «говорит», сообщения комнаты через data channels, демонстрация экрана ([ADR-0017](../docs/adr/0017-screen-sharing.md)). Без HTTP-сервера: транспорт сигнализации, авторизация и пользователи остаются у твоего сервера.
 Архитектура: [ADR-0010](../docs/adr/0010-sfu-before-1.0.md), [ADR-0011](../docs/adr/0011-sfu-kotlin-multiplatform.md), [ADR-0013](../docs/adr/0013-embeddable-sfu.md). Готовое приложение — [krtc-sfu-server](../krtc-sfu-server/README.md).
 
 ## Подключение

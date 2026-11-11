@@ -16,8 +16,10 @@ import krtc.protocol.sdp.SessionDescription
  * Layout for a participant:
  * - `0` audio, `1` video — its own uplink (recvonly on the SFU side; video asks for simulcast q/h/f);
  * - `d` data channels (SCTP), when enabled;
+ * - `s` its screen share uplink (one stream, no simulcast), when enabled;
  * - per slot i: `2+2i` audio and `3+2i` video of one other participant (sendonly), or `inactive` when
- *   the slot is free (someone left) or that participant sends no video. Free slots are reused.
+ *   the slot is free (someone left) or that participant sends no video; `s<i>` its screen share, when enabled.
+ *   Free slots are reused.
  */
 internal class OfferBuilder(
     /** Host candidate addresses, most preferred first. */
@@ -30,6 +32,8 @@ internal class OfferBuilder(
     private val tcp: Boolean = false,
     /** Offer an SCTP association for data channels as the third m-line ([MediaPlan.DATA_MID]). */
     private val dataChannels: Boolean = false,
+    /** Offer a screen share uplink ([MediaPlan.UPLINK_SCREEN_MID]) and a screen m-line in every slot. */
+    private val screenShare: Boolean = false,
 ) {
     internal fun build(p: Participant, sessionId: Long, version: Long, slots: List<Participant?>): SessionDescription {
         val sd = SessionDescription()
@@ -38,16 +42,31 @@ internal class OfferBuilder(
         sd.lines += SdpLine('s', "krtc-sfu")
         sd.lines += SdpLine('t', "0 0")
         sd.attributes += SdpAttribute("ice-lite")
-        val mids = listOf("0", "1") + (if (dataChannels) listOf(MediaPlan.DATA_MID) else emptyList()) + (2 until 2 + 2 * slots.size).map { "$it" }
+        val mids = buildList {
+            add(MediaPlan.UPLINK_AUDIO_MID)
+            add(MediaPlan.UPLINK_VIDEO_MID)
+            if (dataChannels) add(MediaPlan.DATA_MID)
+            if (screenShare) add(MediaPlan.UPLINK_SCREEN_MID)
+            for (i in slots.indices) {
+                add("${2 + 2 * i}")
+                add("${3 + 2 * i}")
+                if (screenShare) add(MediaPlan.screenMid(i))
+            }
+        }
         sd.attributes += SdpAttribute("group", "BUNDLE " + mids.joinToString(" "))
         sd.attributes += SdpAttribute("msid-semantic", " WMS *")
-        sd.media += audio(p, mid = "0", direction = Direction.RECVONLY, publisher = null)
-        sd.media += video(p, mid = "1", direction = Direction.RECVONLY, publisher = null)
+        sd.media += audio(p, mid = MediaPlan.UPLINK_AUDIO_MID, direction = Direction.RECVONLY, publisher = null)
+        sd.media += video(p, mid = MediaPlan.UPLINK_VIDEO_MID, direction = Direction.RECVONLY, feed = null, simulcast = true)
         if (dataChannels) sd.media += application(p)
+        if (screenShare) sd.media += video(p, mid = MediaPlan.UPLINK_SCREEN_MID, direction = Direction.RECVONLY, feed = null, simulcast = false)
         slots.forEachIndexed { i, publisher ->
             sd.media += audio(p, "${2 + 2 * i}", if (publisher == null) Direction.INACTIVE else Direction.SENDONLY, publisher)
-            val sendsVideo = publisher != null && publisher.publishesVideo
-            sd.media += video(p, "${3 + 2 * i}", if (sendsVideo) Direction.SENDONLY else Direction.INACTIVE, publisher.takeIf { sendsVideo })
+            val kinds = if (screenShare) listOf(VideoKind.CAMERA, VideoKind.SCREEN) else listOf(VideoKind.CAMERA)
+            for (kind in kinds) {
+                val feed = (if (kind == VideoKind.CAMERA) publisher?.camera else publisher?.screen)?.takeIf { it.publishing }
+                val mid = if (kind == VideoKind.CAMERA) "${3 + 2 * i}" else MediaPlan.screenMid(i)
+                sd.media += video(p, mid, if (feed != null) Direction.SENDONLY else Direction.INACTIVE, feed, simulcast = false)
+            }
         }
         return sd
     }
@@ -100,12 +119,12 @@ internal class OfferBuilder(
         return m
     }
 
-    private fun video(p: Participant, mid: String, direction: Direction, publisher: Participant?): MediaDescription {
+    private fun video(p: Participant, mid: String, direction: Direction, feed: VideoFeed?, simulcast: Boolean): MediaDescription {
         val pts = listOf(MediaPlan.VP8_PT, MediaPlan.VP8_RTX_PT, MediaPlan.H264_PT, MediaPlan.H264_RTX_PT)
         val m = MediaDescription("video", port, "UDP/TLS/RTP/SAVPF", pts.map { "$it" }.toMutableList())
         transport(p, m, mid)
         val a = m.attributes
-        val uplink = publisher == null && direction == Direction.RECVONLY
+        val uplink = feed == null && direction == Direction.RECVONLY
         if (uplink) {
             // The SFU's own MID/RID ids; renamed away before forwarding (MediaPlan.IGNORED_EXT_ID).
             a += SdpAttribute("extmap", "${MediaPlan.MID_EXT_ID} ${RtpStreamId.MID_URI}")
@@ -131,16 +150,18 @@ internal class OfferBuilder(
             a += SdpAttribute("rtpmap", "$rtx rtx/90000")
             a += SdpAttribute("fmtp", "$rtx apt=$pt")
         }
-        if (uplink) {
+        if (uplink && simulcast) {
             // Ask for simulcast: the browser creates one encoding per rid, scaled ¼, ½ and 1 (MediaPlan.LAYER_RIDS).
             MediaPlan.LAYER_RIDS.forEach { a += SdpAttribute("rid", "$it recv") }
             a += SdpAttribute("simulcast", "recv " + MediaPlan.LAYER_RIDS.joinToString(";"))
         }
-        if (publisher != null) {
-            val (stream, track) = msid(publisher, "video")
+        if (feed != null) {
+            val publisher = feed.publisher
+            // The camera shares a MediaStream with the microphone (lip sync); the screen is a stream of its own.
+            val (stream, track) = if (feed.kind == VideoKind.CAMERA) msid(publisher, "video") else "screen-${publisher.id}" to "screen-${publisher.id}"
             a += SdpAttribute("msid", "$stream $track")
-            a += SdpAttribute("ssrc-group", "FID ${publisher.videoSsrc} ${publisher.videoRtxSsrc}")
-            for (ssrc in listOf(publisher.videoSsrc, publisher.videoRtxSsrc)) {
+            a += SdpAttribute("ssrc-group", "FID ${feed.ssrc} ${feed.rtxSsrc}")
+            for (ssrc in listOf(feed.ssrc, feed.rtxSsrc)) {
                 a += SdpAttribute("ssrc", "$ssrc cname:${publisher.cname}")
                 a += SdpAttribute("ssrc", "$ssrc msid:$stream $track")
             }

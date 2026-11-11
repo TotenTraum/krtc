@@ -45,9 +45,17 @@ public sealed class ServerMessage {
         val protocol: Int = SignalingProtocol.VERSION,
     ) : ServerMessage()
 
-    /** `mids` maps each downlink m-line to the participant whose media it carries. */
+    /**
+     * `mids` maps each downlink m-line to the participant whose media it carries; `screens` lists the mids that
+     * carry screen shares (the others are microphones and cameras). The client publishes its screen on m-line `s`.
+     */
     @Serializable @SerialName("offer")
-    public data class Offer(val version: Long, val sdp: String, val mids: Map<String, String> = emptyMap()) : ServerMessage()
+    public data class Offer(
+        val version: Long,
+        val sdp: String,
+        val mids: Map<String, String> = emptyMap(),
+        val screens: List<String> = emptyList(),
+    ) : ServerMessage()
 
     @Serializable @SerialName("peer-joined")
     public data class PeerJoined(val id: String, val name: String) : ServerMessage()
@@ -79,4 +87,11 @@ public sealed class ClientMessage {
      */
     @Serializable @SerialName("restart-ice")
     public data object RestartIce : ClientMessage()
+
+    /**
+     * Asks for a new offer, e.g. to start or stop publishing a screen share or a camera: the client changes the
+     * direction of its uplink m-line in the answer to that offer.
+     */
+    @Serializable @SerialName("renegotiate")
+    public data object Renegotiate : ClientMessage()
 }

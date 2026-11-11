@@ -8,10 +8,13 @@ class SignalingTest {
     @Test
     fun wireFormatIsStable() {
         assertEquals(
-            """{"type":"offer","version":3,"sdp":"v=0","mids":{"2":"a"}}""",
-            SignalingProtocol.encode(ServerMessage.Offer(3, "v=0", mapOf("2" to "a"))),
+            """{"type":"offer","version":3,"sdp":"v=0","mids":{"2":"a","s0":"a"},"screens":["s0"]}""",
+            SignalingProtocol.encode(ServerMessage.Offer(3, "v=0", mapOf("2" to "a", "s0" to "a"), listOf("s0"))),
         )
         assertEquals("""{"type":"layer","peer":"a","layer":"q"}""", SignalingProtocol.encode(ClientMessage.Layer("a", "q")))
+        assertEquals("""{"type":"renegotiate"}""", SignalingProtocol.encode(ClientMessage.Renegotiate))
+        // Offers from servers that predate screen sharing still decode.
+        assertEquals(ServerMessage.Offer(3, "v=0", mapOf("2" to "a")), SignalingProtocol.decodeServer("""{"type":"offer","version":3,"sdp":"v=0","mids":{"2":"a"}}"""))
     }
 
     @Test

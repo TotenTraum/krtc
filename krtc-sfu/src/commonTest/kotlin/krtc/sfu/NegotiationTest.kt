@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class NegotiationTest {
-    private val sfu = Sfu(SfuConfig(udpPort = 0, shards = 2, dataChannels = false)) // m-line layout without the data m-line; DataRelayTest covers it
+    private val sfu = Sfu(SfuConfig(udpPort = 0, shards = 2, dataChannels = false, screenShare = false)) // layout without the data and screen m-lines; DataRelayTest and ScreenShareTest cover them
 
     @AfterTest
     fun close() = sfu.close()

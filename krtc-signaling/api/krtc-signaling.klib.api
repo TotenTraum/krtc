@@ -99,6 +99,14 @@ sealed class krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage|null
         final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ClientMessage.Companion.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
     }
 
+    final object Renegotiate : kotlinx.serialization.internal/SerializerFactory, krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.Renegotiate|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.Renegotiate.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.Renegotiate.hashCode|hashCode(){}[0]
+        final fun serializer(): kotlinx.serialization/KSerializer<krtc.signaling/ClientMessage.Renegotiate> // krtc.signaling/ClientMessage.Renegotiate.serializer|serializer(){}[0]
+        final fun serializer(kotlin/Array<out kotlinx.serialization/KSerializer<*>>...): kotlinx.serialization/KSerializer<*> // krtc.signaling/ClientMessage.Renegotiate.serializer|serializer(kotlin.Array<out|kotlinx.serialization.KSerializer<*>>...){}[0]
+        final fun toString(): kotlin/String // krtc.signaling/ClientMessage.Renegotiate.toString|toString(){}[0]
+    }
+
     final object RestartIce : kotlinx.serialization.internal/SerializerFactory, krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.RestartIce|null[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.RestartIce.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.RestartIce.hashCode|hashCode(){}[0]
@@ -136,10 +144,12 @@ sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null
     }
 
     final class Offer : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.Offer|null[0]
-        constructor <init>(kotlin/Long, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // krtc.signaling/ServerMessage.Offer.<init>|<init>(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        constructor <init>(kotlin/Long, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ...) // krtc.signaling/ServerMessage.Offer.<init>|<init>(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<kotlin.String>){}[0]
 
         final val mids // krtc.signaling/ServerMessage.Offer.mids|{}mids[0]
             final fun <get-mids>(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.signaling/ServerMessage.Offer.mids.<get-mids>|<get-mids>(){}[0]
+        final val screens // krtc.signaling/ServerMessage.Offer.screens|{}screens[0]
+            final fun <get-screens>(): kotlin.collections/List<kotlin/String> // krtc.signaling/ServerMessage.Offer.screens.<get-screens>|<get-screens>(){}[0]
         final val sdp // krtc.signaling/ServerMessage.Offer.sdp|{}sdp[0]
             final fun <get-sdp>(): kotlin/String // krtc.signaling/ServerMessage.Offer.sdp.<get-sdp>|<get-sdp>(){}[0]
         final val version // krtc.signaling/ServerMessage.Offer.version|{}version[0]
@@ -148,7 +158,8 @@ sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null
         final fun component1(): kotlin/Long // krtc.signaling/ServerMessage.Offer.component1|component1(){}[0]
         final fun component2(): kotlin/String // krtc.signaling/ServerMessage.Offer.component2|component2(){}[0]
         final fun component3(): kotlin.collections/Map<kotlin/String, kotlin/String> // krtc.signaling/ServerMessage.Offer.component3|component3(){}[0]
-        final fun copy(kotlin/Long = ..., kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): krtc.signaling/ServerMessage.Offer // krtc.signaling/ServerMessage.Offer.copy|copy(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        final fun component4(): kotlin.collections/List<kotlin/String> // krtc.signaling/ServerMessage.Offer.component4|component4(){}[0]
+        final fun copy(kotlin/Long = ..., kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<kotlin/String> = ...): krtc.signaling/ServerMessage.Offer // krtc.signaling/ServerMessage.Offer.copy|copy(kotlin.Long;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<kotlin.String>){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.Offer.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.Offer.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // krtc.signaling/ServerMessage.Offer.toString|toString(){}[0]

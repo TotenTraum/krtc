@@ -27,6 +27,7 @@ import krtc.sfu.room.OfferBuilder
 import krtc.sfu.room.Participant
 import krtc.sfu.room.Room
 import krtc.sfu.room.Shard
+import krtc.sfu.room.VideoKind
 import krtc.sfu.srtp.SrtpSessionKeys
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -61,7 +62,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private val announced = config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }
     private val tcp: TcpServer? = if (config.iceTcp) TcpServer(udp.localAddresses, udp.localPort, ::onPacket) else null
     private val transports = Transports(udp, tcp)
-    private val offers = OfferBuilder(announced, udp.localPort, identity.fingerprint, udp = config.iceUdp, tcp = tcp != null, dataChannels = config.dataChannels)
+    private val offers = OfferBuilder(announced, udp.localPort, identity.fingerprint, udp = config.iceUdp, tcp = tcp != null, dataChannels = config.dataChannels, screenShare = config.screenShare)
 
     /** Guards membership: [rooms], room member lists and the address table updates. Never held on the media path. */
     private val lock = SynchronizedObject()
@@ -140,6 +141,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 p.room.shard.execute { p.room.setPreferredLayer(p, message.peer, layer) }
             }
             ClientMessage.RestartIce -> restartIce(p)
+            ClientMessage.Renegotiate -> sessions[p.id]?.takeIf { it.participant === p }?.negotiate()
         }
     }
 
@@ -212,11 +214,12 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         return r.shard.execute { r.data.sendFromHost(message) }
     }
 
-    /** Server-side mute: stops (or resumes) forwarding a participant's audio and/or video. */
-    public fun setMuted(participantId: String, audio: Boolean? = null, video: Boolean? = null): Boolean {
+    /** Server-side mute: stops (or resumes) forwarding a participant's audio, camera video and/or screen share. */
+    public fun setMuted(participantId: String, audio: Boolean? = null, video: Boolean? = null, screen: Boolean? = null): Boolean {
         val p = sessions[participantId]?.participant ?: return false
         audio?.let { p.audioMuted = it }
         video?.let { p.videoMuted = it }
+        screen?.let { p.screen.muted = it }
         return true
     }
 
@@ -253,7 +256,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     private fun info(s: PeerSession): ParticipantInfo {
         val p = s.participant
-        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking)
+        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking, p.screen.publishing, p.screen.muted)
     }
 
     private fun announceSpeaking(p: Participant, speaking: Boolean) {
@@ -378,17 +381,24 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             version++
             inFlight = version
             inFlightSlots = slots.toList()
-            inFlightVideo = inFlightSlots.filter { it != null && it.publishesVideo }.map { it!!.id }.toSet()
+            inFlightVideo = inFlightSlots.filterNotNull().flatMap { pub ->
+                pub.feeds.filter { it.publishing && (it.kind == VideoKind.CAMERA || config.screenShare) }.map { it.key }
+            }.toSet()
             val sdp = offers.build(participant, sessionId, version, inFlightSlots).toString()
+            val screens = ArrayList<String>()
             val mids = buildMap {
                 inFlightSlots.forEachIndexed { i, pub ->
                     if (pub != null) {
                         put("${2 + 2 * i}", pub.id)
-                        if (pub.id in inFlightVideo) put("${3 + 2 * i}", pub.id)
+                        if (pub.camera.key in inFlightVideo) put("${3 + 2 * i}", pub.id)
+                        if (pub.screen.key in inFlightVideo) {
+                            put(MediaPlan.screenMid(i), pub.id)
+                            screens += MediaPlan.screenMid(i)
+                        }
                     }
                 }
             }
-            participant.sink.send(ServerMessage.Offer(version, sdp, mids))
+            participant.sink.send(ServerMessage.Offer(version, sdp, mids, screens))
         }
 
         fun onAnswer(answerVersion: Long, sdp: String) {
@@ -400,22 +410,30 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 participant.receiving = inFlightSlots.filterNotNull().map { it.id }.toSet()
                 // New video subscriptions pick a layer and request a key frame on their first packet (Room.forwardVideo).
                 participant.receivingVideo = inFlightVideo
-                val uplinkVideo = answer.media.firstOrNull { it.mid == "1" }?.direction
-                val publishes = uplinkVideo == Direction.SENDONLY || uplinkVideo == Direction.SENDRECV
-                val changed = publishes != participant.publishesVideo
+                fun sends(mid: String) = answer.media.firstOrNull { it.mid == mid }?.let { m ->
+                    m.port != 0 && (m.direction == Direction.SENDONLY || m.direction == Direction.SENDRECV)
+                } ?: false
+                val publishes = sends(MediaPlan.UPLINK_VIDEO_MID)
+                val sharing = config.screenShare && sends(MediaPlan.UPLINK_SCREEN_MID)
+                if (sharing) answer.media.firstOrNull { it.mid == MediaPlan.UPLINK_SCREEN_MID }?.let { participant.screenSsrcs = it.ssrcs.toSet() }
+                val cameraChanged = publishes != participant.publishesVideo
+                val screenChanged = sharing != participant.screen.publishing
                 participant.publishesVideo = publishes
+                participant.screen.publishing = sharing
                 inFlight = -1
                 if (pending) {
                     pending = false
                     negotiate()
                 }
-                changed
+                cameraChanged to screenChanged
             }
-            if (videoChanged) {
-                // Its video m-line in everyone else's offer changes between sendonly and inactive.
+            val (cameraChanged, screenChanged) = videoChanged
+            if (cameraChanged || screenChanged) {
+                // Its video m-lines in everyone else's offer change between sendonly and inactive.
                 participant.room.members.filter { it !== participant }.forEach { sessions[it.id]?.negotiate() }
-                eventFlow.tryEmit(SfuEvent.VideoPublishingChanged(participant.room.name, participant.id, participant.publishesVideo))
             }
+            if (cameraChanged) eventFlow.tryEmit(SfuEvent.VideoPublishingChanged(participant.room.name, participant.id, participant.publishesVideo))
+            if (screenChanged) eventFlow.tryEmit(SfuEvent.ScreenShareChanged(participant.room.name, participant.id, participant.screen.publishing))
         }
 
         private fun startDtls(answer: SessionDescription): Boolean {

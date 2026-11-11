@@ -148,8 +148,51 @@ internal class VideoLayer(public val index: Int) {
     internal fun isActive(now: Long): Boolean = lastPacketMillis >= 0 && now - lastPacketMillis < MediaPlan.LAYER_TIMEOUT_MILLIS
 }
 
+internal enum class VideoKind { CAMERA, SCREEN }
+
 /**
- * What one subscriber receives from one video publisher: the chosen simulcast layer and an independent
+ * One video uplink of a participant — its camera (up to three simulcast layers) or its screen share (one
+ * stream, treated as the top layer) — and how it is forwarded: under the SFU's own SSRC and RTX SSRC.
+ * Layer state is shard-thread only; [publishing] and [muted] are written by negotiation and the host.
+ */
+internal class VideoFeed(val publisher: Participant, val kind: VideoKind) {
+    /** Identifies the feed in subscribers' maps: the publisher id for the camera, `id/screen` for the screen. */
+    val key: String = if (kind == VideoKind.CAMERA) publisher.id else publisher.id + SCREEN_SUFFIX
+    val ssrc: Long = Participant.randomSsrc()
+    val rtxSsrc: Long = Participant.randomSsrc()
+    val layers = Array(MediaPlan.LAYER_RIDS.size) { VideoLayer(it) }
+    var rtxSeq = secureRandomInt(0x8000)
+
+    @Volatile var publishing: Boolean = false
+    @Volatile var muted: Boolean = false
+
+    private val layerBySsrc = HashMap<Long, Int>()
+    private val layerByRtxSsrc = HashMap<Long, Int>()
+
+    /** The uplink layer a video packet belongs to: from its RID extension, else from its SSRC. */
+    fun layerOf(ssrc: Long, rid: String?): VideoLayer {
+        val index = if (rid != null) MediaPlan.layerOf(rid).also { layerBySsrc[ssrc] = it } else layerBySsrc.getOrPut(ssrc) { MediaPlan.TOP_LAYER }
+        return layers[index]
+    }
+
+    fun layerBySsrc(ssrc: Long): VideoLayer? = layerBySsrc[ssrc]?.let { layers[it] }
+
+    /** The layer an RTX stream repairs: from its repaired-RID, else remembered by SSRC, else the only active layer. */
+    fun layerOfRtx(rtxSsrc: Long, repairedRid: String?): VideoLayer? {
+        if (repairedRid != null) return layers[MediaPlan.layerOf(repairedRid).also { layerByRtxSsrc[rtxSsrc] = it }]
+        layerByRtxSsrc[rtxSsrc]?.let { return layers[it] }
+        return layers.filter { it.ssrc >= 0 }.singleOrNull()
+    }
+
+    override fun toString(): String = "VideoFeed($key)"
+
+    internal companion object {
+        const val SCREEN_SUFFIX = "/screen"
+    }
+}
+
+/**
+ * What one subscriber receives from one video feed: the chosen simulcast layer and an independent
  * numbering (seq, timestamp, VP8 PictureID/TL0PICIDX) that stays continuous across layer switches.
  * Also remembers which source packet went out under each sequence number, so NACKs are served from the
  * publisher's per-layer cache without a per-subscriber packet copy. Shard thread only.
@@ -249,7 +292,6 @@ internal class Participant(
 
     /** Server-side mute: the SFU stops forwarding this participant's audio / video. */
     @Volatile internal var audioMuted: Boolean = false
-    @Volatile internal var videoMuted: Boolean = false
 
     // ICE-lite credentials (RFC 8445 §5.3: ufrag ≥ 4 chars, pwd ≥ 22 chars of ice-char). Replaced on ICE restart;
     // the previous pair stays valid until the client's checks switch to the new one.
@@ -283,26 +325,37 @@ internal class Participant(
 
     /** This participant's media as forwarded to everyone else, under SSRCs the SFU chose. */
     internal val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
-    internal val videoSsrc: Long = randomSsrc()
-    internal val videoRtxSsrc: Long = randomSsrc()
+
+    /** Its video uplinks: the camera (simulcast) and a screen share (one layer). */
+    internal val camera: VideoFeed = VideoFeed(this, VideoKind.CAMERA)
+    internal val screen: VideoFeed = VideoFeed(this, VideoKind.SCREEN)
+    internal val feeds: List<VideoFeed> = listOf(camera, screen)
+    internal val videoSsrc: Long get() = camera.ssrc
+    internal val videoRtxSsrc: Long get() = camera.rtxSsrc
 
     @Volatile internal var remote: PeerAddress? = null
     @Volatile internal var lastConsentMillis: Long = nowMillis()
 
-    /** Whether this participant sends video (its answer accepted the video uplink m-line). */
-    @Volatile internal var publishesVideo: Boolean = false
+    /** Whether this participant sends camera video (its answer accepted the video uplink m-line). */
+    internal var publishesVideo: Boolean
+        get() = camera.publishing
+        set(value) { camera.publishing = value }
 
-    /** Publishers whose audio / video m-lines this participant has accepted (from the last applied answer). */
+    /** Server-side mute of the camera. */
+    internal var videoMuted: Boolean
+        get() = camera.muted
+        set(value) { camera.muted = value }
+
+    /** Publishers whose audio m-lines, and video feeds ([VideoFeed.key]), this participant has accepted (last applied answer). */
     @Volatile internal var receiving: Set<String> = emptySet()
     @Volatile internal var receivingVideo: Set<String> = emptySet()
 
     // --- media state, shard thread only ---
     internal var keys: SrtpSessionKeys? = null
     internal var uplinkAudioSsrc = -1L
-    internal val layers = Array(MediaPlan.LAYER_RIDS.size) { VideoLayer(it) }
-    private val layerBySsrc = HashMap<Long, Int>()
-    internal val downlinks = HashMap<String, DownlinkVideo>() // by publisher id
-    internal var rtxSeq = secureRandomInt(0x8000)
+    internal val layers: Array<VideoLayer> get() = camera.layers
+    internal val downlinks = HashMap<String, DownlinkVideo>() // by feed key
+    private val feedBySsrc = HashMap<Long, VideoFeed>()
 
     /** Uplink transport-cc: arrival times of this participant's packets, fed back to it. */
     internal val twccIn = TwccReceiver()
@@ -329,24 +382,30 @@ internal class Participant(
         room.shard.execute { keys = k }
     }
 
-    /** The uplink layer a video packet belongs to: from its RID extension, else from its SSRC. */
-    internal fun layerOf(ssrc: Long, rid: String?): VideoLayer {
-        val index = if (rid != null) MediaPlan.layerOf(rid).also { layerBySsrc[ssrc] = it } else layerBySsrc.getOrPut(ssrc) { MediaPlan.TOP_LAYER }
-        return layers[index]
+    /**
+     * The feed an uplink video (or RTX) packet belongs to: by its MID extension, else by SSRCs from the answer
+     * (screen share), else as learned earlier; the camera by default.
+     */
+    internal fun feedOf(ssrc: Long, mid: String?): VideoFeed {
+        val byMid = when (mid) {
+            MediaPlan.UPLINK_VIDEO_MID -> camera
+            MediaPlan.UPLINK_SCREEN_MID -> screen
+            else -> null
+        }
+        if (byMid != null) {
+            feedBySsrc[ssrc] = byMid
+            return byMid
+        }
+        return feedBySsrc[ssrc] ?: (if (ssrc in screenSsrcs) screen else camera).also { feedBySsrc[ssrc] = it }
     }
 
-    internal fun layerBySsrc(ssrc: Long): VideoLayer? = layerBySsrc[ssrc]?.let { layers[it] }
+    /** SSRCs (media and RTX) the answer declared for the screen uplink. */
+    @Volatile internal var screenSsrcs: Set<Long> = emptySet()
 
-    private val layerByRtxSsrc = HashMap<Long, Int>()
+    internal fun layerBySsrc(ssrc: Long): Pair<VideoFeed, VideoLayer>? =
+        feeds.firstNotNullOfOrNull { f -> f.layerBySsrc(ssrc)?.let { f to it } }
 
-    /** The layer an RTX stream repairs: from its repaired-RID, else remembered by SSRC, else the only active layer. */
-    internal fun layerOfRtx(rtxSsrc: Long, repairedRid: String?): VideoLayer? {
-        if (repairedRid != null) return layers[MediaPlan.layerOf(repairedRid).also { layerByRtxSsrc[rtxSsrc] = it }]
-        layerByRtxSsrc[rtxSsrc]?.let { return layers[it] }
-        return layers.filter { it.ssrc >= 0 }.singleOrNull()
-    }
-
-    internal fun downlinkFrom(publisherId: String): DownlinkVideo = downlinks.getOrPut(publisherId) { DownlinkVideo() }
+    internal fun downlinkFrom(feedKey: String): DownlinkVideo = downlinks.getOrPut(feedKey) { DownlinkVideo() }
 
     override fun toString(): String = "Participant($id, $name)"
 

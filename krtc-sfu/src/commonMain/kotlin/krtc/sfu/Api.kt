@@ -53,6 +53,8 @@ public data class SfuConfig(
      * (ADR-0016); see [Sfu.sendData] and [dataPolicy].
      */
     val dataChannels: Boolean = true,
+    /** Offer every participant a screen share uplink and the screen shares of the others (one m-line per slot). */
+    val screenShare: Boolean = true,
     /** Decides what happens to each data message a participant sends. Defaults to relaying it unchanged. */
     val dataPolicy: DataPolicy = DataPolicy.Relay,
     /** Testing only: percentage of downlink video packets to drop, to exercise NACK/RTX recovery. */
@@ -150,6 +152,7 @@ public sealed class SfuEvent {
     public data class MediaFailed(override val room: String, val participantId: String, val error: String) : SfuEvent()
     public data class SpeakingChanged(override val room: String, val participantId: String, val speaking: Boolean) : SfuEvent()
     public data class VideoPublishingChanged(override val room: String, val participantId: String, val publishing: Boolean) : SfuEvent()
+    public data class ScreenShareChanged(override val room: String, val participantId: String, val sharing: Boolean) : SfuEvent()
 }
 
 public data class ParticipantInfo(
@@ -161,6 +164,8 @@ public data class ParticipantInfo(
     val audioMuted: Boolean,
     val videoMuted: Boolean,
     val speaking: Boolean,
+    val sharesScreen: Boolean = false,
+    val screenMuted: Boolean = false,
 )
 
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)

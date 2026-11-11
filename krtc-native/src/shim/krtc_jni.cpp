@@ -210,6 +210,20 @@ KRTC_JNI(void, videoSourcePushArgb)(JNIEnv *env, jclass, jlong s, jint w, jint h
     krtc_video_source_push_argb(H<krtc_video_source>(s), w, h, reinterpret_cast<uint32_t *>(p), rotation, ts);
     env->ReleaseIntArrayElements(argb, p, JNI_ABORT);
 }
+KRTC_JNI(void, videoSourcePushRgba)(JNIEnv *env, jclass, jlong s, jint w, jint h, jbyteArray rgba, jint stride, jint rotation, jlong ts) {
+    jbyte *p = env->GetByteArrayElements(rgba, nullptr);
+    krtc_video_source_push_rgba(H<krtc_video_source>(s), w, h, reinterpret_cast<const uint8_t *>(p), stride, rotation, ts);
+    env->ReleaseByteArrayElements(rgba, p, JNI_ABORT);
+}
+KRTC_JNI(void, videoSourcePushRgbaDirect)(JNIEnv *env, jclass, jlong s, jint w, jint h, jobject rgba, jint stride, jint rotation, jlong ts) {
+    auto *p = static_cast<const uint8_t *>(env->GetDirectBufferAddress(rgba));
+    if (p) krtc_video_source_push_rgba(H<krtc_video_source>(s), w, h, p, stride, rotation, ts);
+}
+KRTC_JNI(jstring, screenSources)(JNIEnv *env, jclass) { return Take(env, krtc_screen_sources()); }
+KRTC_JNI(jlong, factoryCreateScreenSource)(JNIEnv *, jclass, jlong f, jlong id, jboolean window, jint fps, jint maxW, jint maxH) {
+    return J(krtc_factory_create_screen_source(H<krtc_factory>(f), id, window ? 1 : 0, fps, maxW, maxH));
+}
+KRTC_JNI(jlong, factoryCreateScreencastSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_screencast_source(H<krtc_factory>(f))); }
 KRTC_JNI(void, videoSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_video_source_release(H<krtc_video_source>(s)); }
 
 // Peer connection.

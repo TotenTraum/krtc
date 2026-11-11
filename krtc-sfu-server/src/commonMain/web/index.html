@@ -51,6 +51,7 @@
   </form>
   <section id="call" class="card" hidden>
     <p id="status">Подключение…</p>
+    <p><button type="button" id="share">Показать экран</button></p>
     <div id="grid"></div>
     <div id="chat">
       <div id="log"></div>
@@ -66,7 +67,7 @@ const params = new URLSearchParams(location.search);
 if (params.get('mute') === '1') $('play').checked = false;
 if (params.get('video')) $('video').value = params.get('video');
 
-const state = { ws: null, pc: null, myId: null, audio: null, video: null, peers: new Map(), midToPeer: new Map(), messages: [] };
+const state = { ws: null, pc: null, myId: null, audio: null, video: null, screen: null, peers: new Map(), midToPeer: new Map(), screenMids: new Set(), messages: [] };
 window.krtc = state; // for automated checks
 
 function fakeAudio() {
@@ -168,14 +169,38 @@ $('say').onsubmit = (e) => {
   if (text && sendData('chat', text)) { say('вы', text); $('text').value = ''; }
 };
 
-function tile(id, name) {
+// Screen share: the `s` uplink sends while there is a screen track; starting and stopping ask the SFU for a new offer.
+async function shareScreen(track) {
+  if (state.screen) state.screen.onended = null;
+  state.screen = track;
+  if (track) {
+    track.contentHint = 'detail'; // keep resolution and sharpness, drop frame rate under pressure
+    track.onended = () => shareScreen(null); // the browser's "stop sharing"
+    const me = tile(state.myId + '-screen', 'ваш экран', false);
+    me.querySelector('video').srcObject = new MediaStream([track]);
+  } else {
+    $('tile-' + state.myId + '-screen')?.remove();
+    const t = state.pc.getTransceivers().find((x) => x.mid === 's');
+    if (t) await t.sender.replaceTrack(null); // stop sending right away
+  }
+  $('share').textContent = track ? 'Остановить показ' : 'Показать экран';
+  state.ws.send(JSON.stringify({ type: 'renegotiate' }));
+}
+state.shareScreen = shareScreen;
+$('share').onclick = async () => {
+  if (state.screen) { state.screen.stop(); return shareScreen(null); }
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+  await shareScreen(stream.getVideoTracks()[0]);
+};
+
+function tile(id, name, layers = true) {
   let el = $('tile-' + id);
   if (!el) {
     el = document.createElement('div');
     el.className = 'tile';
     el.id = 'tile-' + id;
     el.innerHTML = '<video autoplay playsinline muted></video><div class="label"><span class="who"></span><span class="meta"></span></div>';
-    if (id !== state.myId) {
+    if (id !== state.myId && layers) {
       // Simulcast: ask the SFU for a lower or higher layer of this participant's video.
       const layers = document.createElement('div');
       layers.className = 'layers';
@@ -208,6 +233,7 @@ function setSpeaking(id, speaking) {
 async function onOffer(msg) {
   const pc = state.pc;
   state.midToPeer = new Map(Object.entries(msg.mids)); // before SRD: ontrack fires during it
+  state.screenMids = new Set(msg.screens ?? []);
   await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
   for (const [mid, track] of [['0', state.audio], ['1', state.video]]) {
     const t = pc.getTransceivers().find((x) => x.mid === mid);
@@ -216,6 +242,17 @@ async function onOffer(msg) {
       await t.sender.replaceTrack(track);
     }
   }
+  const s = pc.getTransceivers().find((x) => x.mid === 's');
+  if (s && state.screen) {
+    s.direction = 'sendonly';
+    if (s.sender.track !== state.screen) await s.sender.replaceTrack(state.screen);
+  } else if (s && s.direction !== 'inactive') {
+    await s.sender.replaceTrack(null);
+    s.direction = 'inactive';
+  }
+  // Screen shares that ended.
+  const sharing = new Set([...state.screenMids].map((m) => state.midToPeer.get(m)));
+  document.querySelectorAll('.tile.screen').forEach((el) => { if (!sharing.has(el.dataset.peer)) el.remove(); });
   await pc.setLocalDescription(await pc.createAnswer());
   state.ws.send(JSON.stringify({ type: 'answer', version: msg.version, sdp: pc.localDescription.sdp }));
 }
@@ -225,6 +262,10 @@ async function summary() {
   const stats = await state.pc.getStats();
   stats.forEach((s) => {
     if (s.type === 'outbound-rtp' && s.kind === 'audio') out.sent.audioBytes += s.bytesSent;
+    if (s.type === 'outbound-rtp' && s.kind === 'video' && s.mid === 's') {
+      out.sent.screen = { frames: s.framesEncoded ?? 0, width: s.frameWidth ?? 0, height: s.frameHeight ?? 0 };
+      return;
+    }
     if (s.type === 'outbound-rtp' && s.kind === 'video') {
       out.sent.videoFrames += s.framesEncoded ?? 0;
       out.sent.width = Math.max(out.sent.width, s.frameWidth ?? 0);
@@ -233,6 +274,10 @@ async function summary() {
     if (s.type !== 'inbound-rtp') return;
     const peer = state.midToPeer.get(s.mid);
     if (!peer) return;
+    if (state.screenMids.has(s.mid)) {
+      (out.screens ||= {})[peer] = { framesDecoded: s.framesDecoded ?? 0, width: s.frameWidth ?? 0, height: s.frameHeight ?? 0, codec: stats.get(s.codecId)?.mimeType };
+      return;
+    }
     const p = (out.peers[peer] ||= {});
     if (s.kind === 'audio') Object.assign(p, { audioPackets: s.packetsReceived, audioLost: s.packetsLost, level: s.audioLevel ?? 0 });
     if (s.kind === 'video') Object.assign(p, {
@@ -259,7 +304,13 @@ $('join').onsubmit = async (e) => {
   openChannels(pc); // they open once the SFU's offer brings the SCTP m-line and DTLS is up
   pc.ontrack = (ev) => {
     const peer = state.midToPeer.get(ev.transceiver.mid);
-    if (ev.track.kind === 'video') {
+    if (state.screenMids.has(ev.transceiver.mid)) {
+      const el = tile(peer + '-screen', (state.peers.get(peer)?.name ?? peer) + ' — экран', false);
+      el.classList.add('screen');
+      el.dataset.peer = peer;
+      el.querySelector('video').srcObject = new MediaStream([ev.track]);
+      el.querySelector('video').style.objectFit = 'contain';
+    } else if (ev.track.kind === 'video') {
       const v = tile(peer, state.peers.get(peer)?.name ?? peer).querySelector('video');
       v.srcObject = new MediaStream([ev.track]);
     } else {
@@ -286,7 +337,7 @@ $('join').onsubmit = async (e) => {
         break;
       }
       case 'peer-joined': state.peers.set(msg.id, msg); tile(msg.id, msg.name); break;
-      case 'peer-left': state.peers.delete(msg.id); $('tile-' + msg.id)?.remove(); break;
+      case 'peer-left': state.peers.delete(msg.id); $('tile-' + msg.id)?.remove(); $('tile-' + msg.id + '-screen')?.remove(); break;
       case 'speaking': setSpeaking(msg.id, msg.speaking); break;
       case 'offer': await onOffer(msg); break;
     }

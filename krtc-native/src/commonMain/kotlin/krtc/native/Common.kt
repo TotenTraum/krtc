@@ -100,6 +100,21 @@ public expect class NativePeerConnectionFactory(
      */
     public fun createCameraSource(index: Int = 0, width: Int = 1280, height: Int = 720, fps: Int = 30): NativeVideoSource?
 
+    /**
+     * Shares a display or window (see [nativeScreenSources]; null: the whole desktop / main display) at up to [fps],
+     * scaled down to fit [maxWidth] × [maxHeight]. Null where the platform has no built-in screen capture (Android:
+     * capture with `AndroidScreenCapture` into [createScreencastSource]) or the user has not permitted it (macOS asks
+     * for Screen Recording permission on first use; the permission applies from the next launch). Publish it with
+     * `RoomClient.setScreen(createVideoTrack(source))`.
+     */
+    public fun createScreenSource(source: ScreenSource? = null, fps: Int = 15, maxWidth: Int = 1920, maxHeight: Int = 1080): NativeVideoSource?
+
+    /**
+     * A video source for screen content the application captures itself: like [createVideoSource], but tracks on it
+     * are marked as screen content, so encoders keep resolution and sharpness and give up frame rate first.
+     */
+    public fun createScreencastSource(): NativeVideoSource
+
     /** A video track on [source]; several tracks may share one source. */
     public fun createVideoTrack(source: NativeVideoSource, id: String = "video"): NativeTrack
 
@@ -109,7 +124,25 @@ public expect class NativePeerConnectionFactory(
 /** Cameras the built-in capture can open, by index (Apple: AVFoundation, Linux: V4L2; empty elsewhere). */
 public expect fun nativeCameras(): List<String>
 
-/** A video source: frames pushed by the application, or a camera. [close] stops a camera. */
+/** Something the built-in screen capture can share: a display, or a window ([isWindow]). */
+public class ScreenSource(public val id: Long, public val isWindow: Boolean, public val title: String) {
+    override fun toString(): String = "ScreenSource($id, ${if (isWindow) "window" else "display"}, $title)"
+}
+
+/**
+ * Displays and windows the built-in screen capture can share: macOS (ScreenCaptureKit; empty until Screen Recording
+ * is permitted), Linux (the X11 display), Windows (displays and windows), iOS (this app's screen, ReplayKit);
+ * empty on Android.
+ */
+public expect fun nativeScreenSources(): List<ScreenSource>
+
+internal fun parseScreenSources(text: String): List<ScreenSource> = text.lineSequence().mapNotNull { line ->
+    val parts = line.split(' ', limit = 3)
+    val id = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
+    ScreenSource(id, parts.getOrNull(1) == "w", parts.getOrNull(2).orEmpty())
+}.toList()
+
+/** A video source: frames pushed by the application, a camera or a screen capture. [close] stops a capture. */
 public expect class NativeVideoSource : AutoCloseable {
     /** Pushes one I420 frame. [rotation] (0, 90, 180, 270, clockwise) is applied by receivers; [timestampMicros] 0 means now. */
     public fun pushI420(
@@ -120,6 +153,9 @@ public expect class NativeVideoSource : AutoCloseable {
 
     /** Pushes one frame of 0xAARRGGBB pixels, rows contiguous. */
     public fun pushArgb(width: Int, height: Int, argb: IntArray, rotation: Int = 0, timestampMicros: Long = 0)
+
+    /** Pushes one frame of R,G,B,A bytes (e.g. Android's RGBA_8888) with [stride] bytes per row. */
+    public fun pushRgba(width: Int, height: Int, rgba: ByteArray, stride: Int = width * 4, rotation: Int = 0, timestampMicros: Long = 0)
 
     override fun close()
 }

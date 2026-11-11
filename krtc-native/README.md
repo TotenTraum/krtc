@@ -28,6 +28,11 @@ client.dataOpen.first { it }
 client.sendData("привет".encodeToByteArray(), topic = "chat")                 // всем; to = listOf(id) — адресно
 client.sendData(cursorBytes, topic = "cursor", reliable = false)              // без повторов
 
+// Демонстрация экрана (ADR-0017): дисплей или окно; на Android — AndroidScreenCapture после диалога согласия.
+val screen = factory.createScreenSource(nativeScreenSources().firstOrNull())   // null — нет захвата или не разрешено
+screen?.let { client.setScreen(factory.createVideoTrack(it, "screen")) }       // client.setScreen(null) — прекратить
+// Экран собеседника: participant.screen (StateFlow трека), выводится так же, как камера.
+
 // Вывод: каждый кадр собеседника в ARGB (0xAARRGGBB), уже повёрнутый.
 client.participants.value.first().video.value?.let { track ->
     (track as NativeTrack).setFrameListener { frame -> render(frame.width, frame.height, frame.argb) }
@@ -60,7 +65,11 @@ Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Windows
 - `push-video` — кадры, сгенерированные в Kotlin (API своих кадров);
 - `camera` — камера 0 (на macOS запускай из Terminal.app, чтобы система спросила разрешение);
 - `restart-ice` — ICE restart на 5-й секунде;
-- `chat` — сообщение в комнату каждую секунду (data channels); полученные сообщения демо печатает всегда.
+- `chat` — сообщение в комнату каждую секунду (data channels); полученные сообщения демо печатает всегда;
+- `screen` — показ экрана после входа:
+  - macOS: запускать из Terminal.app, первый раз система спросит разрешение на запись экрана, и показ заработает со следующего запуска;
+  - Linux: нужен X11 (`DISPLAY`);
+  - Android: системный диалог, выбрать «весь экран».
 
 Принятое видео отрисовывается через frame listener, демо печатает средний цвет кадра.
 

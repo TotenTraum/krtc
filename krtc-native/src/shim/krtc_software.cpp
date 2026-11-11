@@ -21,6 +21,18 @@
 #if defined(RTC_DAV1D_IN_INTERNAL_DECODER_FACTORY)
 #include "api/video_codecs/video_decoder_factory_template_dav1d_adapter.h"
 #endif
+#include <atomic>
+#include <chrono>
+#include <thread>
+#if defined(_WIN32)
+#include "modules/desktop_capture/desktop_capture_options.h"
+#include "modules/desktop_capture/desktop_capturer.h"
+#include "modules/desktop_capture/desktop_frame.h"
+#elif defined(__linux__) && !defined(__ANDROID__)
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <dlfcn.h>
+#endif
 #if defined(_WIN32)
 // libwebrtc's video capture factory, which on Windows is DirectShow (DeviceInfoDS, VideoCaptureDS).
 #include "modules/video_capture/video_capture_factory.h"
@@ -147,6 +159,173 @@ std::function<void()> StartCamera(int index, int width, int height, int fps, Pus
         module->DeRegisterCaptureDataCallback();
     };
 }
+#endif
+
+// ---------------------------------------------------------------- screen capture
+
+namespace {
+/** Runs [capture] about [fps] times a second on a thread of its own until the returned stop function is called. */
+std::function<void()> Every(int fps, std::function<void()> setup, std::function<void()> capture, std::function<void()> teardown) {
+    auto running = std::make_shared<std::atomic<bool>>(true);
+    auto thread = std::make_shared<std::thread>([=] {
+        setup();
+        const auto period = std::chrono::microseconds(1000000 / std::max(1, fps));
+        auto next = std::chrono::steady_clock::now();
+        while (running->load()) {
+            capture();
+            next += period;
+            std::this_thread::sleep_until(next);
+            if (std::chrono::steady_clock::now() > next + period) next = std::chrono::steady_clock::now(); // fell behind
+        }
+        teardown();
+    });
+    return [running, thread] {
+        running->store(false);
+        thread->join();
+    };
+}
+}  // namespace
+
+#if defined(_WIN32)
+// Windows: libwebrtc's DesktopCapturer (DXGI or GDI for displays, window capture). Each capturer lives on its
+// capture thread: created, used and destroyed there.
+namespace {
+webrtc::DesktopCaptureOptions ScreenOptions() {
+    webrtc::DesktopCaptureOptions options = webrtc::DesktopCaptureOptions::CreateDefault();
+    options.set_allow_directx_capturer(true);
+    return options;
+}
+
+std::unique_ptr<webrtc::DesktopCapturer> CreateCapturer(bool window) {
+    return window ? webrtc::DesktopCapturer::CreateWindowCapturer(ScreenOptions()) : webrtc::DesktopCapturer::CreateScreenCapturer(ScreenOptions());
+}
+
+class FrameSink : public webrtc::DesktopCapturer::Callback {
+public:
+    FrameSink(PushVideoSource *source, int maxWidth, int maxHeight) : source_(source), maxWidth_(maxWidth), maxHeight_(maxHeight) {}
+    void OnCaptureResult(webrtc::DesktopCapturer::Result result, std::unique_ptr<webrtc::DesktopFrame> frame) override {
+        if (result != webrtc::DesktopCapturer::Result::SUCCESS || !frame) return;
+        PushBgra(source_.get(), frame->data(), frame->stride(), frame->size().width(), frame->size().height(), maxWidth_, maxHeight_, 0);
+    }
+
+private:
+    webrtc::scoped_refptr<PushVideoSource> source_;
+    int maxWidth_, maxHeight_;
+};
+}  // namespace
+
+std::vector<ScreenSource> ScreenSources() {
+    std::vector<ScreenSource> out;
+    for (bool window : {false, true}) {
+        std::thread([&] {
+            auto capturer = CreateCapturer(window);
+            webrtc::DesktopCapturer::SourceList list;
+            if (!capturer || !capturer->GetSourceList(&list)) return;
+            int index = 0;
+            for (const auto &s : list) {
+                std::string title = s.title.empty() ? (window ? "Window " : "Display ") + std::to_string(++index) : s.title;
+                out.push_back({static_cast<int64_t>(s.id), window, title});
+            }
+        }).join();
+    }
+    return out;
+}
+
+std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+    // Check on the caller's thread that the source can be selected, then capture on a thread of its own.
+    {
+        bool ok = false;
+        std::thread([&] {
+            auto probe = CreateCapturer(window);
+            ok = probe && probe->SelectSource(static_cast<webrtc::DesktopCapturer::SourceId>(id));
+        }).join();
+        if (!ok) return nullptr;
+    }
+    auto sink = std::make_shared<FrameSink>(source, maxWidth, maxHeight);
+    auto capturer = std::make_shared<std::unique_ptr<webrtc::DesktopCapturer>>();
+    return Every(
+        fps,
+        [=] {
+            *capturer = CreateCapturer(window);
+            if (*capturer && (*capturer)->SelectSource(static_cast<webrtc::DesktopCapturer::SourceId>(id))) (*capturer)->Start(sink.get());
+            else capturer->reset();
+        },
+        [=] { if (*capturer) (*capturer)->CaptureFrame(); },
+        [=] { capturer->reset(); });
+}
+
+#elif defined(__linux__) && !defined(__ANDROID__)
+// Linux: the X11 display with XGetImage (whole frames; no XDamage), through libX11 loaded at run time, so the
+// client still has no link-time X11 dependency. Wayland sessions are not supported (they need PipeWire and the
+// desktop portal); under XWayland only X11 windows are visible.
+namespace {
+void *X11Symbol(const char *name) {
+    static void *lib = dlopen("libX11.so.6", RTLD_LAZY | RTLD_LOCAL);
+    return lib ? dlsym(lib, name) : nullptr;
+}
+
+struct XFunctions {
+    Display *(*open)(const char *) = nullptr;
+    int (*close)(Display *) = nullptr;
+    Window (*root)(Display *) = nullptr;
+    Status (*attributes)(Display *, Window, XWindowAttributes *) = nullptr;
+    XImage *(*image)(Display *, Drawable, int, int, unsigned int, unsigned int, unsigned long, int) = nullptr;
+    bool ok = false;
+};
+
+const XFunctions &X() {
+    static const XFunctions f = [] {
+        XFunctions f;
+        f.open = reinterpret_cast<decltype(f.open)>(X11Symbol("XOpenDisplay"));
+        f.close = reinterpret_cast<decltype(f.close)>(X11Symbol("XCloseDisplay"));
+        f.root = reinterpret_cast<decltype(f.root)>(X11Symbol("XDefaultRootWindow"));
+        f.attributes = reinterpret_cast<decltype(f.attributes)>(X11Symbol("XGetWindowAttributes"));
+        f.image = reinterpret_cast<decltype(f.image)>(X11Symbol("XGetImage"));
+        f.ok = f.open && f.close && f.root && f.attributes && f.image;
+        return f;
+    }();
+    return f;
+}
+}  // namespace
+
+std::vector<ScreenSource> ScreenSources() {
+    const XFunctions &x = X();
+    if (!x.ok) return {};
+    Display *display = x.open(nullptr);
+    if (!display) return {};
+    XWindowAttributes a{};
+    x.attributes(display, x.root(display), &a);
+    x.close(display);
+    const char *name = getenv("DISPLAY");
+    return {{-1, false, "X11 display " + std::string(name ? name : "") + " " + std::to_string(a.width) + "x" + std::to_string(a.height)}};
+}
+
+std::function<void()> StartScreen(int64_t, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+    const XFunctions &x = X();
+    if (window || !x.ok) return nullptr;
+    Display *display = x.open(nullptr);
+    if (!display) return nullptr;
+    webrtc::scoped_refptr<PushVideoSource> target(source);
+    return Every(
+        fps, [] {},
+        [=] {
+            Window root = x.root(display);
+            XWindowAttributes a{};
+            if (!x.attributes(display, root, &a)) return;
+            XImage *image = x.image(display, root, 0, 0, a.width, a.height, AllPlanes, ZPixmap);
+            if (!image) return;
+            // 24/32-bit TrueColor on little-endian: B, G, R, X in memory, which libyuv calls ARGB.
+            if (image->bits_per_pixel == 32)
+                PushBgra(target.get(), reinterpret_cast<const uint8_t *>(image->data), image->bytes_per_line, image->width, image->height, maxWidth, maxHeight, 0);
+            image->f.destroy_image(image);
+        },
+        [=] { x.close(display); });
+}
+
+#else
+// Android: the application captures with MediaProjection (AndroidScreenCapture) into a screencast source.
+std::vector<ScreenSource> ScreenSources() { return {}; }
+std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource *) { return nullptr; }
 #endif
 
 }  // namespace krtc

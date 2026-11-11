@@ -82,6 +82,20 @@ void krtc_video_source_push_i420(krtc_video_source *source, int width, int heigh
                                  int rotation, int64_t timestamp_us);
 /* 32-bit ARGB pixels (0xAARRGGBB as native-endian ints), width × height, rows contiguous. */
 void krtc_video_source_push_argb(krtc_video_source *source, int width, int height, const uint32_t *argb, int rotation, int64_t timestamp_us);
+/* RGBA bytes (R,G,B,A in memory, e.g. Android's RGBA_8888) with a row stride in bytes. */
+void krtc_video_source_push_rgba(krtc_video_source *source, int width, int height, const uint8_t *rgba, int stride, int rotation, int64_t timestamp_us);
+
+/* Screen sharing. Sources the shim can capture itself, one per line as "<id> <s|w> <title>" (s: display, w: window;
+ * free with krtc_free): macOS displays and windows (ScreenCaptureKit), the Linux X11 display, iOS this app's screen
+ * (ReplayKit); none on Android, where the app captures with MediaProjection into a screencast source.
+ * A screen source is marked as screen content, and tracks made from it get the "detail" content hint, so the
+ * encoder keeps resolution and sharpness and gives up frame rate first. Frames are scaled down to fit max_width ×
+ * max_height (0 = no limit). NULL if capture is unavailable or not permitted (macOS asks for Screen Recording
+ * permission on first use and returns NULL until it is granted). */
+char *krtc_screen_sources(void);
+krtc_video_source *krtc_factory_create_screen_source(krtc_factory *factory, int64_t id, int window, int fps, int max_width, int max_height);
+krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *factory);
+
 krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *id, krtc_video_source *source);
 void krtc_video_source_release(krtc_video_source *source);
 

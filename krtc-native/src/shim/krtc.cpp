@@ -339,6 +339,27 @@ KRTC_API krtc_video_source *krtc_factory_create_video_source(krtc_factory *) {
     return new krtc_video_source{make_ref_counted<krtc::PushVideoSource>(), nullptr};
 }
 
+KRTC_API krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *) {
+    return new krtc_video_source{make_ref_counted<krtc::PushVideoSource>(true), nullptr};
+}
+
+KRTC_API char *krtc_screen_sources(void) {
+    std::string out;
+    for (const auto &s : krtc::ScreenSources()) {
+        std::string title = s.title;
+        std::replace(title.begin(), title.end(), '\n', ' ');
+        out += std::to_string(s.id) + (s.window ? " w " : " s ") + title + "\n";
+    }
+    return Dup(out);
+}
+
+KRTC_API krtc_video_source *krtc_factory_create_screen_source(krtc_factory *, int64_t id, int window, int fps, int max_width, int max_height) {
+    auto source = make_ref_counted<krtc::PushVideoSource>(true);
+    std::function<void()> stop = krtc::StartScreen(id, window != 0, fps > 0 ? fps : 15, max_width, max_height, source.get());
+    if (!stop) return nullptr;
+    return new krtc_video_source{source, std::move(stop)};
+}
+
 KRTC_API int krtc_camera_count(void) { return krtc::CameraCount(); }
 
 KRTC_API char *krtc_camera_name(int index) { return Dup(krtc::CameraName(index)); }
@@ -383,8 +404,37 @@ KRTC_API void krtc_video_source_push_argb(krtc_video_source *s, int width, int h
                         .build());
 }
 
+KRTC_API void krtc_video_source_push_rgba(krtc_video_source *s, int width, int height, const uint8_t *rgba, int stride, int rotation, int64_t timestamp_us) {
+    scoped_refptr<I420Buffer> buffer = I420Buffer::Create(width, height);
+    libyuv::ABGRToI420(rgba, stride, buffer->MutableDataY(), buffer->StrideY(), buffer->MutableDataU(), buffer->StrideU(),
+                       buffer->MutableDataV(), buffer->StrideV(), width, height);
+    s->source->Push(VideoFrame::Builder()
+                        .set_video_frame_buffer(buffer)
+                        .set_rotation(Rotation(rotation))
+                        .set_timestamp_us(timestamp_us > 0 ? timestamp_us : TimeMicros())
+                        .build());
+}
+
+namespace krtc {
+void PushBgra(PushVideoSource *source, const uint8_t *bgra, int stride, int width, int height, int maxWidth, int maxHeight, int64_t timestampUs) {
+    scoped_refptr<I420Buffer> full = I420Buffer::Create(width, height);
+    libyuv::ARGBToI420(bgra, stride, full->MutableDataY(), full->StrideY(), full->MutableDataU(), full->StrideU(),
+                       full->MutableDataV(), full->StrideV(), width, height);
+    double scale = 1.0;
+    if (maxWidth > 0) scale = std::min(scale, static_cast<double>(maxWidth) / width);
+    if (maxHeight > 0) scale = std::min(scale, static_cast<double>(maxHeight) / height);
+    scoped_refptr<I420Buffer> out = full;
+    if (scale < 1.0) {
+        out = I420Buffer::Create(std::max(2, static_cast<int>(width * scale)) & ~1, std::max(2, static_cast<int>(height * scale)) & ~1);
+        out->ScaleFrom(*full);
+    }
+    source->Push(VideoFrame::Builder().set_video_frame_buffer(out).set_timestamp_us(timestampUs > 0 ? timestampUs : TimeMicros()).build());
+}
+}  // namespace krtc
+
 KRTC_API krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *id, krtc_video_source *s) {
     scoped_refptr<VideoTrackInterface> track = factory->factory->CreateVideoTrack(s->source, id);
+    if (track && s->source->is_screencast()) track->set_content_hint(VideoTrackInterface::ContentHint::kDetailed);
     return track ? new krtc_track{track, nullptr} : nullptr;
 }
 

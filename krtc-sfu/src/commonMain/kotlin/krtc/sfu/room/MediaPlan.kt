@@ -18,6 +18,14 @@ internal object MediaPlan {
     internal const val TRANSPORT_CC_EXT_ID: Int = 5
     internal const val TWCC_FEEDBACK_INTERVAL_MILLIS: Long = 50
 
+    /** Uplink m-lines of every offer: microphone, camera (simulcast), screen share (one layer). */
+    internal const val UPLINK_AUDIO_MID: String = "0"
+    internal const val UPLINK_VIDEO_MID: String = "1"
+    internal const val UPLINK_SCREEN_MID: String = "s"
+
+    /** The screen share of the participant in downlink slot [slot]. */
+    internal fun screenMid(slot: Int): String = "s$slot"
+
     /** The data channel m-line (SCTP over DTLS, RFC 8841), third in every offer when data channels are on. */
     internal const val DATA_MID: String = "d"
     internal const val SCTP_PORT: Int = 5000

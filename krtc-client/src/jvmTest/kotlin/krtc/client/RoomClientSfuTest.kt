@@ -150,6 +150,34 @@ class RoomClientSfuTest {
     }
 
     @Test
+    fun screenShareReachesTheOthersAndStops(): Unit = runBlocking {
+        withTimeout(10_000) {
+            val alice = RoomClient(url, FakeFactory())
+            val bobFactory = FakeFactory()
+            val bob = RoomClient(url, bobFactory)
+            alice.join("screen", "Alice")
+            alice.state.first { it is RoomState.Connected }
+            bob.join("screen", "Bob")
+            bob.state.first { it is RoomState.Connected }
+            val bobOnAlice = alice.participants.first { it.isNotEmpty() }.single()
+
+            val display = FakeTrack("video")
+            bob.setScreen(display)
+            val shared = bobOnAlice.screen.first { it != null }!!
+            assertEquals("video", shared.kind)
+            assertNull(bobOnAlice.video.value, "the screen is not mistaken for a camera")
+            val bobPc = bobFactory.created.single()
+            while (bobPc.getTransceivers().firstOrNull { it.mid == "s" }?.sender?.track !== display) kotlinx.coroutines.delay(20)
+            assertEquals(krtc.core.RTCRtpTransceiverDirection.SENDONLY, bobPc.getTransceivers().single { it.mid == "s" }.direction)
+
+            bob.setScreen(null)
+            bobOnAlice.screen.first { it == null }
+            alice.leave()
+            bob.leave()
+        }
+    }
+
+    @Test
     fun failedConnectionTriggersIceRestartWithFreshCredentials(): Unit = runBlocking {
         withTimeout(15_000) {
             val factory = FakeFactory()

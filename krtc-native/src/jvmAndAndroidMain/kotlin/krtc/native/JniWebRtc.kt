@@ -72,11 +72,19 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createCameraSource(index: Int, width: Int, height: Int, fps: Int): NativeVideoSource? =
         Jni.factoryCreateCameraSource(handle, index, width, height, fps).takeIf { it != 0L }?.let(::NativeVideoSource)
 
+    public actual fun createScreenSource(source: ScreenSource?, fps: Int, maxWidth: Int, maxHeight: Int): NativeVideoSource? =
+        Jni.factoryCreateScreenSource(handle, source?.id ?: -1, source?.isWindow == true, fps, maxWidth, maxHeight).takeIf { it != 0L }?.let(::NativeVideoSource)
+
+    public actual fun createScreencastSource(): NativeVideoSource =
+        NativeVideoSource(Jni.factoryCreateScreencastSource(handle).also { check(it != 0L) { "video source creation failed" } })
+
     public actual fun createVideoTrack(source: NativeVideoSource, id: String): NativeTrack =
         NativeTrack(Jni.factoryCreateVideoTrack(handle, id, source.handle).also { check(it != 0L) { "video track creation failed" } })
 
     actual override fun close(): Unit = Jni.factoryRelease(handle)
 }
+
+public actual fun nativeScreenSources(): List<ScreenSource> = parseScreenSources(Jni.screenSources().orEmpty())
 
 public actual fun nativeCameras(): List<String> = List(Jni.cameraCount()) { i -> Jni.cameraName(i) ?: "camera $i" }
 
@@ -97,6 +105,19 @@ public actual class NativeVideoSource internal constructor(internal val handle: 
     public actual fun pushArgb(width: Int, height: Int, argb: IntArray, rotation: Int, timestampMicros: Long) {
         require(argb.size >= width * height) { "argb holds ${argb.size} pixels, need ${width * height}" }
         if (!closed) Jni.videoSourcePushArgb(handle, width, height, argb, rotation, timestampMicros)
+    }
+
+    @Synchronized
+    public actual fun pushRgba(width: Int, height: Int, rgba: ByteArray, stride: Int, rotation: Int, timestampMicros: Long) {
+        require(rgba.size >= stride * (height - 1) + width * 4) { "rgba holds ${rgba.size} bytes, too few for $width x $height" }
+        if (!closed) Jni.videoSourcePushRgba(handle, width, height, rgba, stride, rotation, timestampMicros)
+    }
+
+    /** Pushes RGBA from a direct buffer without copying it into the Java heap (Android screen capture). */
+    @Synchronized
+    internal fun pushRgba(width: Int, height: Int, rgba: java.nio.ByteBuffer, stride: Int, rotation: Int, timestampMicros: Long) {
+        require(rgba.isDirect) { "a direct buffer is needed" }
+        if (!closed) Jni.videoSourcePushRgbaDirect(handle, width, height, rgba, stride, rotation, timestampMicros)
     }
 
     @Synchronized

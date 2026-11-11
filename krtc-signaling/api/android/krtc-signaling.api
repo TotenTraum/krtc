@@ -66,6 +66,14 @@ public final class krtc/signaling/ClientMessage$Layer$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class krtc/signaling/ClientMessage$Renegotiate : krtc/signaling/ClientMessage {
+	public static final field INSTANCE Lkrtc/signaling/ClientMessage$Renegotiate;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class krtc/signaling/ClientMessage$RestartIce : krtc/signaling/ClientMessage {
 	public static final field INSTANCE Lkrtc/signaling/ClientMessage$RestartIce;
 	public fun equals (Ljava/lang/Object;)Z
@@ -158,15 +166,17 @@ public final class krtc/signaling/ServerMessage$Companion {
 
 public final class krtc/signaling/ServerMessage$Offer : krtc/signaling/ServerMessage {
 	public static final field Companion Lkrtc/signaling/ServerMessage$Offer$Companion;
-	public fun <init> (JLjava/lang/String;Ljava/util/Map;)V
-	public synthetic fun <init> (JLjava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (JLjava/lang/String;Ljava/util/Map;Ljava/util/List;)V
+	public synthetic fun <init> (JLjava/lang/String;Ljava/util/Map;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()J
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/util/Map;
-	public final fun copy (JLjava/lang/String;Ljava/util/Map;)Lkrtc/signaling/ServerMessage$Offer;
-	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Offer;JLjava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Offer;
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (JLjava/lang/String;Ljava/util/Map;Ljava/util/List;)Lkrtc/signaling/ServerMessage$Offer;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Offer;JLjava/lang/String;Ljava/util/Map;Ljava/util/List;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Offer;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getMids ()Ljava/util/Map;
+	public final fun getScreens ()Ljava/util/List;
 	public final fun getSdp ()Ljava/lang/String;
 	public final fun getVersion ()J
 	public fun hashCode ()I

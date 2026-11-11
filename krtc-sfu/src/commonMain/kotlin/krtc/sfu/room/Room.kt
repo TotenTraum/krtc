@@ -93,7 +93,7 @@ internal class Room(
             h.payloadType == MediaPlan.OPUS_PT -> forwardAudio(from, data, plainLen, h)
             MediaPlan.isVideo(h.payloadType) -> {
                 if (simulatedUplinkLossPercent > 0 && lossRandom.nextInt(100) < simulatedUplinkLossPercent) return
-                forwardVideo(from, data, plainLen, h)
+                forwardVideo(from.feedOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.MID_EXT_ID)), data, plainLen, h)
             }
             MediaPlan.isRtx(h.payloadType) -> onUpstreamRtx(from, data, plainLen, h)
             else -> Unit
@@ -117,9 +117,10 @@ internal class Room(
         }
     }
 
-    private fun forwardVideo(from: Participant, data: ByteArray, plainLen: Int, h: RtpHeader) {
+    private fun forwardVideo(feed: VideoFeed, data: ByteArray, plainLen: Int, h: RtpHeader) {
+        val from = feed.publisher
         val now = nowMillis()
-        val layer = from.layerOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.RID_EXT_ID))
+        val layer = feed.layerOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.RID_EXT_ID))
         layer.ssrc = h.ssrc
         layer.lastPacketMillis = now
         layer.countBytes(plainLen)
@@ -127,7 +128,7 @@ internal class Room(
         // Subscribers negotiated their own MID mapping: hide the publisher's MID/RID from them.
         RtpStreamId.rename(data, h, UPLINK_ONLY_EXTENSIONS, MediaPlan.IGNORED_EXT_ID)
         layer.cache.put(h.sequenceNumber, data, plainLen)
-        if (from.videoMuted) return
+        if (feed.muted) return
 
         val payload = h.headerLength
         val payloadLen = h.payloadLength(data, 0, plainLen)
@@ -138,15 +139,15 @@ internal class Room(
 
         val out = shard.out
         for (sub in members) {
-            if (sub === from || from.id !in sub.receivingVideo) continue
+            if (sub === from || feed.key !in sub.receivingVideo) continue
             val k = sub.keys ?: continue
             val to = sub.remote ?: continue
-            val down = sub.downlinkFrom(from.id)
-            if (down.target < 0) chooseLayer(from, down, now)
+            val down = sub.downlinkFrom(feed.key)
+            if (down.target < 0) chooseLayer(feed, down, now)
             // Switch layers only at a key frame of the target layer, so the decoder never sees a gap.
             if (down.target != down.current && layer.index == down.target && keyFrame) down.switchTo(layer.index, h, d)
             if (layer.index != down.current) continue
-            down.rewrite(data, h, d, payload, from.videoSsrc)
+            down.rewrite(data, h, d, payload, feed.ssrc)
             stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
             val n = k.rtpOut.protect(data, 0, plainLen, out, 0)
             if (simulatedLossPercent > 0 && lossRandom.nextInt(100) < simulatedLossPercent) continue
@@ -155,16 +156,16 @@ internal class Room(
     }
 
     /** Picks the best active layer within the subscriber's cap (preference and bandwidth) and asks for a key frame on it. */
-    private fun chooseLayer(publisher: Participant, down: DownlinkVideo, now: Long) {
-        val active = publisher.layers.filter { it.isActive(now) }
+    private fun chooseLayer(feed: VideoFeed, down: DownlinkVideo, now: Long) {
+        val active = feed.layers.filter { it.isActive(now) }
         val chosen = active.lastOrNull { it.index <= down.cap } ?: active.firstOrNull() ?: return
         down.target = chosen.index
-        if (down.target != down.current) requestKeyframe(publisher, chosen)
+        if (down.target != down.current) requestKeyframe(feed.publisher, chosen)
     }
 
-    /** Sets which simulcast layer [subscriber] wants from [publisherId] (0 = lowest). */
-    internal fun setPreferredLayer(subscriber: Participant, publisherId: String, layer: Int) {
-        val down = subscriber.downlinkFrom(publisherId)
+    /** Sets which simulcast layer [subscriber] wants from a feed ([VideoFeed.key]: publisher id = camera) (0 = lowest). */
+    internal fun setPreferredLayer(subscriber: Participant, feedKey: String, layer: Int) {
+        val down = subscriber.downlinkFrom(feedKey)
         down.preferred = layer.coerceIn(0, MediaPlan.TOP_LAYER)
         down.target = -1 // re-evaluated on the next packet
     }
@@ -213,7 +214,8 @@ internal class Room(
         val payload = h.headerLength
         val payloadLen = h.payloadLength(data, 0, plainLen)
         if (payloadLen < 2) return
-        val layer = from.layerOfRtx(h.ssrc, RtpStreamId.read(data, h, MediaPlan.REPAIRED_RID_EXT_ID)) ?: return
+        val feed = from.feedOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.MID_EXT_ID))
+        val layer = feed.layerOfRtx(h.ssrc, RtpStreamId.read(data, h, MediaPlan.REPAIRED_RID_EXT_ID)) ?: return
         if (layer.ssrc < 0) return
         val osn = ((data[payload].toInt() and 0xFF) shl 8) or (data[payload + 1].toInt() and 0xFF)
         if (!layer.isMissing(osn)) return // already recovered (or never lost): don't forward twice
@@ -227,7 +229,7 @@ internal class Room(
         val len = payload + payloadLen - 2
         if (!header.parse(out, 0, len)) return
         counters.rtxRecovered.incrementAndFetch()
-        forwardVideo(from, out, len, header)
+        forwardVideo(feed, out, len, header)
     }
 
     // ------------------------------------------------------------------ RTCP
@@ -255,11 +257,19 @@ internal class Room(
         }
     }
 
-    private fun publisherOfVideo(downlinkSsrc: Long): Participant? = members.firstOrNull { it.videoSsrc == downlinkSsrc }
+    private fun publisherOfVideo(downlinkSsrc: Long): VideoFeed? {
+        for (m in members) for (f in m.feeds) if (f.ssrc == downlinkSsrc) return f
+        return null
+    }
 
-    private fun keyframeForSubscriber(publisher: Participant, subscriber: Participant) {
-        val current = subscriber.downlinks[publisher.id]?.current ?: return
-        if (current >= 0) requestKeyframe(publisher, publisher.layers[current])
+    private fun feedByKey(snapshot: List<Participant>, key: String): VideoFeed? {
+        for (m in snapshot) for (f in m.feeds) if (f.key == key) return f
+        return null
+    }
+
+    private fun keyframeForSubscriber(feed: VideoFeed, subscriber: Participant) {
+        val current = subscriber.downlinks[feed.key]?.current ?: return
+        if (current >= 0) requestKeyframe(feed.publisher, feed.layers[current])
     }
 
     /** Forwards a publisher's SR under the downlink SSRC so subscribers can synchronize audio and video. */
@@ -271,24 +281,24 @@ internal class Room(
             for (sub in members) if (sub !== from && from.id in sub.receiving) sendRtcp(sub, sr)
             return
         }
-        val layer = from.layerBySsrc(ssrc) ?: return
+        val (feed, layer) = from.layerBySsrc(ssrc) ?: return
         for (sub in members) {
-            if (sub === from || from.id !in sub.receivingVideo) continue
-            val down = sub.downlinks[from.id] ?: continue
+            if (sub === from || feed.key !in sub.receivingVideo) continue
+            val down = sub.downlinks[feed.key] ?: continue
             if (down.current != layer.index) continue // each subscriber's timeline follows its own layer
-            sendRtcp(sub, Rtcp.rewriteSenderReport(data, at, from.videoSsrc, (srTs + down.tsOffset) and 0xFFFFFFFFL))
+            sendRtcp(sub, Rtcp.rewriteSenderReport(data, at, feed.ssrc, (srTs + down.tsOffset) and 0xFFFFFFFFL))
         }
     }
 
     /** Answers a subscriber's NACK with RTX packets (RFC 4588) rebuilt from the publisher's layer cache. */
-    private fun retransmit(publisher: Participant, subscriber: Participant, seqs: List<Int>) {
+    private fun retransmit(feed: VideoFeed, subscriber: Participant, seqs: List<Int>) {
         val k = subscriber.keys ?: return
         val to = subscriber.remote ?: return
-        val down = subscriber.downlinks[publisher.id] ?: return
+        val down = subscriber.downlinks[feed.key] ?: return
         val rtx = scratch
         for (outSeq in seqs) {
             val source = down.source(outSeq) ?: continue
-            val layer = publisher.layers[source ushr 16]
+            val layer = feed.layers[source ushr 16]
             val srcSeq = source and 0xFFFF
             val pkt = layer.cache.packet(srcSeq) ?: continue
             val len = layer.cache.length(srcSeq)
@@ -296,9 +306,9 @@ internal class Room(
             val hl = header.headerLength
             pkt.copyInto(rtx, 0, 0, hl)
             rtx[1] = ((pkt[1].toInt() and 0x80) or MediaPlan.rtxFor(header.payloadType)).toByte()
-            publisher.rtxSeq = (publisher.rtxSeq + 1) and 0xFFFF
-            Rtp.setSequenceNumber(rtx, 0, publisher.rtxSeq)
-            Rtp.setSsrc(rtx, 0, publisher.videoRtxSsrc)
+            feed.rtxSeq = (feed.rtxSeq + 1) and 0xFFFF
+            Rtp.setSequenceNumber(rtx, 0, feed.rtxSeq)
+            Rtp.setSsrc(rtx, 0, feed.rtxSsrc)
             Rtp.setTimestamp(rtx, 0, (header.timestamp + down.sentTsOffset(outSeq)) and 0xFFFFFFFFL)
             rtx[hl] = (outSeq ushr 8).toByte() // original sequence number, as the subscriber saw it
             rtx[hl + 1] = outSeq.toByte()
@@ -359,29 +369,29 @@ internal class Room(
         val elapsed = if (lastTick < 0) 0L else now - lastTick
         lastTick = now
         val snapshot = members
-        for (p in snapshot) for (layer in p.layers) layer.updateBitrate(elapsed)
+        for (p in snapshot) for (f in p.feeds) for (layer in f.layers) layer.updateBitrate(elapsed)
         for (p in snapshot) {
             if (p.speaking && now - p.lastLoudMillis > MediaPlan.SPEAKING_HOLD_MILLIS) {
                 p.speaking = false
                 onSpeaking(p, false)
             }
             // Re-ask for packets still missing (each sequence number at most a few times).
-            for (layer in p.layers) if (layer.hasMissing()) sendNack(p, layer)
-            val activeSsrcs = p.layers.filter { it.isActive(now) }.map { it.ssrc }
+            for (f in p.feeds) for (layer in f.layers) if (layer.hasMissing()) sendNack(p, layer)
+            val activeSsrcs = p.feeds.flatMap { f -> f.layers.filter { it.isActive(now) }.map { it.ssrc } }
             if (remb && activeSsrcs.isNotEmpty()) {
                 sendRtcp(p, Rtcp.concat(Rtcp.receiverReport(MediaPlan.SFU_SSRC), Rtcp.remb(MediaPlan.SFU_SSRC, MediaPlan.VIDEO_BITRATE, activeSsrcs)))
             }
             // Downlinks: drop state for publishers who left; re-choose layers that went quiet or can improve.
             val it = p.downlinks.entries.iterator()
             while (it.hasNext()) {
-                val (publisherId, down) = it.next()
-                val publisher = snapshot.firstOrNull { m -> m.id == publisherId }
-                if (publisher == null) {
+                val (feedKey, down) = it.next()
+                val feed = feedByKey(snapshot, feedKey)
+                if (feed == null) {
                     it.remove()
                     continue
                 }
-                val best = publisher.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.cap }?.index ?: -1
-                val currentActive = down.current >= 0 && publisher.layers[down.current].isActive(now)
+                val best = feed.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.cap }?.index ?: -1
+                val currentActive = down.current >= 0 && feed.layers[down.current].isActive(now)
                 if (!currentActive || (best > down.current && down.target != best)) down.target = -1
             }
             allocate(p, snapshot, now)
@@ -400,11 +410,11 @@ internal class Room(
      */
     private fun allocate(sub: Participant, snapshot: List<Participant>, now: Long) {
         if (!sub.bwe.active) return
-        val pubs = ArrayList<Participant>()
+        val pubs = ArrayList<VideoFeed>()
         val downs = ArrayList<DownlinkVideo>()
-        for ((publisherId, down) in sub.downlinks) {
-            if (publisherId !in sub.receivingVideo) continue
-            pubs += snapshot.firstOrNull { it.id == publisherId } ?: continue
+        for ((feedKey, down) in sub.downlinks) {
+            if (feedKey !in sub.receivingVideo) continue
+            pubs += feedByKey(snapshot, feedKey) ?: continue
             downs += down
         }
         if (downs.isEmpty()) return

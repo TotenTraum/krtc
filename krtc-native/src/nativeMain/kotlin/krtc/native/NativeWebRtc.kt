@@ -102,6 +102,12 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createCameraSource(index: Int, width: Int, height: Int, fps: Int): NativeVideoSource? =
         krtc_factory_create_camera_source(handle, index, width, height, fps)?.let(::NativeVideoSource)
 
+    public actual fun createScreenSource(source: ScreenSource?, fps: Int, maxWidth: Int, maxHeight: Int): NativeVideoSource? =
+        krtc_factory_create_screen_source(handle, source?.id ?: -1, if (source?.isWindow == true) 1 else 0, fps, maxWidth, maxHeight)?.let(::NativeVideoSource)
+
+    public actual fun createScreencastSource(): NativeVideoSource =
+        NativeVideoSource(krtc_factory_create_screencast_source(handle) ?: error("video source creation failed"))
+
     public actual fun createVideoTrack(source: NativeVideoSource, id: String): NativeTrack =
         NativeTrack(krtc_factory_create_video_track(handle, id, source.handle) ?: error("video track creation failed"))
 
@@ -109,6 +115,9 @@ public actual class NativePeerConnectionFactory actual constructor(
         krtc_factory_release(handle)
     }
 }
+
+public actual fun nativeScreenSources(): List<ScreenSource> =
+    parseScreenSources(krtc_screen_sources()?.let { p -> p.toKString().also { krtc_free(p) } }.orEmpty())
 
 public actual fun nativeCameras(): List<String> =
     List(krtc_camera_count()) { i -> krtc_camera_name(i)?.let { p -> p.toKString().also { krtc_free(p) } } ?: "camera $i" }
@@ -141,6 +150,13 @@ public actual class NativeVideoSource internal constructor(internal val handle: 
         require(argb.size >= width * height) { "argb holds ${argb.size} pixels, need ${width * height}" }
         synchronized(lock) {
             if (!closed) argb.usePinned { krtc_video_source_push_argb(handle, width, height, it.addressOf(0).reinterpret(), rotation, timestampMicros) }
+        }
+    }
+
+    public actual fun pushRgba(width: Int, height: Int, rgba: ByteArray, stride: Int, rotation: Int, timestampMicros: Long) {
+        require(rgba.size >= stride * (height - 1) + width * 4) { "rgba holds ${rgba.size} bytes, too few for $width x $height" }
+        synchronized(lock) {
+            if (!closed) rgba.usePinned { krtc_video_source_push_rgba(handle, width, height, it.addressOf(0).reinterpret(), stride, rotation, timestampMicros) }
         }
     }
 

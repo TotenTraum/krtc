@@ -26,6 +26,7 @@
 | [0014](0014-spike-krtc-native.md) | Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc, бэкенд `krtc-core` для macOS, Linux, iOS, JVM и Android | Принято, кроме Windows |
 | [0015](0015-sfu-transport-and-congestion.md) | Транспорт и управление перегрузкой SFU: transport-cc и выбор слоёв, сокет на адрес, IPv6, ICE-TCP, ICE restart | Принято |
 | [0016](0016-data-channels.md) | Data channels: SCTP в `krtc-sfu`, `RTCDataChannel` в клиенте, сообщения комнаты | Принято |
+| [0017](0017-screen-sharing.md) | Демонстрация экрана: второй видеопоток в SFU, `setScreen` в клиенте, захват на каждой платформе | Принято |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

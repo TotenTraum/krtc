@@ -27,6 +27,8 @@ final class krtc.client/RemoteParticipant { // krtc.client/RemoteParticipant|nul
         final fun <get-id>(): kotlin/String // krtc.client/RemoteParticipant.id.<get-id>|<get-id>(){}[0]
     final val name // krtc.client/RemoteParticipant.name|{}name[0]
         final fun <get-name>(): kotlin/String // krtc.client/RemoteParticipant.name.<get-name>|<get-name>(){}[0]
+    final val screen // krtc.client/RemoteParticipant.screen|{}screen[0]
+        final fun <get-screen>(): kotlinx.coroutines.flow/StateFlow<krtc.core/MediaStreamTrack?> // krtc.client/RemoteParticipant.screen.<get-screen>|<get-screen>(){}[0]
     final val speaking // krtc.client/RemoteParticipant.speaking|{}speaking[0]
         final fun <get-speaking>(): kotlinx.coroutines.flow/StateFlow<kotlin/Boolean> // krtc.client/RemoteParticipant.speaking.<get-speaking>|<get-speaking>(){}[0]
     final val video // krtc.client/RemoteParticipant.video|{}video[0]
@@ -55,10 +57,11 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
 
     final fun leave() // krtc.client/RoomClient.leave|leave(){}[0]
     final fun sendData(kotlin/ByteArray, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ...): kotlin/Boolean // krtc.client/RoomClient.sendData|sendData(kotlin.ByteArray;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.Boolean){}[0]
-    final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
     final suspend fun restartIce() // krtc.client/RoomClient.restartIce|restartIce(){}[0]
     final suspend fun setCamera(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setCamera|setCamera(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setMicrophone(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setMicrophone|setMicrophone(krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun setScreen(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setScreen|setScreen(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setVideoQuality(kotlin/String, krtc.client/VideoQuality) // krtc.client/RoomClient.setVideoQuality|setVideoQuality(kotlin.String;krtc.client.VideoQuality){}[0]
 }
 

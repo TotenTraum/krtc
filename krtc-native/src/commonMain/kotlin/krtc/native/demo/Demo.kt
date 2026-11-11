@@ -6,6 +6,7 @@ import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
 import krtc.native.NativeVideoSource
 import krtc.native.nativeCameras
+import krtc.native.nativeScreenSources
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -19,13 +20,16 @@ import kotlin.concurrent.Volatile
  * a video track, and reports what it sends and receives. Same code on every platform:
  *   krtc-native-demo.kexe ws://<sfu>:8092 test native-client 30 [codec|- [flags...]]
  * Flags: `push-video` publishes frames generated here (the push API) instead of the built-in test pattern,
- * `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s, `chat` sends a room message every second (data channels). Received video is rendered
+ * `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s, `chat` sends a room message every second (data channels), `screen` shares the screen after joining (renegotiates).
+ * Remote screen shares are rendered and summarized like cameras. Received video is rendered
  * through a frame listener and summarized (average colour).
  */
 public suspend fun runDemo(
     args: Array<String>,
     /** How `camera` opens one (Android passes Camera2 capture into a pushed source). */
     openCamera: (NativePeerConnectionFactory) -> NativeVideoSource? = { it.createCameraSource(0, 1280, 720, 30) },
+    /** How `screen` captures (Android passes MediaProjection capture into a screencast source). */
+    openScreen: suspend (NativePeerConnectionFactory) -> NativeVideoSource? = { it.createScreenSource() },
 ): Unit = coroutineScope {
     val url = args.getOrElse(0) { "ws://127.0.0.1:8080" }
     val room = args.getOrElse(1) { "test" }
@@ -36,7 +40,7 @@ public suspend fun runDemo(
     val flags = args.drop(5).toSet()
     val factory = NativePeerConnectionFactory(preferredVideoCodec = preferred)
     factory.setTestTone(true)
-    println("video codecs: ${factory.videoCodecs}, cameras: ${nativeCameras()}")
+    println("video codecs: ${factory.videoCodecs}, cameras: ${nativeCameras()}, screens: ${nativeScreenSources()}")
     val mic = factory.createAudioTrack()
     var source: NativeVideoSource? = null
     val camera = when {
@@ -55,6 +59,14 @@ public suspend fun runDemo(
     client.join(room, name, microphone = mic, camera = camera)
     val connected = withTimeout(10_000) { client.state.first { it is RoomState.Connected } } as RoomState.Connected
     println("joined ${connected.room} as ${connected.selfId}")
+    var screenSource: NativeVideoSource? = null
+    var screenTrack: NativeTrack? = null
+    if ("screen" in flags) {
+        screenSource = openScreen(factory) ?: error("screen capture unavailable (no source, or not permitted)")
+        screenTrack = factory.createVideoTrack(screenSource, "screen")
+        client.setScreen(screenTrack)
+        println("sharing the screen")
+    }
 
     // Room messages: print what arrives; with the `chat` flag also send one every second.
     launch { client.data.collect { m -> println("     data from ${m.from ?: "server"} [${m.topic}${if (m.reliable) "" else ", lossy"}]: ${m.payload.decodeToString()}") } }
@@ -78,13 +90,16 @@ public suspend fun runDemo(
                 video.setFrameListener(rendered::onFrame)
             }
             val stats = video?.videoStats()
-            "${p.name}: audio=${p.audio.value != null} video=${stats?.let { "${it.frames} frames ${it.width}x${it.height}" } ?: "none"}"
+            val screen = (p.screen.value as NativeTrack?)?.videoStats()
+            "${p.name}: audio=${p.audio.value != null} video=${stats?.let { "${it.frames} frames ${it.width}x${it.height}" } ?: "none"}" +
+                (screen?.let { " screen=${it.frames} frames ${it.width}x${it.height}" } ?: "")
         }
         if ((second + 1) % 5 == 0) {
             val stats = client.peerConnection?.getStats().orEmpty().values
             val codecs = stats.filter { it.type == "codec" }.associateBy { it.id }
             val sent = stats.filter { it.type == "outbound-rtp" }.joinToString { s ->
-                "${s.string("kind")} ${codecs[s.string("codecId")]?.string("mimeType")} ${s.long("packetsSent")} pkts" +
+                "${s.string("mid")?.let { "[$it] " } ?: ""}${s.string("kind")} ${codecs[s.string("codecId")]?.string("mimeType")} ${s.long("packetsSent")} pkts" +
+                    (s.long("frameWidth")?.let { " ${it}x${s.long("frameHeight")}" } ?: "") +
                     (s.string("encoderImplementation")?.let { " enc=$it" } ?: "")
             }
             val got = stats.filter { it.type == "inbound-rtp" && it.string("kind") == "audio" }.sumOf { it.long("packetsReceived") ?: 0 }
@@ -98,6 +113,8 @@ public suspend fun runDemo(
     rendered.print()
     client.leave()
     source?.close()
+    screenSource?.close()
+    screenTrack?.release()
     coroutineContext[kotlinx.coroutines.Job]?.children?.forEach { it.cancel() }
     mic.release()
     camera.release()

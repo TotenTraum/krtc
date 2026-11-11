@@ -70,10 +70,14 @@ public class RoomData(
 public class RemoteParticipant internal constructor(public val id: String, public val name: String) {
     internal val audioState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val videoState = MutableStateFlow<MediaStreamTrack?>(null)
+    internal val screenState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val speakingState = MutableStateFlow(false)
 
     public val audio: StateFlow<MediaStreamTrack?> = audioState.asStateFlow()
     public val video: StateFlow<MediaStreamTrack?> = videoState.asStateFlow()
+
+    /** Its screen share, while it shares one. */
+    public val screen: StateFlow<MediaStreamTrack?> = screenState.asStateFlow()
     public val speaking: StateFlow<Boolean> = speakingState.asStateFlow()
 
     override fun toString(): String = "RemoteParticipant($id, $name)"
@@ -116,6 +120,8 @@ public class RoomClient(
     private var pc: RTCPeerConnection? = null
     private var microphone: MediaStreamTrack? = null
     private var camera: MediaStreamTrack? = null
+    private var screen: MediaStreamTrack? = null
+    private var screenMids: Set<String> = emptySet()
     private var selfId: String? = null
     private var midToPeer: Map<String, String> = emptyMap()
     private var reliableChannel: RTCDataChannel? = null
@@ -133,10 +139,17 @@ public class RoomClient(
      * Connects and joins [roomName]. [microphone] and [camera] are published if given (and can be
      * swapped later with [setMicrophone] / [setCamera]). Returns once the WebSocket is open.
      */
-    public suspend fun join(roomName: String, displayName: String, microphone: MediaStreamTrack? = null, camera: MediaStreamTrack? = null) {
+    public suspend fun join(
+        roomName: String,
+        displayName: String,
+        microphone: MediaStreamTrack? = null,
+        camera: MediaStreamTrack? = null,
+        screen: MediaStreamTrack? = null,
+    ) {
         check(job == null) { "already joined" }
         this.microphone = microphone
         this.camera = camera
+        this.screen = screen
         stateFlow.value = RoomState.Connecting
         val peerConnection = factory.createPeerConnection(configuration)
         pc = peerConnection
@@ -182,6 +195,7 @@ public class RoomClient(
     /** Applies one SFU offer and answers it (JSEP answerer). */
     private suspend fun answer(peerConnection: RTCPeerConnection, offer: ServerMessage.Offer) {
         midToPeer = offer.mids
+        screenMids = offer.screens.toSet()
         peerConnection.setRemoteDescription(RTCSessionDescription(RTCSdpType.OFFER, offer.sdp))
         if (reliableChannel == null && "\nm=application " in offer.sdp) openDataChannels(peerConnection)
         for ((mid, track) in listOf(UPLINK_AUDIO_MID to microphone, UPLINK_VIDEO_MID to camera)) {
@@ -191,6 +205,17 @@ public class RoomClient(
                 if (transceiver.sender.track !== track) transceiver.sender.replaceTrack(track)
             }
         }
+        // The screen uplink sends only while there is a screen track; otherwise the SFU offers nothing to others.
+        peerConnection.getTransceivers().firstOrNull { it.mid == UPLINK_SCREEN_MID }?.let { t ->
+            val track = screen
+            if (track != null) {
+                t.direction = RTCRtpTransceiverDirection.SENDONLY
+                if (t.sender.track !== track) t.sender.replaceTrack(track)
+            } else if (t.direction != RTCRtpTransceiverDirection.INACTIVE) {
+                t.sender.replaceTrack(null)
+                t.direction = RTCRtpTransceiverDirection.INACTIVE
+            }
+        }
         // m-lines the SFU marked inactive (someone left, or sends no video) lose their tracks.
         for (p in participantsFlow.value) {
             val mids = midToPeer.filterValues { it == p.id }.keys
@@ -198,6 +223,7 @@ public class RoomClient(
                 p.audioState.value = null
                 p.videoState.value = null
             }
+            if (mids.none { it in screenMids }) p.screenState.value = null
         }
         val answer = peerConnection.createAnswer()
         peerConnection.setLocalDescription(answer)
@@ -241,7 +267,11 @@ public class RoomClient(
     private fun onTrack(mid: String?, track: MediaStreamTrack) {
         val peer = mid?.let { midToPeer[it] } ?: return
         val p = participant(peer) ?: return
-        if (track.kind == "video") p.videoState.value = track else p.audioState.value = track
+        when {
+            mid in screenMids -> p.screenState.value = track
+            track.kind == "video" -> p.videoState.value = track
+            else -> p.audioState.value = track
+        }
     }
 
     private fun participant(id: String): RemoteParticipant? = participantsFlow.value.firstOrNull { it.id == id }
@@ -273,10 +303,34 @@ public class RoomClient(
         pc?.getTransceivers()?.firstOrNull { it.mid == UPLINK_AUDIO_MID }?.sender?.replaceTrack(track)
     }
 
-    /** Replaces the published camera track (null stops sending video content). */
+    /**
+     * Replaces the published camera track (null stops sending video content). Publishing a camera for the first
+     * time (joined without one) renegotiates, so the others get a video m-line for it.
+     */
     public suspend fun setCamera(track: MediaStreamTrack?) {
         camera = track
-        pc?.getTransceivers()?.firstOrNull { it.mid == UPLINK_VIDEO_MID }?.sender?.replaceTrack(track)
+        val t = pc?.getTransceivers()?.firstOrNull { it.mid == UPLINK_VIDEO_MID } ?: return
+        t.sender.replaceTrack(track)
+        if (track != null && t.direction != RTCRtpTransceiverDirection.SENDONLY) send(ClientMessage.Renegotiate)
+    }
+
+    /**
+     * Starts sharing [track] as this participant's screen (a capture of the display, a window or app content), or
+     * stops with null. Starting and stopping renegotiate with the SFU, which then offers it to everyone else as
+     * [RemoteParticipant.screen]; replacing one screen track with another does not.
+     */
+    public suspend fun setScreen(track: MediaStreamTrack?) {
+        screen = track
+        val t = pc?.getTransceivers()?.firstOrNull { it.mid == UPLINK_SCREEN_MID } ?: return
+        val sending = t.direction == RTCRtpTransceiverDirection.SENDONLY
+        when {
+            track != null && sending -> t.sender.replaceTrack(track)
+            track != null -> send(ClientMessage.Renegotiate)
+            sending -> {
+                t.sender.replaceTrack(null) // stop sending now; the m-line goes inactive with the next answer
+                send(ClientMessage.Renegotiate)
+            }
+        }
     }
 
     /** Asks the SFU for a simulcast layer of [participantId]'s video. */
@@ -308,6 +362,7 @@ public class RoomClient(
     private companion object {
         const val UPLINK_AUDIO_MID = "0"
         const val UPLINK_VIDEO_MID = "1"
+        const val UPLINK_SCREEN_MID = "s"
         const val ICE_RESTART_GRACE_MILLIS = 2_000L
         const val ICE_RESTART_RETRY_MILLIS = 5_000L
     }

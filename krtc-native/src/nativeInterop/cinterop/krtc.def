@@ -10,4 +10,4 @@ linkerOpts.linux = -ldl -lpthread -lm
 linkerOpts.ios = -ObjC -lc++ -framework Foundation -framework AVFoundation -framework Security -framework CoreAudio \
   -framework AudioToolbox -framework UIKit -framework CoreMedia -framework CoreGraphics -framework VideoToolbox \
   -framework CoreVideo -framework Metal -framework MetalKit -framework QuartzCore -framework GLKit -framework OpenGLES \
-  -framework Network
+  -framework Network -framework ReplayKit
