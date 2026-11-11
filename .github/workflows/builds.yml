@@ -3,8 +3,8 @@
 #   krtc-macos-arm64     SFU server and native demo client (Kotlin/Native)
 #   krtc-ios             demo client for the simulator (run with `xcrun simctl spawn booted …`) and the device (unsigned)
 #   krtc-jvm-demo-macos  demo client on the desktop JVM, macOS arm64 (needs Java 21+)
-#   krtc-linux-x64       demo client
-#   krtc-linux-arm64     demo client
+#   krtc-linux-x64       SFU server and demo client (only glibc needed; OpenSSL is linked in)
+#   krtc-linux-arm64     SFU server and demo client
 #   krtc-sfu-jvm         SFU server on the JVM, any OS with Java 21+
 #   krtc-android         demo APK (arm64), see krtc-native-android-demo
 #
@@ -113,6 +113,13 @@ jobs:
             krtc-native/.deps/linux-arm64
             krtc-native/.deps/android-arm64
           key: webrtc-linux-android-${{ env.WEBRTC_RELEASE }}
+      - name: Cache static OpenSSL
+        uses: actions/cache@v4
+        with:
+          path: |
+            krtc-sfu/.deps/openssl-linux-x64
+            krtc-sfu/.deps/openssl-linux-arm64
+          key: openssl-${{ hashFiles('krtc-sfu/build-openssl.sh') }}
       - name: Cache Kotlin/Native
         uses: actions/cache@v4
         with:
@@ -121,12 +128,14 @@ jobs:
       - name: libwebrtc
         run: krtc-native/fetch-deps.sh linux-x64 linux-arm64 android-arm64
       - name: Tests
-        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-client:jvmTest
+        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:linuxX64Test :krtc-client:jvmTest
       - name: Build
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: >
           ./gradlew
+          :krtc-sfu-server:linkDebugExecutableLinuxX64
+          :krtc-sfu-server:linkDebugExecutableLinuxArm64
           :krtc-sfu-server:jvmDistZip
           :krtc-native:linkDemoDebugExecutableLinuxX64
           :krtc-native:linkDemoDebugExecutableLinuxArm64
@@ -134,6 +143,8 @@ jobs:
       - name: Collect
         run: |
           mkdir -p out/linux-x64 out/linux-arm64 out/jvm out/android
+          cp krtc-sfu-server/build/bin/linuxX64/debugExecutable/krtc-sfu.kexe out/linux-x64/
+          cp krtc-sfu-server/build/bin/linuxArm64/debugExecutable/krtc-sfu.kexe out/linux-arm64/
           cp krtc-native/build/bin/linuxX64/demoDebugExecutable/krtc-native-demo.kexe out/linux-x64/
           cp krtc-native/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
           cp krtc-sfu-server/build/dist/krtc-sfu-jvm.zip out/jvm/

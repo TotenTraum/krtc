@@ -101,7 +101,7 @@ krtc-native-demo.exe ws://<LAN-IP>:8092 test windows-client 30 video/H264
 | `krtc-macos-arm64` | `krtc-sfu.kexe`, `krtc-native-demo.kexe` | `chmod +x *.kexe`, затем `xattr -d com.apple.quarantine *.kexe` (файл из браузера), запуск как в разделе «Демо» |
 | `krtc-ios` | демо для симулятора и для устройства (без подписи) | Симулятор: `xcrun simctl spawn booted ./krtc-native-demo-simulator.kexe ws://<LAN-IP>:8092 test ios 30`. Сборку для устройства нужно подписать самому |
 | `krtc-jvm-demo-macos` | `krtc-native-jvm-demo.zip` (JVM-клиент, macOS arm64) | Java 21+, `unzip`, затем `krtc-native-jvm-demo/bin/krtc-native-demo ws://<LAN-IP>:8092 test jvm 30` |
-| `krtc-linux-x64`, `krtc-linux-arm64` | `krtc-native-demo.kexe` (зависит только от glibc) | `chmod +x`, запуск как в разделе «Демо». SFU для Linux — `krtc-sfu-jvm` |
+| `krtc-linux-x64`, `krtc-linux-arm64` | `krtc-sfu.kexe`, `krtc-native-demo.kexe` (оба зависят только от glibc, OpenSSL вшит) | `chmod +x *.kexe`, затем `./krtc-sfu.kexe --announce <LAN-IP>` и демо как в разделе «Демо» |
 | `krtc-sfu-jvm` | `krtc-sfu-jvm.zip` (SFU на JVM, любая ОС) | Java 21+, `unzip`, затем `krtc-sfu-jvm/bin/krtc-sfu --announce <LAN-IP>` (Windows: `bin\krtc-sfu.bat`) и открыть `http://<host>:8080` |
 | `krtc-android` | `krtc-native-demo.apk` (arm64) | `adb install krtc-native-demo.apk`, запуск как в разделе «Демо» |
 

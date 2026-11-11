@@ -2,9 +2,9 @@ package = krtc.sfu.openssl
 headers = openssl/evp.h openssl/ssl.h openssl/err.h openssl/rand.h openssl/x509.h openssl/core_names.h
 headerFilter = openssl/**
 compilerOpts = -DOPENSSL_SUPPRESS_DEPRECATED
-# Propagated to every binary that uses the klib. macOS gets OpenSSL statically from the klib itself.
-linkerOpts.linux_x64 = -lssl -lcrypto
-linkerOpts.linux_arm64 = -lssl -lcrypto
+# OpenSSL itself comes statically from the klib (see build.gradle.kts); on Linux it needs these system libraries.
+linkerOpts.linux_x64 = -lpthread -ldl
+linkerOpts.linux_arm64 = -lpthread -ldl
 
 ---
 

@@ -19,7 +19,7 @@ kotlin {
 
 На Kotlin/Native флаги OpenSSL прописывать не нужно, они едут в klib:
 - macOS: OpenSSL 3 из Homebrew линкуется статически;
-- Linux: нужны системные `libssl` и `libcrypto` 3.x.
+- Linux (x64, arm64): OpenSSL 3 собирается из исходников (`build-openssl.sh`, вызывается Gradle при первой сборке) компилятором и sysroot самого Kotlin/Native и линкуется статически. Бинарю нужна только glibc. Собирать можно и на macOS, и на Linux; нужны `perl` и `make`.
 
 ## Встраивание
 

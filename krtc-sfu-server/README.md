@@ -7,10 +7,14 @@
 
 ## Запуск
 
-Kotlin/Native (macOS, нужен `brew install openssl@3`):
+Kotlin/Native (macOS, нужен `brew install openssl@3`; Linux-бинари собираются там же, OpenSSL для них Gradle собирает сам):
 
 ```bash
 ./gradlew :krtc-sfu-server:linkReleaseExecutableMacosArm64
+```
+
+```bash
+./gradlew :krtc-sfu-server:linkReleaseExecutableLinuxX64 :krtc-sfu-server:linkReleaseExecutableLinuxArm64
 ```
 
 ```bash
@@ -122,4 +126,3 @@ JVM:
 - Нет TURN/TLS на 443 и probing в оценке канала ([ADR-0015](../docs/adr/0015-sfu-transport-and-congestion.md)).
 - Нет авторизации в сигнализации этого приложения (во встраиваемом SFU — `JoinPolicy`).
 - Data channels: без I-DATA и приоритетов каналов ([ADR-0016](../docs/adr/0016-data-channels.md)).
-- Linux-бинари собираются на Linux-хосте с OpenSSL 3.
