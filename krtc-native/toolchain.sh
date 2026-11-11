@@ -10,5 +10,8 @@ android-arm64)
     CXX="$BIN/clang++"; AR="$BIN/llvm-ar"; TARGET_FLAGS="--target=aarch64-linux-android24"
     ;;
 linux) CXX="${CXX:-clang++}"; AR="ar"; TARGET_FLAGS="" ;;
+# Windows x64, MSVC ABI: clang-cl and lld-link with the MSVC CRT/STL and Windows SDK in $WINSYSROOT (xwin
+# splat --use-winsysroot-style); run it in docker-build-shim.sh win.
+win) CXX="clang-cl"; AR="llvm-lib"; TARGET_FLAGS="--target=x86_64-pc-windows-msvc /winsysroot ${WINSYSROOT:-/xwin}" ;;
 *) echo "unknown target $TARGET" >&2; exit 1 ;;
 esac

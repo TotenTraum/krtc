@@ -1,6 +1,6 @@
 # ADR-0014. Итоги spike `krtc-native`: C-прослойка над готовой libwebrtc
 
-- Статус: Принято для macOS arm64, Linux arm64 и x64, iOS (симулятор; устройство — только сборка), desktop JVM и Android arm64: звонок с Chrome через `krtc-sfu` работает на каждой (см. «Звонок», «Linux», «iOS», «JVM и Android»). Windows не проверен
+- Статус: Принято для macOS arm64, Linux arm64 и x64, iOS (симулятор; устройство — только сборка), desktop JVM и Android arm64: звонок с Chrome через `krtc-sfu` работает на каждой (см. «Звонок», «Linux», «iOS», «JVM и Android»). Windows x64 (JVM и `mingwX64`) собирается кросс-компиляцией с мака и проверен только под Wine, на настоящем Windows не запускался (см. «Windows»)
 - Дата: 2026-11-10
 - Проверяет: [ADR-0001](0001-engine-libwebrtc.md), [ADR-0002](0002-binding-c-abi-shim.md), [ADR-0008](0008-libwebrtc-versioning.md), [ADR-0012](0012-kmp-client.md)
 
@@ -92,6 +92,36 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
 - Звонок из симулятора (iPhone 17 Pro, iOS 26): H.264 через VideoToolbox 640×360, ~14 кадров/с, потерь 0; тон доходит; видео Chrome 1280×720 и Opus принимаются.
 - `iosArm64` (устройство) собирается и линкуется, на телефоне не запускался.
 
+## Windows
+
+Windows x64 проверялся на маке (2026-11-11), Windows-машины и CI нет. Сборка LiveKit `webrtc-win-x64-release.zip` (114 МБ, SHA-256 `862403fc…5ff46146`): `webrtc.lib` (89 МБ), clang, `use_custom_libcxx=false`, то есть MSVC STL и статический CRT (`/MT`, `RuntimeLibrary=MT_StaticRelease` в каждом объекте).
+
+**Одна `krtc.dll` на JVM и Kotlin/Native.** libwebrtc собрана под MSVC ABI, поэтому статически влинковать её в MinGW-бинарь Kotlin/Native нельзя: другой C++-рантайм, другое декорирование имён. Граница проходит по плоскому C ABI `krtc.h`: на x64 у MSVC и MinGW одно соглашение о вызовах и одинаковые `int`/`int64_t`/указатели.
+- **Прослойка** (`krtc.cpp`, `krtc_audio.cpp`, `krtc_software.cpp`) и `krtc_jni.cpp` собираются clang-cl 21 (`/MT /GR- /EHs-c-`, дефайны из `webrtc.ninja`). Затем lld-link собирает из них и `webrtc.lib` библиотеку `krtc.dll` (19,7 МБ).
+- **Экспорт:** 60 функций `krtc_*` (через `.def`, сверено со всеми объявлениями `krtc.h`), 59 `Java_krtc_native_*` и `JNI_OnLoad`. Больше ничего, libwebrtc и BoringSSL остаются внутри.
+- **Импорт:** только системные DLL (`KERNEL32`, `USER32`, `WS2_32`, `WINMM`, `CRYPT32`, `ole32`, `OLEAUT32`, `msdmo`). CRT статический, Visual C++ Redistributable не нужен.
+- **Импорт-библиотеки:** `krtc.lib` для MSVC и `libkrtc.dll.a` (`llvm-dlltool`) для MinGW.
+- **Кросс-сборка в Docker** (`docker/windows/Dockerfile`, `docker-build-shim.sh win`): Debian, clang/lld 21 с apt.llvm.org, MSVC CRT/STL 14.44 и Windows SDK 10.0.26100 через [xwin](https://github.com/Jake-Shadle/xwin) 0.10.0. Сборка образа принимает лицензию Microsoft на эти файлы (`xwin --accept-license`). `jni_md.h` для Windows лежит в `src/shim/win32`: у JDK на маке он свой. Прослойка собирается за ~10 секунд, образ — ~20 минут, один раз.
+- **JVM:** `krtc.dll` лежит в jar (`krtc/native/windows-x64/`), `Jni.kt` выбирает её на Windows.
+- **Kotlin/Native `mingwX64`:** cinterop на `krtc.h`, в klib упакована `libkrtc.dll.a`, поэтому приложение линкуется без дополнительных флагов. `krtc.dll` должна лежать рядом с `.exe`, Gradle копирует её к демо. Демо импортирует `krtc.dll`, `WINHTTP` (Ktor), `bcrypt` и `msvcrt`.
+- **Камера:** DirectShow через `VideoCaptureFactory` libwebrtc (`krtc_software.cpp`). На Windows фабрика не тянет лишних зависимостей, в отличие от Linux, где она требует glib. Звук `AudioDevice.PLATFORM` — Core Audio libwebrtc (`kPlatformDefaultAudio`).
+
+**Проверка под Wine.** Docker на маке, `linux/amd64` через эмуляцию Rosetta, Wine 8.0 из Debian bookworm.
+- BoringSSL в этой libwebrtc берёт энтропию из `ProcessPrng` (`bcryptprimitives.dll`, Windows 10+). В Wine 8.0 этой DLL нет, и `krtc_pc_create` падает в `abort()`. Для проверки рядом с `.exe` клали заглушку `bcryptprimitives.dll` (`ProcessPrng` через `RtlGenRandom`); в репозиторий она не входит, на Windows 10+ не нужна. Wine 11 с этой DLL под эмуляцией не запускается.
+- **C-тест** против `krtc.dll` (фабрика, треки, PeerConnection, data channel, `getStats`, закрытие) проходит.
+- **Kotlin/Native-демо** `mingwX64` под Wine и `krtc-native-demo` на macOS через `krtc-sfu` на маке:
+
+| Направление | Результат |
+|---|---|
+| Wine → macOS | H.264 (OpenH264) с Windows-клиента принят и отрисован (320×180, нижний слой simulcast при ~7 кадрах/с кодирования под эмуляцией); тон доходит; сообщения data channel доходят |
+| macOS → Wine | VP8 640×360 ~15 кадров/с отрисован, Opus принят (~400 пакетов); сообщения data channel доходят |
+
+  Через ~15 секунд Wine-клиент выпадает. SFU закрывает его по сигнальному WebSocket, а не по ICE. Время совпадает с первым ping сервера (`pingPeriod = 15.seconds`), так что вероятная причина — WebSocket WinHTTP в Wine 8 (Ktor WinHttp engine) с ping. Это не `krtc.dll`, но на настоящем Windows не проверено.
+- **Desktop JVM** (Temurin 21 для Windows под Wine): `Jni.kt` находит `krtc/native/windows-x64/krtc.dll` в jar. `System.load`, `JNI_OnLoad`, создание фабрики и список кодеков через JNI работают. Дальше JVM падает в собственном `java.net.NetworkInterface` (в Wine 8 нет одной из функций IP Helper, `0xc06d007f`) — при копировании DLL во временный каталог (сид `SecureRandom`) и при подключении Ktor CIO. Звонок на JVM под Wine не дошёл, нужен Windows.
+- Камера и `AudioDevice.PLATFORM` на Windows не запускались.
+
+**Что нужно для «проверено»:** звонок с Chrome на настоящем Windows 10/11 x64 (демо `mingwX64` и `runJvmDemo`), камера, системный звук. Подойдёт Windows-машина или CI-раннер `windows-latest`.
+
 ## JVM и Android
 
 По ADR-0002 — один JNI-слой поверх того же `krtc.h`: `krtc_jni.cpp` (C++) и `Jni.kt` + `JniWebRtc.kt` в общем source set `jvmAndAndroidMain`. Публичный API общий для всех платформ: `NativePeerConnectionFactory` и `NativeTrack` объявлены `expect` в `commonMain`, поэтому приложение создаёт бэкенд прямо из общего кода. Демо (`runDemo`) тоже общее.
@@ -117,6 +147,7 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
 |---|---|---|
 | macOS, iOS | `RTCCameraVideoCapturer` (AVFoundation) → свой `RTCVideoCapturerDelegate` → `ObjCToNativeVideoFrameBuffer`. Перед стартом запрашивается разрешение; при отказе — `null` | Камера перечисляется («Камера (MacBook Air)»). Захват не проверен: процессу из этой сессии macOS не показывает запрос (у приложения-хоста нет описания доступа к камере), и честно выдаётся `null`. Из Terminal.app запрос появится |
 | Linux | V4L2 через классы `DeviceInfoV4l2` и `VideoCaptureModuleV4L2` напрямую. `VideoCaptureFactory` не годится: тянет камеру через PipeWire/xdg-portal, а ей нужен glib | Перечисление в контейнере (камер нет); бинарь по-прежнему зависит только от glibc |
+| Windows | DirectShow через `VideoCaptureFactory` (`DeviceInfoDS`, `VideoCaptureDS`), тот же код модуля захвата, что на Linux | Только сборка; под Wine камер нет (`cameras: []`) |
 | Android | `AndroidCamera` (Camera2 в Kotlin): YUV_420_888 → I420 → `pushI420` с поворотом сенсора | Эмулятор: Chrome получает 720×1280 VP8 с картинкой виртуальной камеры, потерь 0 |
 | Android, звук | `AndroidAudio`: AudioRecord (`VOICE_COMMUNICATION`, системные AEC/NS) → `pushAudio`, `pullAudio` → AudioTrack | Собирается; эмулятор запускался без звука |
 
@@ -129,7 +160,9 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
 
 - **Системное аудиоустройство** (`AudioDevice.PLATFORM`): собирается, в звонке не проверялось, чтобы не шуметь.
 - **Simulcast H.264 через VideoToolbox**: идёт только один слой из трёх; не разбирались.
-- **Windows**; **iOS на устройстве**; **desktop JVM на Linux и Windows** (нужны `libkrtc_jni` под них).
+- **Windows на настоящем железе** (под Wine — см. «Windows»: звонок `mingwX64` с медиа в обе стороны, JNI до сетевой части); **iOS на устройстве**; **desktop JVM на Linux** (нужна `libkrtc_jni` под него).
+- **Сигнальный WebSocket на Windows** (Ktor WinHttp engine): под Wine 8 обрывается на первом ping сервера.
+- **Временные файлы на Windows:** `Jni.kt` копирует `krtc.dll` из jar во временный каталог, и `deleteOnExit` не удаляет её, пока DLL загружена. Копии копятся; нужен постоянный кэш по хешу.
 - **Камера на macOS** (нужен запуск из приложения с описанием доступа или из Terminal.app), **на Linux** (нет устройства), **на iOS** (у симулятора нет камеры).
 - **Android:** MediaCodec (аппаратный H.264), звук `AndroidAudio` в звонке, ABI кроме arm64-v8a.
 - **Системное аудио на Linux** (PulseAudio/ALSA).
@@ -144,5 +177,5 @@ Linux arm64 и x64 проверены в Docker на маке (2026-11-10): сб
 3. **Следующие шаги для клиента:**
    - изоляция символов и для Kotlin/Native на macOS/iOS (как на Linux);
    - Android: MediaCodec, остальные ABI;
-   - Windows (сборки LiveKit `win-x64`/`win-arm64` есть);
+   - Windows: проверка на настоящем Windows (или CI), затем `win-arm64` (сборка LiveKit есть);
    - переименовать пакет `krtc.native`.

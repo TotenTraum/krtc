@@ -28,7 +28,7 @@ public:
 std::unique_ptr<webrtc::VideoEncoderFactory> PlatformVideoEncoderFactory();
 std::unique_ptr<webrtc::VideoDecoderFactory> PlatformVideoDecoderFactory();
 
-// Cameras: Apple (AVFoundation), Linux (V4L2). Elsewhere (Android: the app captures with Camera2) none.
+// Cameras: Apple (AVFoundation), Linux (V4L2), Windows (DirectShow). Elsewhere (Android: the app captures with Camera2) none.
 int CameraCount();
 std::string CameraName(int index);
 

@@ -16,6 +16,7 @@ namespace krtc {
 
 namespace {
 constexpr int kRate = 48000;
+constexpr double kPi = 3.14159265358979323846;  // M_PI is not standard (MSVC headers lack it)
 constexpr int kFrame = kRate / 100;  // 10 ms
 constexpr size_t kMaxBuffered = kRate;  // 1 s
 }  // namespace
@@ -149,7 +150,7 @@ private:
                     // Test tone: 440 Hz, half a second on, half off (so speaking detection toggles).
                     for (int i = 0; i < kFrame; ++i, ++sample) {
                         const bool on = tone_ && (sample / (kRate / 2)) % 2 == 0;
-                        frame[i] = on ? static_cast<int16_t>(6000 * std::sin(2 * M_PI * 440 * sample / kRate)) : 0;
+                        frame[i] = on ? static_cast<int16_t>(6000 * std::sin(2 * kPi * 440 * sample / kRate)) : 0;
                     }
                 }
                 uint32_t mic_level = 0;

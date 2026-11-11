@@ -68,8 +68,9 @@ krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *i
 krtc_track *krtc_factory_create_test_video_track(krtc_factory *factory, const char *id, int width, int height, int fps);
 
 /* Video sources. A pushed source takes frames from the application; a camera source captures (Apple:
- * AVFoundation, Linux: V4L2; NULL where unavailable, e.g. Android, where the app captures and pushes, or when the
- * user denies camera access; on Apple the first call may show the OS permission prompt and wait for it).
+ * AVFoundation, Linux: V4L2, Windows: DirectShow; NULL where unavailable, e.g. Android, where the app captures
+ * and pushes, or when the user denies camera access; on Apple the first call may show the OS permission prompt
+ * and wait for it).
  * Releasing a source stops its camera; tracks made from it keep their own reference. */
 krtc_video_source *krtc_factory_create_video_source(krtc_factory *factory);
 int krtc_camera_count(void);

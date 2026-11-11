@@ -116,6 +116,7 @@ internal object Jni {
         val arch = System.getProperty("os.arch").lowercase().let { if (it == "aarch64") "arm64" else if (it == "amd64" || it == "x86_64") "x64" else it }
         val (dir, file) = when {
             os.contains("mac") -> "macos-$arch" to "libkrtc_jni.dylib"
+            os.contains("windows") -> "windows-$arch" to "krtc.dll"
             os.contains("linux") && System.getProperty("java.vendor").orEmpty().contains("Android", ignoreCase = true).not() -> "linux-$arch" to "libkrtc_jni.so"
             else -> null to null
         }

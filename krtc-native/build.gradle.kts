@@ -1,8 +1,13 @@
 // krtc-core backend on libwebrtc through the krtc C shim (ADR-0002, ADR-0014).
 // Kotlin/Native (macOS, iOS, Linux): cinterop; the shim and libwebrtc are packed into the klib.
-// JVM (macOS) and Android: one JNI layer (krtc_jni.cpp) built into libkrtc_jni, packed into the jar / AAR.
+// Kotlin/Native (Windows, mingwX64): cinterop against krtc.dll through its MinGW import library (packed into the
+// klib); the application ships krtc.dll next to its .exe. libwebrtc is MSVC-built, so it cannot be linked
+// statically into a MinGW binary; the flat C ABI of krtc.h is the DLL boundary.
+// JVM (macOS, Windows) and Android: one JNI layer (krtc_jni.cpp) built into libkrtc_jni (Windows: krtc.dll),
+// packed into the jar / AAR.
 // libwebrtc: LiveKit's prebuilt static library (krtc-native/.deps, not committed); the shim is built by
-// build-shim.sh against it (on Linux inside Docker, see docker-build-shim.sh), the JNI library by build-jni.sh.
+// build-shim.sh against it (on Linux and Windows inside Docker, see docker-build-shim.sh), the JNI library by
+// build-jni.sh.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
@@ -12,32 +17,46 @@ plugins {
     alias(libs.plugins.android.kmp.library)
 }
 
-/**
- * One libwebrtc platform: `.deps/<name>/<name>-release` and the shim built into `.deps/build/<name>`.
- * [isolated]: the shim and libwebrtc are merged into `libkrtc_webrtc.a` exporting only krtc_* (Linux: its
- * bundled libc++abi and BoringSSL would otherwise collide with Kotlin/Native's libstdc++ and OpenSSL).
- */
-class WebRtcPlatform(val name: String, val shimCommand: List<String>, val isolated: Boolean) {
+/** How a Kotlin/Native target links the shim and libwebrtc. */
+enum class Linkage {
+    /** libkrtc_shim.a and libwebrtc.a. */
+    STATIC,
+    /** One libkrtc_webrtc.a exporting only krtc_* (Linux: libwebrtc's bundled libc++abi and BoringSSL would
+     * otherwise collide with Kotlin/Native's libstdc++ and OpenSSL). */
+    ISOLATED,
+    /** krtc.dll through its import library libkrtc.dll.a (Windows). */
+    DLL,
+}
+
+/** One libwebrtc platform: `.deps/<name>/<name>-release` and the shim built into `.deps/build/<name>`. */
+class WebRtcPlatform(val name: String, val shimCommand: List<String>, val linkage: Linkage) {
     val webrtcDir = layout.projectDirectory.dir(".deps/$name/$name-release")
     val shimOut = layout.projectDirectory.dir(".deps/build/$name")
     val libraries: List<Pair<String, String>>
-        get() = if (isolated) listOf(shimOut.asFile.path to "libkrtc_webrtc.a")
-        else listOf(shimOut.asFile.path to "libkrtc_shim.a", webrtcDir.dir("lib").asFile.path to "libwebrtc.a")
+        get() = when (linkage) {
+            Linkage.STATIC -> listOf(shimOut.asFile.path to "libkrtc_shim.a", webrtcDir.dir("lib").asFile.path to "libwebrtc.a")
+            Linkage.ISOLATED -> listOf(shimOut.asFile.path to "libkrtc_webrtc.a")
+            Linkage.DLL -> listOf(shimOut.asFile.path to "libkrtc.dll.a")
+        }
+    val outputs: List<String>
+        get() = libraries.map { (dir, lib) -> "$dir/$lib" } + if (linkage == Linkage.DLL) listOf(shimOut.file("krtc.dll").asFile.path) else emptyList()
 }
 
 val platforms = mapOf(
-    "macosArm64" to WebRtcPlatform("mac-arm64", listOf("./build-shim.sh", ".deps/mac-arm64/mac-arm64-release", ".deps/build/mac-arm64"), isolated = false),
-    "iosArm64" to WebRtcPlatform("ios-device-arm64", listOf("./build-shim.sh", ".deps/ios-device-arm64/ios-device-arm64-release", ".deps/build/ios-device-arm64", "ios"), isolated = false),
-    "iosSimulatorArm64" to WebRtcPlatform("ios-simulator-arm64", listOf("./build-shim.sh", ".deps/ios-simulator-arm64/ios-simulator-arm64-release", ".deps/build/ios-simulator-arm64", "ios-simulator"), isolated = false),
-    "linuxArm64" to WebRtcPlatform("linux-arm64", listOf("./docker-build-shim.sh", "arm64"), isolated = true),
-    "linuxX64" to WebRtcPlatform("linux-x64", listOf("./docker-build-shim.sh", "x64"), isolated = true),
+    "macosArm64" to WebRtcPlatform("mac-arm64", listOf("./build-shim.sh", ".deps/mac-arm64/mac-arm64-release", ".deps/build/mac-arm64"), linkage = Linkage.STATIC),
+    "iosArm64" to WebRtcPlatform("ios-device-arm64", listOf("./build-shim.sh", ".deps/ios-device-arm64/ios-device-arm64-release", ".deps/build/ios-device-arm64", "ios"), linkage = Linkage.STATIC),
+    "iosSimulatorArm64" to WebRtcPlatform("ios-simulator-arm64", listOf("./build-shim.sh", ".deps/ios-simulator-arm64/ios-simulator-arm64-release", ".deps/build/ios-simulator-arm64", "ios-simulator"), linkage = Linkage.STATIC),
+    "linuxArm64" to WebRtcPlatform("linux-arm64", listOf("./docker-build-shim.sh", "arm64"), linkage = Linkage.ISOLATED),
+    "linuxX64" to WebRtcPlatform("linux-x64", listOf("./docker-build-shim.sh", "x64"), linkage = Linkage.ISOLATED),
+    // krtc.dll (shim + libwebrtc + JNI), shared with the desktop JVM.
+    "mingwX64" to WebRtcPlatform("win-x64", listOf("./docker-build-shim.sh", "win"), linkage = Linkage.DLL),
 )
 
 val shimTasks = platforms.mapValues { (target, platform) ->
     tasks.register<Exec>("buildShim${target.replaceFirstChar { it.uppercase() }}") {
         inputs.dir("src/shim")
-        inputs.files("build-shim.sh", "toolchain.sh")
-        outputs.files(platform.libraries.map { (dir, lib) -> "$dir/$lib" })
+        inputs.files("build-shim.sh", "toolchain.sh", "build-jni.sh", "docker-build-shim.sh")
+        outputs.files(platform.outputs)
         commandLine(platform.shimCommand)
     }
 }
@@ -60,6 +79,7 @@ val jniLibraries = listOf(
 // The desktop JVM loads libkrtc_jni from the jar (krtc/native/<os>-<arch>/, see Jni.kt).
 val jvmJniResources = tasks.register<Sync>("jvmJniResources") {
     from(jniLibraries.getValue("MacosArm64")) { into("krtc/native/macos-arm64") }
+    from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
     into(layout.buildDirectory.dir("generated/jni/jvm"))
 }
 
@@ -109,6 +129,15 @@ kotlin {
         binaries.executable("demo") {
             entryPoint = "krtc.native.demo.main"
             baseName = "krtc-native-demo"
+            if (platform.linkage == Linkage.DLL) {
+                // Windows: the executable loads krtc.dll from its own directory.
+                val dll = platform.shimOut.file("krtc.dll").asFile
+                val outDir = outputDirectoryProperty
+                linkTaskProvider.configure {
+                    inputs.file(dll)
+                    doLast { dll.copyTo(outDir.get().asFile.resolve(dll.name), overwrite = true) }
+                }
+            }
         }
     }
     macosArm64 { krtcNative() }
@@ -116,9 +145,10 @@ kotlin {
     linuxX64 { krtcNative() }
     iosArm64 { krtcNative() }
     iosSimulatorArm64 { krtcNative() }
+    mingwX64 { krtcNative() }
 
     sourceSets {
-        matching { it.name.startsWith("native") || it.name.startsWith("apple") || it.name.startsWith("macos") || it.name.startsWith("ios") || it.name.startsWith("linux") }.configureEach {
+        matching { it.name.startsWith("native") || it.name.startsWith("apple") || it.name.startsWith("macos") || it.name.startsWith("ios") || it.name.startsWith("linux") || it.name.startsWith("mingw") }.configureEach {
             languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi")
         }
         commonMain.dependencies {

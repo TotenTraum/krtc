@@ -9,6 +9,7 @@
 | iOS | `iosSimulatorArm64`, `iosArm64` | cinterop | симулятор проверен, устройство — только сборка |
 | desktop JVM (macOS arm64) | `jvm` | JNI, dylib в jar | проверен |
 | Android arm64 | `android` | JNI, `.so` в AAR | проверен на эмуляторе |
+| Windows x64 | `mingwX64`, `jvm` | cinterop через импорт-библиотеку `krtc.dll`; JNI, `krtc.dll` в jar | только сборка; Wine: звонок `mingwX64` с macOS-клиентом, JNI до сети. На Windows не запускался |
 
 Публичный API общий (`commonMain`): `NativePeerConnectionFactory`, `NativeTrack`, `AudioDevice`. Data channels — через `RTCPeerConnection.createDataChannel` и `ondatachannel` из `krtc-core` ([ADR-0016](../docs/adr/0016-data-channels.md)).
 
@@ -16,7 +17,7 @@
 
 ```kotlin
 val factory = NativePeerConnectionFactory(preferredVideoCodec = "video/H264")
-val camera = factory.createCameraSource()                 // macOS/iOS/Linux; на Android — AndroidCamera(context, factory.createVideoSource())
+val camera = factory.createCameraSource()                 // macOS/iOS/Linux/Windows; на Android — AndroidCamera(context, factory.createVideoSource())
     ?: factory.createVideoSource()                        // или свои кадры: source.pushArgb(w, h, pixels) / pushI420(...)
 val client = RoomClient("wss://sfu.example.com", factory)
 client.join("team", "Alice", microphone = factory.createAudioTrack(), camera = factory.createVideoTrack(camera))
@@ -33,22 +34,22 @@ client.participants.value.first().video.value?.let { track ->
 }
 ```
 
-Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux). `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
+Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux, Windows). `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
 
 ## Подготовка
 
-Готовые libwebrtc от LiveKit (релиз `webrtc-a545de4`) распаковываются в `.deps/<платформа>` (каталог не коммитится). Платформы: `mac-arm64`, `linux-arm64`, `linux-x64`, `ios-simulator-arm64`, `ios-device-arm64`, `android-arm64`:
+Готовые libwebrtc от LiveKit (релиз `webrtc-a545de4`) распаковываются в `.deps/<платформа>` (каталог не коммитится). Платформы: `mac-arm64`, `linux-arm64`, `linux-x64`, `ios-simulator-arm64`, `ios-device-arm64`, `android-arm64`, `win-x64`:
 
 ```bash
-cd krtc-native/.deps && for p in mac-arm64 linux-arm64 linux-x64 ios-simulator-arm64 ios-device-arm64 android-arm64; do mkdir -p $p && curl -sSLo $p/w.zip https://github.com/livekit/rust-sdks/releases/download/webrtc-a545de4/webrtc-$p-release.zip && unzip -qo $p/w.zip -d $p; done
+cd krtc-native/.deps && for p in mac-arm64 linux-arm64 linux-x64 ios-simulator-arm64 ios-device-arm64 android-arm64 win-x64; do mkdir -p $p && curl -sSLo $p/w.zip https://github.com/livekit/rust-sdks/releases/download/webrtc-a545de4/webrtc-$p-release.zip && unzip -qo $p/w.zip -d $p; done
 ```
 
-Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Android — Android NDK (`ANDROID_NDK_HOME` или новейший в `~/Library/Android/sdk/ndk`).
+Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Windows x64 — тоже в Docker, кросс-компиляцией: clang-cl и lld-link 21, MSVC CRT и Windows SDK через xwin (`docker-build-shim.sh win`, `docker/windows/Dockerfile`; сборка образа принимает лицензию Microsoft на эти файлы). Результат — одна `krtc.dll` (прослойка, libwebrtc, JNI) для JVM и `mingwX64`. Kotlin/Native-приложению под Windows нужна `krtc.dll` рядом с `.exe`. Android — Android NDK (`ANDROID_NDK_HOME` или новейший в `~/Library/Android/sdk/ndk`).
 
 ## Сборка
 
 ```bash
-./gradlew :krtc-native:linkDemoDebugExecutableMacosArm64 :krtc-native:linkDemoDebugExecutableLinuxArm64 :krtc-native:linkDemoDebugExecutableLinuxX64 :krtc-native:linkDemoDebugExecutableIosSimulatorArm64 :krtc-native:jvmJar :krtc-native-android-demo:assembleDebug
+./gradlew :krtc-native:linkDemoDebugExecutableMacosArm64 :krtc-native:linkDemoDebugExecutableLinuxArm64 :krtc-native:linkDemoDebugExecutableLinuxX64 :krtc-native:linkDemoDebugExecutableIosSimulatorArm64 :krtc-native:linkDemoDebugExecutableMingwX64 :krtc-native:jvmJar :krtc-native-android-demo:assembleDebug
 ```
 
 ## Демо
@@ -84,3 +85,9 @@ adb shell am start -n krtc.demo.android/.DemoActivity --es args "'ws://<LAN-IP>:
 ```
 
 Вывод Android-демо — в `adb logcat -s System.out`.
+
+Windows: `krtc-native/build/bin/mingwX64/demoDebugExecutable` (`krtc-native-demo.exe` и `krtc.dll`) копируется на машину целиком.
+
+```bat
+krtc-native-demo.exe ws://<LAN-IP>:8092 test windows-client 30 video/H264
+```
