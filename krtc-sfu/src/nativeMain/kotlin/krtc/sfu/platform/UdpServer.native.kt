@@ -22,6 +22,7 @@ import platform.posix.SOCK_DGRAM
 import platform.posix.SOL_SOCKET
 import platform.posix.SO_RCVBUF
 import platform.posix.SO_REUSEADDR
+import platform.posix.EADDRINUSE
 import platform.posix.SO_REUSEPORT
 import platform.posix.SO_SNDBUF
 import platform.posix.bind
@@ -61,6 +62,14 @@ internal actual class UdpServer actual constructor(
 
     init {
         val addresses = resolveBind(bindHost)
+        // The shard sockets share the port with SO_REUSEPORT, which the OS also allows across processes: a second
+        // SFU on the same port would silently split the packets with the first. A plain bind first fails if anyone
+        // else holds the port.
+        if (port != 0) for (ip in addresses) {
+            if (exclusiveBindErrno(ip, port) == EADDRINUSE) {
+                throw IllegalArgumentException("UDP port $port is already in use on ${PeerAddress(ip, port)} (another krtc-sfu?)")
+            }
+        }
         var boundPort = port
         val opened = ArrayList<List<Int>>()
         val used = ArrayList<ByteArray>()
@@ -128,6 +137,18 @@ internal actual class UdpServer actual constructor(
             error("bind(${PeerAddress(ip, port)}) failed: errno $e")
         }
         fd
+    }
+
+    /** Binds [port] without SO_REUSEADDR/SO_REUSEPORT and releases it at once: 0, or the errno of the bind. */
+    private fun exclusiveBindErrno(ip: ByteArray, port: Int): Int = memScoped {
+        val fd = socket(if (ip.size == 4) AF_INET else AF_INET6, SOCK_DGRAM, 0)
+        if (fd < 0) return errno
+        if (ip.size == 16) krtc_set_ipv6_only(fd)
+        val addr = allocArray<ByteVar>(SOCKADDR_SIZE)
+        val len = ip.usePinned { krtc_sockaddr_make(addr, it.addressOf(0).reinterpret(), ip.size, port) }
+        val e = if (bind(fd, addr.reinterpret(), len.convert()) != 0) errno else 0
+        close(fd)
+        e
     }
 
     private fun boundPort(fd: Int): Int = memScoped {

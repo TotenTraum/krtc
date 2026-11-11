@@ -27,6 +27,12 @@ import kotlin.time.Duration.Companion.seconds
  * each client used; `--announce` lists the addresses clients should reach (public IPs behind NAT).
  *   --simulate-loss 0  --simulate-uplink-loss 0  --simulate-downlink-kbps 0   (testing only)
  */
+/** Whether a TCP listener can bind [port] on all interfaces right now. */
+internal expect fun tcpPortFree(port: Int): Boolean
+
+/** Prints [message] to stderr and exits with status 1. */
+internal expect fun exitWithError(message: String): Nothing
+
 public fun main(args: Array<String>) {
     val opts = args.toList().chunked(2).filter { it.size == 2 }.associate { (k, v) -> k.removePrefix("--") to v }
     fun opt(name: String, env: String): String? = opts[name] ?: environment(env)
@@ -43,7 +49,13 @@ public fun main(args: Array<String>) {
         simulatedDownlinkBps = (opt("simulate-downlink-kbps", "KRTC_SIMULATE_DOWNLINK_KBPS")?.toLong() ?: 0) * 1000,
     )
     val httpPort = (opt("http-port", "KRTC_HTTP_PORT") ?: environment("PORT"))?.toInt() ?: 8080
-    val sfu = Sfu(config)
+    // Ktor binds inside a coroutine, where a busy port ends the process with an uncaught exception: check first.
+    if (!tcpPortFree(httpPort)) exitWithError("krtc-sfu: HTTP port $httpPort is already in use (another krtc-sfu? use --http-port)")
+    val sfu = try {
+        Sfu(config)
+    } catch (e: IllegalArgumentException) {
+        exitWithError("krtc-sfu: ${e.message}")
+    }
     val server = standaloneServer(sfu, httpPort)
     println("krtc-sfu: http://localhost:$httpPort/  (UDP ${sfu.udpPort}, announced ${config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }.joinToString()})")
     server.start(wait = true)

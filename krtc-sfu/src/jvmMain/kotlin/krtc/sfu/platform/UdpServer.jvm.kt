@@ -29,6 +29,19 @@ internal actual class UdpServer actual constructor(
 
     init {
         val addresses = resolveBind(bindHost)
+        // The shard sockets share the port with SO_REUSEPORT, which the OS also allows across processes: a second
+        // SFU on the same port would silently split the packets with the first. A plain bind first fails if anyone
+        // else holds the port.
+        if (port != 0) for (address in addresses) {
+            try {
+                DatagramChannel.open(if (address is Inet6Address) StandardProtocolFamily.INET6 else StandardProtocolFamily.INET)
+                    .use { it.bind(InetSocketAddress(address, port)) }
+            } catch (e: java.net.BindException) {
+                throw IllegalArgumentException("UDP port $port on ${address.hostAddress} is already in use (another krtc-sfu?)", e)
+            } catch (_: java.io.IOException) {
+                // Other failures are handled per address below.
+            }
+        }
         var boundPort = port
         val opened = ArrayList<List<DatagramChannel>>()
         val used = ArrayList<ByteArray>()
