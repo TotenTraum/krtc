@@ -104,9 +104,10 @@ krtc-native-demo.exe ws://<LAN-IP>:8092 test windows-client 30 video/H264
 | `krtc-linux-x64`, `krtc-linux-arm64` | `krtc-sfu.kexe`, `krtc-native-demo.kexe` (оба зависят только от glibc, OpenSSL вшит) | `chmod +x *.kexe`, затем `./krtc-sfu.kexe --announce <LAN-IP>` и демо как в разделе «Демо» |
 | `krtc-sfu-jvm` | `krtc-sfu-jvm.zip` (SFU на JVM, любая ОС) | Java 21+, `unzip`, затем `krtc-sfu-jvm/bin/krtc-sfu --announce <LAN-IP>` (Windows: `bin\krtc-sfu.bat`) и открыть `http://<host>:8080` |
 | `krtc-android` | `krtc-native-demo.apk` (arm64) | `adb install krtc-native-demo.apk`, запуск как в разделе «Демо» |
+| `krtc-windows-x64` | `krtc-native-demo.exe` + `krtc.dll`, `krtc-native-jvm-demo-windows.zip` | `krtc-native-demo.exe ws://<LAN-IP>:8092 test windows 30` (`krtc.dll` рядом с exe). JVM: Java 21+, распаковать, `bin\krtc-native-demo.bat ws://...`. SFU для Windows — `krtc-sfu-jvm` |
 
 Ограничения:
-- **Windows в CI пока нет.** Локально `krtc.dll` и `mingwX64`-демо кросс-компилируются в Docker (раздел «Подготовка»).
+- **Windows кросс-компилируется на Linux** (clang-cl и xwin в Docker). На настоящем Windows сборки ещё не запускались ([ADR-0014](../docs/adr/0014-spike-krtc-native.md)). Нативного SFU под Windows нет: в Windows-сборке его заменяет `krtc-sfu-jvm`.
 - **Linux arm64:** прослойка собирается в эмулируемом arm64-контейнере, это самый долгий шаг.
 
-Сборки можно получить и локально, теми же задачами Gradle: `:krtc-sfu-server:jvmDistZip`, `:krtc-native:jvmDemoDistZip`, `linkDemoDebugExecutable<Target>`. Без Docker (как на macOS-раннерах CI) JVM-jar собирается без `krtc.dll`: `-Pkrtc.jvm.windows=false`.
+Сборки можно получить и локально, теми же задачами Gradle: `:krtc-sfu-server:jvmDistZip`, `:krtc-native:jvmDemoDistZip`, `linkDemoDebugExecutable<Target>`. Какие нативные библиотеки попадут в JVM-jar, задают свойства `-Pkrtc.jvm.macos=false` и `-Pkrtc.jvm.windows=false`.

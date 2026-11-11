@@ -77,10 +77,12 @@ val jniLibraries = listOf(
 }
 
 // The desktop JVM loads libkrtc_jni from the jar (krtc/native/<os>-<arch>/, see Jni.kt).
-// -Pkrtc.jvm.windows=false leaves krtc.dll out (it is cross-compiled in Docker, which macOS CI runners lack).
+// Which native libraries the jar carries. -Pkrtc.jvm.windows=false leaves krtc.dll out (cross-compiled in Docker,
+// which macOS CI runners lack); -Pkrtc.jvm.macos=false leaves libkrtc_jni.dylib out (built only on macOS).
 val jvmWindows = (findProperty("krtc.jvm.windows") as String?)?.toBoolean() ?: true
+val jvmMacos = (findProperty("krtc.jvm.macos") as String?)?.toBoolean() ?: true
 val jvmJniResources = tasks.register<Sync>("jvmJniResources") {
-    from(jniLibraries.getValue("MacosArm64")) { into("krtc/native/macos-arm64") }
+    if (jvmMacos) from(jniLibraries.getValue("MacosArm64")) { into("krtc/native/macos-arm64") }
     if (jvmWindows) from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
     into(layout.buildDirectory.dir("generated/jni/jvm"))
 }
@@ -175,13 +177,17 @@ tasks.register<JavaExec>("runJvmDemo") {
     mainClass.set("krtc.native.demo.MainKt")
 }
 
-// A runnable JVM demo for testing on another Mac (CI artifact): unzip, then
-//   krtc-native-jvm-demo/bin/krtc-native-demo ws://<sfu>:8092 test jvm-client 30
+// A runnable JVM demo for testing on another machine (CI artifact): unzip, then
+//   krtc-native-jvm-demo/bin/krtc-native-demo ws://<sfu>:8092 test jvm-client 30      (Windows: bin\krtc-native-demo.bat)
 val jvmDemoStartScript = tasks.register("jvmDemoStartScript") {
     val dir = layout.buildDirectory.dir("dist/scripts")
     outputs.dir(dir)
     doLast {
         val out = dir.get().asFile.apply { mkdirs() }
+        out.resolve("krtc-native-demo.bat").writeText(
+            "@echo off\r\n" +
+                "java --enable-native-access=ALL-UNNAMED -cp \"%~dp0..\\lib\\*\" krtc.native.demo.MainKt %*\r\n",
+        )
         out.resolve("krtc-native-demo").writeText(
             "#!/bin/sh\n" +
                 "# Needs Java 21+.\n" +
