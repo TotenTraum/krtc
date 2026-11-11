@@ -17,6 +17,9 @@ val opensslPrefix: String = (findProperty("openssl.prefix") as String?) ?: "/opt
 val linuxOpenSsl = mapOf("linuxX64" to "linux-x64", "linuxArm64" to "linux-arm64").mapValues { (target, platform) ->
     val dir = layout.projectDirectory.dir(".deps/openssl-$platform")
     dir to tasks.register<Exec>("buildOpenSsl${target.replaceFirstChar { it.uppercase() }}") {
+        // Any Kotlin/Native compile for the target downloads Kotlin/Native's clang and sysroot, which the script
+        // builds with (on a fresh machine they are not there yet; the script fetches them itself as a fallback).
+        dependsOn(":krtc-protocol:compileKotlin${target.replaceFirstChar { it.uppercase() }}")
         inputs.file("build-openssl.sh")
         outputs.files(dir.file("lib/libssl.a"), dir.file("lib/libcrypto.a"))
         commandLine("./build-openssl.sh", platform)
