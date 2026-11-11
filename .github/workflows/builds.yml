@@ -4,6 +4,8 @@
 #   krtc-ios             demo client for the simulator (run with `xcrun simctl spawn booted …`) and the device (unsigned)
 #   krtc-jvm-demo-macos  demo client on the desktop JVM, macOS arm64 (needs Java 21+)
 #   krtc-meet-macos      the krtc-meet app (ADR-0018) as a .dmg, unsigned (right-click → Open the first time)
+#   krtc-meet-ios        krtc-meet for the iOS simulator (unzip, xcrun simctl install booted krtc-meet.app)
+#   krtc-meet-android    krtc-meet as an APK (arm64)
 #   krtc-linux-x64       SFU server and demo client (only glibc needed; OpenSSL is linked in)
 #   krtc-linux-arm64     SFU server and demo client
 #   krtc-sfu-jvm         SFU server on the JVM, any OS with Java 21+
@@ -71,11 +73,14 @@ jobs:
           :krtc-native:linkDemoDebugExecutableIosArm64
           :krtc-native:jvmDemoDistZip
           :krtc-meet:packageDmg
+          :krtc-meet:assembleIosSimulatorApp
           -Pkrtc.jvm.windows=false
       - name: Collect
         run: |
           mkdir -p out/macos out/ios out/jvm out/meet
           cp krtc-meet/build/compose/binaries/main/dmg/*.dmg out/meet/
+          mkdir -p out/meet-ios
+          ditto -c -k --keepParent krtc-meet/build/ios/krtc-meet.app out/meet-ios/krtc-meet-simulator.zip
           cp krtc-sfu-server/build/bin/macosArm64/debugExecutable/krtc-sfu.kexe out/macos/
           cp krtc-native/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe out/macos/
           cp krtc-native/build/bin/iosSimulatorArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-simulator.kexe
@@ -101,6 +106,11 @@ jobs:
         with:
           name: krtc-meet-macos
           path: out/meet
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-meet-ios
+          path: out/meet-ios
           retention-days: 14
 
   linux-android:
@@ -156,6 +166,7 @@ jobs:
           :krtc-native:linkDemoDebugExecutableLinuxX64
           :krtc-native:linkDemoDebugExecutableLinuxArm64
           :krtc-native-android-demo:assembleDebug
+          :krtc-meet-android:assembleDebug
       - name: Collect
         run: |
           mkdir -p out/linux-x64 out/linux-arm64 out/jvm out/android
@@ -165,6 +176,8 @@ jobs:
           cp krtc-native/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
           cp krtc-sfu-server/build/dist/krtc-sfu-jvm.zip out/jvm/
           cp krtc-native-android-demo/build/outputs/apk/debug/*.apk out/android/krtc-native-demo.apk
+          mkdir -p out/meet-android
+          cp krtc-meet-android/build/outputs/apk/debug/*.apk out/meet-android/krtc-meet.apk
       - uses: actions/upload-artifact@v4
         with:
           name: krtc-linux-x64
@@ -184,6 +197,11 @@ jobs:
         with:
           name: krtc-android
           path: out/android
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-meet-android
+          path: out/meet-android
           retention-days: 14
 
   windows:

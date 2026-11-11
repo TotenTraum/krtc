@@ -1,6 +1,6 @@
 # ADR-0018. `krtc-meet`: пример приложения для звонков на Compose Multiplatform
 
-- Статус: Принято, этапы M2–M5 впереди
+- Статус: Принято, этапы M3–M5 впереди
 - Дата: 2026-11-11
 - Уточняет: [ADR-0012](0012-kmp-client.md), [ADR-0014](0014-spike-krtc-native.md)
 
@@ -36,6 +36,28 @@
 - Упаковка: `createDistributable` и `packageDmg`, `.app` с описаниями доступа к камере и микрофону. Переменные окружения `KRTC_MEET_*` позволяют входить автоматически и снимать снимок окна для проверок.
 - Проверено: приложение с тестовой картинкой и тестовым звуком в комнате с двумя вкладками Chrome. Chrome получает его видео и звук без потерь. Приложение выводит своё превью и видео Chrome (снимок интерфейса, отрисованный Compose вне экрана), подсвечивает говорящих.
 - Не проверено: настоящие камера и микрофон (`PLATFORM`) в `.app` с описаниями доступа — запуск владельцем проекта.
+
+## M2 (2026-11-11)
+
+- `krtc-meet` получил таргеты Android (`com.android.kotlin.multiplatform.library`, `compileSdk` 37, как требует Compose 1.12) и iOS.
+- Разница платформ спрятана за `MediaPlatform`:
+  - `NativeMediaPlatform` — desktop и iOS, звук и камеры через libwebrtc;
+  - `AndroidMediaPlatform` — синтетический звук плюс `AndroidAudio`, камеры через Camera2 (`AndroidCamera`).
+- Вывод кадров:
+  - Android — `android.graphics.Bitmap.setPixels`;
+  - iOS — Skia, как на desktop.
+- Отступы безопасной области (`WindowInsets.safeDrawing`) в общем `App`. Кнопки звонка переносятся на узком экране.
+- Приложения:
+  - модуль `krtc-meet-android`;
+  - iOS-приложение для симулятора без проекта Xcode: Kotlin `main` с `UIApplicationMain` и `AppDelegate`, `Info.plist`, подпись ad-hoc (`assembleIosSimulatorApp`).
+- CI: артефакты `krtc-meet-android` и `krtc-meet-ios`.
+- Проверено в звонке с Chrome через `krtc-sfu-server`:
+
+  | Платформа | Результат |
+  |---|---|
+  | Android 16 (эмулятор) | С тестовой картинкой: Chrome получает 1280×720 без потерь. С виртуальной камерой эмулятора и `AndroidAudio`: 720×1280. Приложение показывает видео Chrome |
+  | iOS 26 (симулятор) | Тестовая картинка и звук: Chrome получает видео и звук без потерь. Приложение показывает видео Chrome |
+- Не проверено: устройства (iPhone с подписью, телефон Android), камера iOS (в симуляторе её нет).
 
 ## Альтернативы
 

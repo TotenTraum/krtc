@@ -29,7 +29,8 @@ data class JoinSettings(
 sealed class CameraChoice {
     data object None : CameraChoice()
     data object TestPattern : CameraChoice()
-    data class Device(val index: Int, val name: String) : CameraChoice()
+    /** A camera by index in [MediaPlatform.cameras]; [id] is the platform's own id where it has one (Camera2). */
+    data class Device(val index: Int, val name: String, val id: String = "") : CameraChoice()
 }
 
 sealed class CallPhase {
@@ -43,7 +44,7 @@ sealed class CallPhase {
  * One call: the factory, local tracks and the [RoomClient], with the state the screens show. Main thread only
  * (the flows may be collected anywhere).
  */
-class MeetSession(private val scope: CoroutineScope) {
+class MeetSession(private val scope: CoroutineScope, private val platform: MediaPlatform = NativeMediaPlatform) {
     private val phaseFlow = MutableStateFlow<CallPhase>(CallPhase.Idle)
     private val participantsFlow = MutableStateFlow<List<RemoteParticipant>>(emptyList())
     private val localVideoFlow = MutableStateFlow<MediaStreamTrack?>(null)
@@ -60,8 +61,9 @@ class MeetSession(private val scope: CoroutineScope) {
     var settings: JoinSettings? = null
         private set
 
-    // Platform audio lives as long as the app: it lists the devices before a call, and the chosen microphone and
-    // speakers stay chosen across calls. Test audio gets a factory of its own per call.
+    // Where the platform allows it, system audio lives as long as the app: it lists the devices before a call, and
+    // the chosen microphone and speakers stay chosen across calls. Otherwise (Android, test audio) every call gets a
+    // factory of its own.
     private var platformFactory: NativePeerConnectionFactory? = null
     private val inputsFlow = MutableStateFlow<List<String>>(emptyList())
     private val outputsFlow = MutableStateFlow<List<String>>(emptyList())
@@ -75,10 +77,17 @@ class MeetSession(private val scope: CoroutineScope) {
     val audioOutput: StateFlow<Int?> = outputFlow.asStateFlow()
 
     private fun platform(): NativePeerConnectionFactory =
-        platformFactory ?: NativePeerConnectionFactory(audioDevice = AudioDevice.PLATFORM).also { platformFactory = it }
+        platformFactory ?: platform.createFactory(testAudio = false).also { platformFactory = it }
+
+    /** Cameras to choose from on the join screen. */
+    fun cameras(): List<CameraChoice.Device> = platform.cameras()
+
+    /** Whether microphones and speakers can be chosen (desktop, iOS). */
+    val audioDeviceChoice: Boolean get() = platform.sharedSystemAudio
 
     /** Reads the device lists again (e.g. after plugging in a headset). */
     fun refreshAudioDevices() {
+        if (!platform.sharedSystemAudio) return
         val f = platform()
         inputsFlow.value = f.audioInputs
         outputsFlow.value = f.audioOutputs
@@ -86,12 +95,12 @@ class MeetSession(private val scope: CoroutineScope) {
 
     /** Switches the microphone; works during a call too. */
     fun selectAudioInput(index: Int) {
-        if (platform().setAudioInput(index)) inputFlow.value = index
+        if (platform.sharedSystemAudio && platform().setAudioInput(index)) inputFlow.value = index
     }
 
     /** Switches the speakers or headphones; works during a call too. */
     fun selectAudioOutput(index: Int) {
-        if (platform().setAudioOutput(index)) outputFlow.value = index
+        if (platform.sharedSystemAudio && platform().setAudioOutput(index)) outputFlow.value = index
     }
 
     /** Releases platform audio (when the app closes). */
@@ -106,7 +115,8 @@ class MeetSession(private val scope: CoroutineScope) {
     private var client: RoomClient? = null
     private var mic: NativeTrack? = null
     private var camera: NativeTrack? = null
-    private var cameraSource: NativeVideoSource? = null
+    private var openedCamera: OpenedCamera? = null
+    private var audioPlumbing: AutoCloseable? = null
     private var watch: Job? = null
 
     fun join(settings: JoinSettings) {
@@ -115,16 +125,18 @@ class MeetSession(private val scope: CoroutineScope) {
         phaseFlow.value = CallPhase.Joining
         scope.launch {
             try {
-                val f = if (settings.testAudio) NativePeerConnectionFactory(audioDevice = AudioDevice.SYNTHETIC).also { callFactory = it } else platform()
+                val shared = !settings.testAudio && platform.sharedSystemAudio
+                val f = if (shared) platform() else platform.createFactory(settings.testAudio).also { callFactory = it }
                 factory = f
                 if (settings.testAudio) f.setTestTone(true)
+                audioPlumbing = platform.startAudio(f, settings.testAudio)
                 mic = f.createAudioTrack("mic")
                 camera = when (val c = settings.camera) {
                     CameraChoice.None -> null
                     CameraChoice.TestPattern -> f.createTestVideoTrack("camera", 1280, 720, 30)
-                    is CameraChoice.Device -> f.createCameraSource(c.index, 1280, 720, 30)?.let { s ->
-                        cameraSource = s
-                        f.createVideoTrack(s, "camera")
+                    is CameraChoice.Device -> platform.openCamera(f, c)?.let { opened ->
+                        openedCamera = opened
+                        f.createVideoTrack(opened.source, "camera")
                     }
                 }
                 localVideoFlow.value = camera
@@ -177,8 +189,10 @@ class MeetSession(private val scope: CoroutineScope) {
         client = null
         participantsFlow.value = emptyList()
         localVideoFlow.value = null
-        cameraSource?.close()
-        cameraSource = null
+        openedCamera?.close()
+        openedCamera = null
+        audioPlumbing?.close()
+        audioPlumbing = null
         camera?.release()
         camera = null
         mic?.release()

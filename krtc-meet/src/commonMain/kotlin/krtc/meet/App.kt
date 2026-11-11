@@ -6,6 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -46,14 +51,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import krtc.client.RemoteParticipant
 import krtc.core.MediaStreamTrack
-import krtc.native.nativeCameras
 
 private val Speaking = Color(0xFF34C27A)
 
 @Composable
 fun App(session: MeetSession, defaults: JoinSettings) {
     MaterialTheme(colorScheme = darkColorScheme()) {
-        Surface(Modifier.fillMaxSize()) {
+        // Phones: keep clear of the status bar, notch and gesture bar (no insets on desktop).
+        Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when (val phase = session.phase.collectAsState().value) {
                 CallPhase.Idle -> JoinScreen(session, defaults) { session.join(it) }
                 CallPhase.Joining -> Centered { Text("Подключение…") }
@@ -65,7 +70,7 @@ fun App(session: MeetSession, defaults: JoinSettings) {
                     }
                 }
             }
-        }
+        } }
     }
 }
 
@@ -78,7 +83,7 @@ fun JoinScreen(session: MeetSession, defaults: JoinSettings, onJoin: (JoinSettin
     var room by remember { mutableStateOf(defaults.room) }
     var name by remember { mutableStateOf(defaults.name) }
     var testAudio by remember { mutableStateOf(defaults.testAudio) }
-    val cameras = remember { nativeCameras().mapIndexed { i, n -> CameraChoice.Device(i, n) } }
+    val cameras = remember { session.cameras() }
     var camera by remember { mutableStateOf(defaults.camera) }
     var menu by remember { mutableStateOf(false) }
 
@@ -104,7 +109,7 @@ fun JoinScreen(session: MeetSession, defaults: JoinSettings, onJoin: (JoinSettin
                 Checkbox(testAudio, { testAudio = it })
                 Text("Тестовый звук вместо микрофона и динамиков")
             }
-            if (!testAudio) AudioDevicePickers(session)
+            if (!testAudio && session.audioDeviceChoice) AudioDevicePickers(session)
             Button(
                 onClick = { onJoin(JoinSettings(server.trim(), room.trim(), name.trim(), camera, testAudio)) },
                 enabled = server.isNotBlank() && room.isNotBlank() && name.isNotBlank(),
@@ -150,6 +155,7 @@ private fun CameraChoice.label(): String = when (this) {
     is CameraChoice.Device -> name
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CallScreen(session: MeetSession, room: String) {
     val participants by session.participants.collectAsState()
@@ -167,12 +173,15 @@ fun CallScreen(session: MeetSession, room: String) {
             items(participants, key = { it.id + "/screen" }) { p -> RemoteScreenTile(p) }
         }
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        // Wraps onto a second line on narrow (phone) screens.
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             FilledTonalButton(onClick = session::toggleMic) { Text(if (micOn) "Выключить микрофон" else "Включить микрофон") }
-            Spacer(Modifier.width(8.dp))
             FilledTonalButton(onClick = session::toggleCamera, enabled = local != null) { Text(if (cameraOn) "Выключить камеру" else "Включить камеру") }
-            Spacer(Modifier.width(8.dp))
-            if (session.settings?.testAudio == false) {
+            if (session.settings?.testAudio == false && session.audioDeviceChoice) {
                 Box {
                     var open by remember { mutableStateOf(false) }
                     FilledTonalButton(onClick = { open = true }) { Text("Звук") }
@@ -180,7 +189,6 @@ fun CallScreen(session: MeetSession, room: String) {
                         Column(Modifier.width(360.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { AudioDevicePickers(session) }
                     }
                 }
-                Spacer(Modifier.width(8.dp))
             }
             Button(onClick = session::leave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Выйти") }
         }
