@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
@@ -319,8 +320,9 @@ private fun TileFor(session: MeetSession, spec: TileSpec, pinned: Boolean, modif
 /** Starts a screen share (choice of display or window, with or without sound) or stops it. */
 @Composable
 private fun ScreenShareButton(session: MeetSession, sharing: Boolean) {
+    val fps by session.screenFps.collectAsState()
     if (sharing) {
-        FilledTonalButton(onClick = session::stopScreen) { Text("Остановить показ") }
+        FilledTonalButton(onClick = session::stopScreen) { Text("Остановить показ · $fps к/с") }
         return
     }
     Box {
@@ -332,6 +334,13 @@ private fun ScreenShareButton(session: MeetSession, sharing: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { withAudio = !withAudio }.padding(end = 12.dp)) {
                 Checkbox(withAudio, { withAudio = it })
                 Text("Со звуком")
+            }
+            // Frame rate: 15 is enough for slides and code, 30 and 60 for video and scrolling.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("Кадров в секунду", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
+                MeetSession.SCREEN_FPS_CHOICES.forEach { choice ->
+                    FilterChip(selected = fps == choice, onClick = { session.setScreenFps(choice) }, label = { Text("$choice") })
+                }
             }
             choices.forEach { c ->
                 DropdownMenuItem(text = { Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = {

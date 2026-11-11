@@ -51,10 +51,10 @@ interface MediaPlatform {
     fun screens(): List<ScreenChoice>
 
     /**
-     * Starts capturing [choice], with the system's sound if [withAudio] and the platform has it; null if the capture
-     * cannot start (no permission, or the user declined).
+     * Starts capturing [choice] at up to [fps] frames per second, with the system's sound if [withAudio] and the
+     * platform has it; null if the capture cannot start (no permission, or the user declined).
      */
-    suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean): OpenedScreen?
+    suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int): OpenedScreen?
 }
 
 /** Desktop and iOS: libwebrtc's own audio devices and camera capture (krtc-native). */
@@ -78,8 +78,8 @@ object NativeMediaPlatform : MediaPlatform {
         }
     }
 
-    override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean): OpenedScreen? {
-        val video = factory.createScreenSource(choice.source, fps = 15) ?: return null
+    override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int): OpenedScreen? {
+        val video = factory.createScreenSource(choice.source, fps = fps) ?: return null
         return OpenedScreen(video, if (withAudio) factory.createSystemAudioSource() else null)
     }
 }

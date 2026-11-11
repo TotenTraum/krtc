@@ -51,7 +51,9 @@
   </form>
   <section id="call" class="card" hidden>
     <p id="status">Подключение…</p>
-    <p><button type="button" id="share">Показать экран</button> <button type="button" id="mic">Выключить микрофон</button></p>
+    <p><button type="button" id="share">Показать экран</button>
+      <select id="fps" title="Кадров в секунду при показе экрана"><option value="15" selected>15 к/с</option><option value="30">30 к/с</option><option value="60">60 к/с</option></select>
+      <button type="button" id="mic">Выключить микрофон</button></p>
     <div id="grid"></div>
     <div id="chat">
       <div id="log"></div>
@@ -194,7 +196,8 @@ state.shareScreen = shareScreen;
 $('share').onclick = async () => {
   if (state.screen) { state.screen.stop(); state.screenAudio?.stop(); return shareScreen(null); }
   // audio: the tab's or system sound where the browser offers it (Chrome: a checkbox in the picker).
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: true });
+  const fps = Number($('fps').value);
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: fps, max: fps } }, audio: true });
   await shareScreen(stream.getVideoTracks()[0], stream.getAudioTracks()[0] ?? null);
 };
 

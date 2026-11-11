@@ -52,13 +52,14 @@ class MeetSessionTest {
         override fun cameras() = emptyList<CameraChoice.Device>()
         override fun openCamera(factory: NativePeerConnectionFactory, camera: CameraChoice.Device) = null
         override fun screens() = listOf(ScreenChoice("test"))
-        override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean): OpenedScreen {
+        override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int): OpenedScreen {
             val source = factory.createScreencastSource()
-            return OpenedScreen(source, null, Pusher(source))
+            return OpenedScreen(source, null, Pusher(source, fps))
         }
     }
 
-    private class Pusher(source: NativeVideoSource) : AutoCloseable {
+    /** Pushes frames at [fps], like a capture would. */
+    private class Pusher(source: NativeVideoSource, fps: Int) : AutoCloseable {
         @Volatile private var running = true
         private val t = thread {
             val pixels = IntArray(640 * 360)
@@ -66,7 +67,7 @@ class MeetSessionTest {
             while (running) {
                 pixels.fill(0xFF000000.toInt() or (n++ * 7 and 0xFF))
                 source.pushArgb(640, 360, pixels)
-                Thread.sleep(66)
+                Thread.sleep(1000L / fps)
             }
         }
         override fun close() {
@@ -162,9 +163,17 @@ class MeetSessionTest {
             waitUntil("connection stats") { b.connection.value?.peers?.containsKey(aliceAtBob.id) == true }
             assertEquals(LinkQuality.GOOD, b.connection.value!!.quality)
 
-            // Screen share: received, paused by unsubscribing, resumed by subscribing again.
+            // Screen share at the chosen frame rate: received, paused by unsubscribing, resumed by subscribing again.
+            a.setScreenFps(30)
             a.startScreen(a.screens().single(), withAudio = false)
             waitUntil("bob receiving alice's screen") { frames(aliceAtBob.screen.value) > 10 }
+            // Screen content keeps its resolution and gives up frame rate first while the bandwidth estimate ramps up:
+            // measure once it has settled.
+            delay(4_000)
+            val f0 = frames(aliceAtBob.screen.value)
+            delay(2_000)
+            val rate = (frames(aliceAtBob.screen.value) - f0) / 2.0
+            assertTrue(rate > 20, "screen at about 30 fps, got $rate")
             b.setScreenSubscribed(aliceAtBob, false)
             delay(500)
             val paused = frames(aliceAtBob.screen.value)

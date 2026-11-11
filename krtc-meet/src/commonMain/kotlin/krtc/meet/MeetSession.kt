@@ -95,6 +95,18 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
     private val volumesFlow = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val processingFlow = MutableStateFlow(AudioProcessing())
 
+    private val screenFpsFlow = MutableStateFlow(DEFAULT_SCREEN_FPS)
+
+    /**
+     * Frame rate of the next screen share ([SCREEN_FPS_CHOICES]). Higher is smoother for video and scrolling but
+     * costs bandwidth and CPU; the encoder still lowers it first when the link cannot carry it, to keep text sharp.
+     */
+    val screenFps: StateFlow<Int> = screenFpsFlow.asStateFlow()
+
+    fun setScreenFps(fps: Int) {
+        screenFpsFlow.value = fps.coerceIn(1, 60)
+    }
+
     /** This user's screen share, while it runs. */
     val screen: StateFlow<MediaStreamTrack?> = screenFlow.asStateFlow()
     val chat: StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
@@ -297,7 +309,7 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         val f = factory ?: return
         val c = client ?: return
         scope.launch {
-            val opened = runCatching { platform.openScreen(f, choice, withAudio) }.getOrNull()
+            val opened = runCatching { platform.openScreen(f, choice, withAudio, screenFpsFlow.value) }.getOrNull()
             if (opened == null) {
                 noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
                 return@launch
@@ -530,6 +542,8 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         /** Data channel topic of chat lines: UTF-8 text, sent reliably. */
         const val CHAT_TOPIC: String = "chat"
         const val MAX_VOLUME: Float = 3f
+        val SCREEN_FPS_CHOICES: List<Int> = listOf(15, 30, 60)
+        const val DEFAULT_SCREEN_FPS: Int = 15
         const val STATS_INTERVAL_MILLIS: Long = 2_000
 
         /** Tiles up to this many pixels tall get the low simulcast layer (180p), up to the next the middle one (360p). */
