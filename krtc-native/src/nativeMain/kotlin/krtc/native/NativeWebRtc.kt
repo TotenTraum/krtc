@@ -68,6 +68,16 @@ public actual class NativePeerConnectionFactory actual constructor(
         krtc_factory_create_with(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
             ?: error("libwebrtc factory creation failed")
 
+    public actual val audioInputs: List<String> get() = devices(0)
+    public actual val audioOutputs: List<String> get() = devices(1)
+
+    private fun devices(output: Int): List<String> = List(krtc_factory_audio_device_count(handle, output).coerceAtLeast(0)) { i ->
+        krtc_factory_audio_device_name(handle, output, i)?.let { p -> p.toKString().also { krtc_free(p) } } ?: "device $i"
+    }
+
+    public actual fun setAudioInput(index: Int): Boolean = krtc_factory_set_audio_device(handle, 0, index) == 0
+    public actual fun setAudioOutput(index: Int): Boolean = krtc_factory_set_audio_device(handle, 1, index) == 0
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public actual val videoCodecs: List<String>
         get() = krtc_factory_video_codecs(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }.split(' ').filter { it.isNotEmpty() }

@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +55,7 @@ fun App(session: MeetSession, defaults: JoinSettings) {
     MaterialTheme(colorScheme = darkColorScheme()) {
         Surface(Modifier.fillMaxSize()) {
             when (val phase = session.phase.collectAsState().value) {
-                CallPhase.Idle -> JoinScreen(defaults) { session.join(it) }
+                CallPhase.Idle -> JoinScreen(session, defaults) { session.join(it) }
                 CallPhase.Joining -> Centered { Text("Подключение…") }
                 is CallPhase.InCall -> CallScreen(session, phase.room)
                 is CallPhase.Ended -> Centered {
@@ -72,7 +73,7 @@ fun App(session: MeetSession, defaults: JoinSettings) {
 private fun Centered(content: @Composable () -> Unit) = Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 
 @Composable
-fun JoinScreen(defaults: JoinSettings, onJoin: (JoinSettings) -> Unit) {
+fun JoinScreen(session: MeetSession, defaults: JoinSettings, onJoin: (JoinSettings) -> Unit) {
     var server by remember { mutableStateOf(defaults.server) }
     var room by remember { mutableStateOf(defaults.room) }
     var name by remember { mutableStateOf(defaults.name) }
@@ -103,11 +104,42 @@ fun JoinScreen(defaults: JoinSettings, onJoin: (JoinSettings) -> Unit) {
                 Checkbox(testAudio, { testAudio = it })
                 Text("Тестовый звук вместо микрофона и динамиков")
             }
+            if (!testAudio) AudioDevicePickers(session)
             Button(
                 onClick = { onJoin(JoinSettings(server.trim(), room.trim(), name.trim(), camera, testAudio)) },
                 enabled = server.isNotBlank() && room.isNotBlank() && name.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Войти") }
+        }
+    }
+}
+
+/** Microphone and speaker choice (platform audio); switching applies at once, also during a call. */
+@Composable
+fun AudioDevicePickers(session: MeetSession) {
+    LaunchedEffect(Unit) { session.refreshAudioDevices() }
+    val inputs by session.audioInputs.collectAsState()
+    val outputs by session.audioOutputs.collectAsState()
+    val input by session.audioInput.collectAsState()
+    val output by session.audioOutput.collectAsState()
+    DevicePicker("Микрофон", inputs, input, session::selectAudioInput)
+    DevicePicker("Динамики", outputs, output, session::selectAudioOutput)
+}
+
+@Composable
+private fun DevicePicker(label: String, options: List<String>, selected: Int?, onSelect: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedTextField(
+            value = selected?.let { options.getOrNull(it) } ?: "Системное по умолчанию",
+            onValueChange = {}, readOnly = true, label = { Text(label) }, singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Box(Modifier.matchParentSize().clickable(enabled = options.isNotEmpty()) { open = true })
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            options.forEachIndexed { i, name ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(i); open = false })
+            }
         }
     }
 }
@@ -140,6 +172,16 @@ fun CallScreen(session: MeetSession, room: String) {
             Spacer(Modifier.width(8.dp))
             FilledTonalButton(onClick = session::toggleCamera, enabled = local != null) { Text(if (cameraOn) "Выключить камеру" else "Включить камеру") }
             Spacer(Modifier.width(8.dp))
+            if (session.settings?.testAudio == false) {
+                Box {
+                    var open by remember { mutableStateOf(false) }
+                    FilledTonalButton(onClick = { open = true }) { Text("Звук") }
+                    DropdownMenu(open, onDismissRequest = { open = false }) {
+                        Column(Modifier.width(360.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { AudioDevicePickers(session) }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             Button(onClick = session::leave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Выйти") }
         }
     }

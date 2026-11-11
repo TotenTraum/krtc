@@ -2,6 +2,7 @@ package krtc.native.demo
 
 import krtc.client.RoomClient
 import krtc.client.RoomState
+import krtc.native.AudioDevice
 import krtc.native.NativeAudioSource
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
@@ -21,7 +22,7 @@ import kotlin.concurrent.Volatile
  * a video track, and reports what it sends and receives. Same code on every platform:
  *   krtc-native-demo.kexe ws://<sfu>:8092 test native-client 30 [codec|- [flags...]]
  * Flags: `push-video` publishes frames generated here (the push API) instead of the built-in test pattern,
- * `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s, `chat` sends a room message every second (data channels), `screen` shares the screen after joining (renegotiates).
+ * `devices` only lists the platform microphones and speakers, `camera` publishes camera 0, `restart-ice` asks for an ICE restart after 5 s, `chat` sends a room message every second (data channels), `screen` shares the screen after joining (renegotiates).
  * Remote screen shares are rendered and summarized like cameras. Received video is rendered
  * through a frame listener and summarized (average colour).
  */
@@ -41,6 +42,14 @@ public suspend fun runDemo(
 
     val preferred = args.getOrNull(4)?.takeIf { it != "-" }
     val flags = args.drop(5).toSet()
+    if ("devices" in flags) {
+        // Platform audio devices, by index (what krtc-meet's microphone and speaker pickers show).
+        NativePeerConnectionFactory(audioDevice = AudioDevice.PLATFORM).use { f ->
+            f.audioInputs.forEachIndexed { i, n -> println("microphone $i: $n") }
+            f.audioOutputs.forEachIndexed { i, n -> println("speakers $i: $n") }
+        }
+        return@coroutineScope
+    }
     val factory = NativePeerConnectionFactory(preferredVideoCodec = preferred)
     factory.setTestTone(true)
     println("video codecs: ${factory.videoCodecs}, cameras: ${nativeCameras()}, screens: ${nativeScreenSources()}")

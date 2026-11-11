@@ -27,9 +27,10 @@ fun main() = application {
         testAudio = env["KRTC_MEET_TEST_AUDIO"] == "1",
     )
     val state = rememberWindowState(width = 1100.dp, height = 760.dp)
-    Window(onCloseRequest = ::exitApplication, title = "krtc meet", state = state) {
+    var current: MeetSession? = null
+    Window(onCloseRequest = { current?.close(); exitApplication() }, title = "krtc meet", state = state) {
         val scope = rememberCoroutineScope()
-        val session = remember { MeetSession(scope) }
+        val session = remember { MeetSession(scope) }.also { current = it }
         remember { if (env["KRTC_MEET_AUTOJOIN"] == "1") session.join(defaults) }
         env["KRTC_MEET_SNAPSHOT"]?.let { file ->
             Snapshot.schedule(1100, 760, file, (env["KRTC_MEET_SNAPSHOT_AFTER"] ?: "10").toLong()) { App(session, defaults) }

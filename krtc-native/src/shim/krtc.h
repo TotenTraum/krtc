@@ -61,6 +61,15 @@ int krtc_factory_pull_audio(krtc_factory *factory, int16_t *out, int count);
 /* RMS level (0..1) of the remote audio mix over the last 10 ms (synthetic audio only). */
 double krtc_factory_output_level(krtc_factory *factory);
 
+/* Platform audio devices (KRTC_AUDIO_PLATFORM; none with synthetic audio). output: 1 speakers/headphones, 0
+ * microphones. Names are freed with krtc_free. Switching works during a call: capture or playout restarts on the
+ * new device. Returns 0 on success. */
+int krtc_factory_audio_device_count(krtc_factory *factory, int output);
+char *krtc_factory_audio_device_name(krtc_factory *factory, int output, int index);
+int krtc_factory_set_audio_device(krtc_factory *factory, int output, int index);
+/* The device in use (-1 if unknown, e.g. the OS default). */
+int krtc_factory_audio_device(krtc_factory *factory, int output);
+
 /* Video codecs this factory can send, as "video/VP8 video/H264 ..." (free with krtc_free). */
 char *krtc_factory_video_codecs(krtc_factory *factory);
 

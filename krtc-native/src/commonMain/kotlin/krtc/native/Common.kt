@@ -67,6 +67,19 @@ public expect class NativePeerConnectionFactory(
     public val audioDevice: AudioDevice
     public val preferredVideoCodec: String?
 
+    /**
+     * Microphones and speakers of [AudioDevice.PLATFORM] audio, by index (empty with synthetic audio). Pick one
+     * with [setAudioInput] / [setAudioOutput], before or during a call.
+     */
+    public val audioInputs: List<String>
+    public val audioOutputs: List<String>
+
+    /** Switches the microphone ([audioInputs] index); a running capture restarts on it. False if it failed. */
+    public fun setAudioInput(index: Int): Boolean
+
+    /** Switches the speakers or headphones ([audioOutputs] index); playout restarts on them. False if it failed. */
+    public fun setAudioOutput(index: Int): Boolean
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public val videoCodecs: List<String>
 

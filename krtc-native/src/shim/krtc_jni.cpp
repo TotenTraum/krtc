@@ -237,6 +237,15 @@ KRTC_JNI(void, audioSourcePush)(JNIEnv *env, jclass, jlong s, jshortArray sample
 KRTC_JNI(void, audioSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_audio_source_release(H<krtc_audio_source>(s)); }
 KRTC_JNI(void, videoSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_video_source_release(H<krtc_video_source>(s)); }
 
+// Platform audio devices.
+KRTC_JNI(jint, factoryAudioDeviceCount)(JNIEnv *, jclass, jlong f, jboolean output) { return krtc_factory_audio_device_count(H<krtc_factory>(f), output ? 1 : 0); }
+KRTC_JNI(jstring, factoryAudioDeviceName)(JNIEnv *env, jclass, jlong f, jboolean output, jint index) {
+    return Take(env, krtc_factory_audio_device_name(H<krtc_factory>(f), output ? 1 : 0, index));
+}
+KRTC_JNI(jint, factorySetAudioDevice)(JNIEnv *, jclass, jlong f, jboolean output, jint index) {
+    return krtc_factory_set_audio_device(H<krtc_factory>(f), output ? 1 : 0, index);
+}
+
 // Peer connection.
 KRTC_JNI(jlong, pcCreate)(JNIEnv *env, jclass, jlong f, jobject listener) {
     auto *p = new Pc();

@@ -41,7 +41,7 @@ client.participants.value.first().video.value?.let { track ->
 }
 ```
 
-Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux, Windows). `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
+Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux, Windows). Устройства перечисляются в `factory.audioInputs` и `factory.audioOutputs`, выбираются через `setAudioInput(i)` и `setAudioOutput(i)`, в том числе во время звонка. Флаг демо `devices` печатает их список. `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
 
 ## Подготовка
 

@@ -43,6 +43,15 @@ public actual class NativePeerConnectionFactory actual constructor(
         .also { check(it != 0L) { "libwebrtc factory creation failed" } }
 
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
+    public actual val audioInputs: List<String> get() = devices(false)
+    public actual val audioOutputs: List<String> get() = devices(true)
+
+    private fun devices(output: Boolean): List<String> =
+        List(Jni.factoryAudioDeviceCount(handle, output).coerceAtLeast(0)) { i -> Jni.factoryAudioDeviceName(handle, output, i) ?: "device $i" }
+
+    public actual fun setAudioInput(index: Int): Boolean = Jni.factorySetAudioDevice(handle, false, index) == 0
+    public actual fun setAudioOutput(index: Int): Boolean = Jni.factorySetAudioDevice(handle, true, index) == 0
+
     public actual val videoCodecs: List<String> get() = Jni.factoryVideoCodecs(handle).split(' ').filter { it.isNotEmpty() }
 
     /** Synthetic audio: send a pulsed 440 Hz tone when the app pushes no PCM. */

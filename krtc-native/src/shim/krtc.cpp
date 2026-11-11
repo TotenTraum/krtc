@@ -343,6 +343,59 @@ KRTC_API krtc_track *krtc_factory_create_test_video_track(krtc_factory *factory,
     return track ? new krtc_track{track, nullptr} : nullptr;
 }
 
+namespace {
+/** libwebrtc initializes the device module only for the first call; listing devices before that needs it too. */
+void EnsureInitialized(AudioDeviceModule *adm) {
+    if (!adm->Initialized()) adm->Init();
+}
+}  // namespace
+
+KRTC_API int krtc_factory_audio_device_count(krtc_factory *f, int output) {
+    if (f->synthetic_audio) return 0;
+    return f->worker->BlockingCall([&] {
+        EnsureInitialized(f->adm.get());
+        return std::max(0, static_cast<int>(output ? f->adm->PlayoutDevices() : f->adm->RecordingDevices()));
+    });
+}
+
+KRTC_API char *krtc_factory_audio_device_name(krtc_factory *f, int output, int index) {
+    if (f->synthetic_audio || index < 0) return nullptr;
+    char name[kAdmMaxDeviceNameSize] = {0};
+    char guid[kAdmMaxGuidSize] = {0};
+    int32_t r = f->worker->BlockingCall([&] {
+        EnsureInitialized(f->adm.get());
+        return output ? f->adm->PlayoutDeviceName(static_cast<uint16_t>(index), name, guid)
+                      : f->adm->RecordingDeviceName(static_cast<uint16_t>(index), name, guid);
+    });
+    return r == 0 ? Dup(name) : nullptr;
+}
+
+KRTC_API int krtc_factory_set_audio_device(krtc_factory *f, int output, int index) {
+    if (f->synthetic_audio || index < 0) return -1;
+    return f->worker->BlockingCall([&] {
+        AudioDeviceModule *adm = f->adm.get();
+        EnsureInitialized(adm);
+        const auto i = static_cast<uint16_t>(index);
+        if (output) {
+            const bool playing = adm->Playing();
+            if (playing) adm->StopPlayout();
+            int32_t r = adm->SetPlayoutDevice(i);
+            if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
+            return static_cast<int>(r);
+        }
+        const bool recording = adm->Recording();
+        if (recording) adm->StopRecording();
+        int32_t r = adm->SetRecordingDevice(i);
+        if (recording && adm->InitRecording() == 0) adm->StartRecording();
+        return static_cast<int>(r);
+    });
+}
+
+KRTC_API int krtc_factory_audio_device(krtc_factory *f, int output) {
+    if (f->synthetic_audio) return -1;
+    return f->worker->BlockingCall([&] { return static_cast<int>(output ? f->adm->GetPlayoutDevice() : f->adm->GetRecordingDevice()); });
+}
+
 KRTC_API krtc_video_source *krtc_factory_create_video_source(krtc_factory *) {
     return new krtc_video_source{make_ref_counted<krtc::PushVideoSource>(), nullptr};
 }
