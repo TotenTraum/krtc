@@ -1,11 +1,15 @@
 #!/bin/sh
 # Builds libkrtc_jni (src/shim/krtc_jni.cpp + the shim + libwebrtc) as a shared library for the JVM or Android.
-#   ./build-jni.sh <libwebrtc dir> <shim output dir (from build-shim.sh)> <target: macos | android-arm64 | win>
+#   ./build-jni.sh <libwebrtc dir> <shim output dir (from build-shim.sh)> <target: macos | android-arm64 | linux | win>
 # Only the JNI entry points (Java_krtc_native_* and JNI_OnLoad) are exported, so libwebrtc's C++ runtime and
 # BoringSSL stay private to the library.
 # Windows: one krtc.dll for both the JVM and Kotlin/Native (mingwX64), so it also exports the krtc_* C API, plus
 # import libraries for MSVC (krtc.lib) and MinGW (libkrtc.dll.a). The CRT is linked statically (/MT), so the DLL
 # needs nothing beyond system DLLs. JDK headers: $JNI_INCLUDE (default /jdk/include, mounted by docker-build-shim.sh).
+# Linux: like the Kotlin/Native library (build-shim.sh), the JNI layer, the shim and exactly the libwebrtc objects
+# they need (with libwebrtc's own libc++ and BoringSSL) become one object with only the JNI entry points global, so
+# the library needs nothing beyond glibc and cannot clash with other native code in the JVM. Run it on Linux
+# (docker-build-shim.sh <arch> jni).
 set -eu
 WEBRTC="$1"
 OUT="$2"
@@ -35,6 +39,27 @@ android-*)
         -static-libstdc++ -Wl,--version-script,"$OUT/jni.map" -Wl,--exclude-libs,ALL -Wl,--gc-sections \
         -Wl,-z,max-page-size=16384 -Wl,--no-undefined -llog -landroid -lOpenSLES
     echo "built $OUT/libkrtc_jni.so"
+    ;;
+linux)
+    INC="$WEBRTC/include"
+    # libwebrtc's defines too: its libc++ headers need the configuration they were built with.
+    DEFINES=$(grep -m1 '^defines = ' "$WEBRTC/webrtc.ninja" | sed 's/^defines = //')
+    eval "set -- $DEFINES"
+    $CXX -c $CFLAGS "$@" -nostdinc++ -isystem "$INC/buildtools/third_party/libc++" -isystem "$INC/third_party/libc++/src/include" \
+        -isystem "$INC/third_party/libc++abi/src/include" -I"${JNI_INCLUDE:-/jdk/include}" -I"$SRC/unix" \
+        "$SRC/krtc_jni.cpp" -o "$OUT/krtc_jni.o"
+    JNI=$(nm --defined-only -g "$OUT/krtc_jni.o" | awk '$2 == "T" && ($3 ~ /^Java_krtc_native_/ || $3 == "JNI_OnLoad") { print $3 }' | sort -u)
+    printf '%s\n' $JNI > "$OUT/jni.exports"
+    UNDEF=""
+    for s in $JNI; do UNDEF="$UNDEF -u $s"; done
+    BUILTINS=$($CXX --rtlib=compiler-rt -print-libgcc-file-name)
+    ld.lld -r $UNDEF -o "$OUT/krtc_jni_all.o" "$OUT/krtc_jni.o" "$OUT/libkrtc_shim.a" "$WEBRTC/lib/libwebrtc.a" "$BUILTINS"
+    objcopy --keep-global-symbols="$OUT/jni.exports" "$OUT/krtc_jni_all.o"
+    printf '{ global: Java_krtc_native_*; JNI_OnLoad; local: *; };\n' > "$OUT/jni.map"
+    $CXX -shared -fuse-ld=lld -nostdlib++ -o "$OUT/libkrtc_jni.so" "$OUT/krtc_jni_all.o" \
+        -Wl,--version-script,"$OUT/jni.map" -Wl,--gc-sections -Wl,--no-undefined -lpthread -ldl -lm
+    rm -f "$OUT/krtc_jni_all.o"
+    echo "built $OUT/libkrtc_jni.so ($(echo $JNI | wc -w) JNI entry points)"
     ;;
 win)
     # jni.h comes from any JDK; jni_md.h for Windows from src/shim/win32 (the host JDK has its own OS's).

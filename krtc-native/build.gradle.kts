@@ -3,8 +3,8 @@
 // Kotlin/Native (Windows, mingwX64): cinterop against krtc.dll through its MinGW import library (packed into the
 // klib); the application ships krtc.dll next to its .exe. libwebrtc is MSVC-built, so it cannot be linked
 // statically into a MinGW binary; the flat C ABI of krtc.h is the DLL boundary.
-// JVM (macOS, Windows) and Android: one JNI layer (krtc_jni.cpp) built into libkrtc_jni (Windows: krtc.dll),
-// packed into the jar / AAR.
+// JVM (macOS, Windows, Linux) and Android: one JNI layer (krtc_jni.cpp) built into libkrtc_jni (Windows: krtc.dll),
+// packed into the jar / AAR. Linux: built in Docker like the Kotlin/Native library, isolated the same way.
 // libwebrtc: LiveKit's prebuilt static library (krtc-native/.deps, not committed); the shim is built by
 // build-shim.sh against it (on Linux and Windows inside Docker, see docker-build-shim.sh), the JNI library by
 // build-jni.sh.
@@ -76,14 +76,36 @@ val jniLibraries = listOf(
     }
 }
 
+/** Linux JNI libraries for the desktop JVM, built in Docker with the shim (docker-build-shim.sh <arch> jni). */
+val linuxJni = listOf("X64" to "x64", "Arm64" to "arm64").associate { (task, arch) ->
+    task to tasks.register<Exec>("buildJniLinux$task") {
+        inputs.dir("src/shim")
+        inputs.files("build-shim.sh", "build-jni.sh", "toolchain.sh", "docker-build-shim.sh", "docker/Dockerfile")
+        outputs.file(layout.projectDirectory.file(".deps/build/linux-$arch/libkrtc_jni.so"))
+        commandLine("./docker-build-shim.sh", arch, "jni")
+    }
+}
+
 // The desktop JVM loads libkrtc_jni from the jar (krtc/native/<os>-<arch>/, see Jni.kt).
-// Which native libraries the jar carries. -Pkrtc.jvm.windows=false leaves krtc.dll out (cross-compiled in Docker,
-// which macOS CI runners lack); -Pkrtc.jvm.macos=false leaves libkrtc_jni.dylib out (built only on macOS).
+// Which native libraries the jar carries (an app installer needs only its own OS's):
+//   -Pkrtc.jvm.macos=false    leaves libkrtc_jni.dylib out (built only on macOS);
+//   -Pkrtc.jvm.windows=false  leaves krtc.dll out (cross-compiled in Docker, which macOS CI runners lack);
+//   -Pkrtc.jvm.windowsDll=<path> takes a krtc.dll built elsewhere instead (packaging on Windows, which has no Docker);
+//   -Pkrtc.jvm.linux=false    leaves the Linux libkrtc_jni.so (x64, arm64) out (built in Docker).
 val jvmWindows = (findProperty("krtc.jvm.windows") as String?)?.toBoolean() ?: true
+val jvmWindowsDll = findProperty("krtc.jvm.windowsDll") as String?
 val jvmMacos = (findProperty("krtc.jvm.macos") as String?)?.toBoolean() ?: true
+val jvmLinux = (findProperty("krtc.jvm.linux") as String?)?.toBoolean() ?: true
 val jvmJniResources = tasks.register<Sync>("jvmJniResources") {
     if (jvmMacos) from(jniLibraries.getValue("MacosArm64")) { into("krtc/native/macos-arm64") }
-    if (jvmWindows) from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
+    when {
+        jvmWindowsDll != null -> from(jvmWindowsDll) { rename { "krtc.dll" }; into("krtc/native/windows-x64") }
+        jvmWindows -> from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
+    }
+    if (jvmLinux) {
+        from(linuxJni.getValue("X64")) { into("krtc/native/linux-x64") }
+        from(linuxJni.getValue("Arm64")) { into("krtc/native/linux-arm64") }
+    }
     into(layout.buildDirectory.dir("generated/jni/jvm"))
 }
 

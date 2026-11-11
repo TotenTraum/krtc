@@ -41,7 +41,25 @@
 open krtc-meet/build/compose/binaries/main/app/krtc-meet.app
 ```
 
-Установщики: `:krtc-meet:packageDmg` (macOS), `packageMsi` (Windows), `packageDeb` (Linux). Каждый собирается на своей ОС. Сборка `.dmg` есть в CI, артефакт `krtc-meet-macos`.
+Установщики: `:krtc-meet:packageDmg` (macOS), `packageMsi` (Windows), `packageDeb` (Linux). Каждый собирается на своей ОС, в нём только библиотеки своей ОС (свойства `krtc.jvm.*`, см. [krtc-native/README.md](../krtc-native/README.md)). В CI есть все три, без подписи:
+
+| Артефакт | Установка |
+|---|---|
+| `krtc-meet-macos` (`.dmg`) | Первый запуск: правой кнопкой → «Открыть» |
+| `krtc-meet-linux` (`.deb`, x64) | `sudo apt install ./krtc-meet_1.0.0-1_amd64.deb`, затем `/opt/krtc-meet/bin/krtc-meet` |
+| `krtc-meet-windows` (`.msi`, x64) | Windows SmartScreen предупредит о неподписанном установщике |
+
+### Linux
+
+Desktop-приложение работает на Linux x64 и arm64: `krtc-native` загружает `libkrtc_jni.so` из jar. Для разработки на Linux достаточно `./gradlew :krtc-meet:run`.
+
+С macOS приложение можно запустить в Linux-контейнере: собрать jar'ы с Compose для Linux и запустить под Xvfb. Нужны пакеты `xvfb`, `libegl1`, `libgl1`, `libxrender1`, `libxtst6`, `libxi6`, `fontconfig`.
+
+```bash
+./gradlew :krtc-meet:desktopClasspath -Pkrtc.meet.desktop=linux-arm64 -Pkrtc.jvm.macos=false -Pkrtc.jvm.windows=false
+```
+
+Затем в контейнере (например, `eclipse-temurin:21-jdk`) `java -cp` со всеми jar'ами из `krtc-meet/build/desktop-classpath`, главный класс `krtc.meet.MainKt`, с `xvfb-run` и переменными `KRTC_MEET_*`.
 
 ### Android
 

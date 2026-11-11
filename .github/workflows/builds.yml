@@ -6,6 +6,9 @@
 #   krtc-meet-macos      the krtc-meet app (ADR-0018) as a .dmg, unsigned (right-click → Open the first time)
 #   krtc-meet-ios        krtc-meet for the iOS simulator (unzip, xcrun simctl install booted krtc-meet.app)
 #   krtc-meet-android    krtc-meet as an APK (arm64)
+#   krtc-meet-linux      krtc-meet as a .deb (x64; needs no Java, the runtime is inside)
+#   krtc-meet-windows    krtc-meet as an .msi (x64), unsigned
+#   krtc-jvm-demo-linux  demo client on the desktop JVM, Linux x64 and arm64 (needs Java 21+)
 #   krtc-linux-x64       SFU server and demo client (only glibc needed; OpenSSL is linked in)
 #   krtc-linux-arm64     SFU server and demo client
 #   krtc-sfu-jvm         SFU server on the JVM, any OS with Java 21+
@@ -75,6 +78,7 @@ jobs:
           :krtc-meet:packageDmg
           :krtc-meet:assembleIosSimulatorApp
           -Pkrtc.jvm.windows=false
+          -Pkrtc.jvm.linux=false
       - name: Collect
         run: |
           mkdir -p out/macos out/ios out/jvm out/meet
@@ -167,6 +171,12 @@ jobs:
           :krtc-native:linkDemoDebugExecutableLinuxArm64
           :krtc-native-android-demo:assembleDebug
           :krtc-meet-android:assembleDebug
+      # The desktop JVM on Linux: libkrtc_jni.so for x64 and arm64 (Docker), in the JVM demo and the krtc-meet .deb.
+      # jpackage needs fakeroot for .deb.
+      - name: Desktop JVM for Linux
+        run: |
+          sudo apt-get install -y fakeroot
+          ./gradlew :krtc-native:jvmDemoDistZip :krtc-meet:packageDeb -Pkrtc.jvm.macos=false -Pkrtc.jvm.windows=false
       - name: Collect
         run: |
           mkdir -p out/linux-x64 out/linux-arm64 out/jvm out/android
@@ -176,8 +186,10 @@ jobs:
           cp krtc-native/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
           cp krtc-sfu-server/build/dist/krtc-sfu-jvm.zip out/jvm/
           cp krtc-native-android-demo/build/outputs/apk/debug/*.apk out/android/krtc-native-demo.apk
-          mkdir -p out/meet-android
+          mkdir -p out/meet-android out/meet-linux out/jvm-linux
           cp krtc-meet-android/build/outputs/apk/debug/*.apk out/meet-android/krtc-meet.apk
+          cp krtc-meet/build/compose/binaries/main/deb/*.deb out/meet-linux/
+          cp krtc-native/build/dist/krtc-native-jvm-demo.zip out/jvm-linux/krtc-native-jvm-demo-linux.zip
       - uses: actions/upload-artifact@v4
         with:
           name: krtc-linux-x64
@@ -202,6 +214,16 @@ jobs:
         with:
           name: krtc-meet-android
           path: out/meet-android
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-meet-linux
+          path: out/meet-linux
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-jvm-demo-linux
+          path: out/jvm-linux
           retention-days: 14
 
   windows:
@@ -234,6 +256,7 @@ jobs:
           :krtc-native:linkDemoDebugExecutableMingwX64
           :krtc-native:jvmDemoDistZip
           -Pkrtc.jvm.macos=false
+          -Pkrtc.jvm.linux=false
       - name: Collect
         run: |
           mkdir -p out/windows
@@ -244,4 +267,39 @@ jobs:
         with:
           name: krtc-windows-x64
           path: out/windows
+          retention-days: 14
+      # krtc.dll for the .msi, which only Windows can package (jpackage + WiX) but which is built here (Docker).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-dll
+          path: krtc-native/.deps/build/win-x64/krtc.dll
+          retention-days: 1
+
+  meet-windows:
+    name: krtc-meet for Windows (.msi)
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: krtc-dll
+          path: krtc-dll
+      # Only the JVM parts are built here: krtc.dll comes from the windows job, macOS and Linux libraries are left out.
+      - name: Package
+        shell: bash
+        run: >
+          ./gradlew :krtc-meet:packageMsi
+          -Pkrtc.jvm.macos=false -Pkrtc.jvm.linux=false
+          "-Pkrtc.jvm.windowsDll=$GITHUB_WORKSPACE/krtc-dll/krtc.dll"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-meet-windows
+          path: krtc-meet/build/compose/binaries/main/msi/*.msi
           retention-days: 14

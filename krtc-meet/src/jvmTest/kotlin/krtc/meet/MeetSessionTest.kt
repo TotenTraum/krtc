@@ -15,6 +15,7 @@ import krtc.sfu.Sfu
 import krtc.sfu.SfuConfig
 import krtc.sfu.ktor.krtcSfu
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -204,6 +205,9 @@ class MeetSessionTest {
     /** Leaving at any moment, also while an offer is being answered, must not touch released native objects. */
     @Test
     fun leavingDuringNegotiationIsSafe(): Unit = runBlocking(main) {
+        val events = java.util.concurrent.ConcurrentLinkedQueue<krtc.sfu.SfuEvent>()
+        val collector = scope.launch(Dispatchers.Default) { sfu.events.collect { events += it } }
+        kotlinx.coroutines.yield()
         repeat(8) { i ->
             val a = MeetSession(scope, TestPlatform())
             val b = MeetSession(scope, TestPlatform())
@@ -215,7 +219,8 @@ class MeetSessionTest {
             b.close()
         }
         delay(500) // coroutines still running after close must fail cleanly, not crash the process
-        assertEquals(0, sfu.metrics().participants, sfu.rooms().toString())
+        collector.cancel()
+        assertEquals(0, sfu.metrics().participants, "${sfu.rooms()}; events: ${events.filter { it !is krtc.sfu.SfuEvent.SpeakingChanged }}")
     }
 
     /** A TCP relay whose connections can be cut like a lost network (no WebSocket close frames). */

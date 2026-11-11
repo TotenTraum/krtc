@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.encodeURLParameter
+import io.ktor.websocket.DefaultWebSocketSession
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.close
@@ -48,6 +49,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Video quality a subscriber asks the SFU for; maps to the simulcast layers `q`, `h`, `f`. */
 public enum class VideoQuality(public val rid: String) { LOW("q"), MEDIUM("h"), HIGH("f") }
@@ -262,11 +264,21 @@ public class RoomClient(
             (resumeToken?.let { "&resume=" + it.encodeURLParameter() } ?: "")
         val ws = withContext(NonCancellable) { http.webSocketSession(url) }
         if (left || !currentCoroutineContext().isActive) {
-            withContext(NonCancellable) { runCatching { ws.close() } }
+            withContext(NonCancellable) { closeGracefully(ws) }
             currentCoroutineContext().ensureActive()
             return null
         }
         return ws
+    }
+
+    /** Says `leave`, closes the socket and waits (up to a second) until the server answered the close. */
+    private suspend fun closeGracefully(ws: WebSocketSession) {
+        runCatching {
+            ws.send(Frame.Text(SignalingProtocol.encode(ClientMessage.Leave)))
+            ws.flush()
+            ws.close()
+        }
+        (ws as? DefaultWebSocketSession)?.let { withTimeoutOrNull(CLOSE_TIMEOUT_MILLIS) { runCatching { it.closeReason.await() } } }
     }
 
     /** Reads signaling until the client leaves, the server ends the session, or reconnecting gives up. */
@@ -567,9 +579,10 @@ public class RoomClient(
         stateFlow.value = RoomState.Disconnected("left")
         // Saying so lets the server remove this client at once; a socket that merely closes could be a dropped
         // connection, which the server keeps for a while in case the client resumes.
+        // Cancelling the scope stops the read loop, and Ktor may then drop the connection with the frames still queued:
+        // wait until they are written and the server answered the close (briefly), then cancel.
         scope.launch {
-            runCatching { ws?.send(Frame.Text(SignalingProtocol.encode(ClientMessage.Leave))) }
-            runCatching { ws?.close() }
+            if (ws != null) withContext(NonCancellable) { closeGracefully(ws) }
         }.invokeOnCompletion { scope.cancel() }
     }
 
@@ -581,6 +594,7 @@ public class RoomClient(
         const val ICE_RESTART_GRACE_MILLIS = 2_000L
         const val ICE_RESTART_RETRY_MILLIS = 5_000L
         const val RECONNECT_FIRST_DELAY_MILLIS = 500L
+        const val CLOSE_TIMEOUT_MILLIS = 1_000L
         const val RECONNECT_MAX_DELAY_MILLIS = 5_000L
     }
 }

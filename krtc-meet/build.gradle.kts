@@ -11,6 +11,18 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
+// The desktop platform of Compose's runtime (Skia): the build machine's, or another with -Pkrtc.meet.desktop=
+// linux-x64 | linux-arm64 | windows-x64 | macos-arm64, e.g. to run the app in a Linux container from macOS
+// (desktopClasspath, see README).
+val desktopRuntime: String = when (val target = findProperty("krtc.meet.desktop") as String?) {
+    null -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.currentOs
+    "linux-x64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.linux_x64
+    "linux-arm64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.linux_arm64
+    "windows-x64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.windows_x64
+    "macos-arm64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.macos_arm64
+    else -> error("unknown krtc.meet.desktop: $target")
+}
+
 kotlin {
     jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }
     android {
@@ -40,7 +52,7 @@ kotlin {
             implementation("androidx.activity:activity-compose:1.13.0")
         }
         jvmMain.dependencies {
-            implementation(compose.desktop.currentOs)
+            implementation(desktopRuntime)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:${libs.versions.coroutines.get()}")
         }
         jvmTest.dependencies {
@@ -90,4 +102,12 @@ tasks.register<Exec>("assembleIosSimulatorApp") {
     dependsOn(iosSimulatorAppFiles)
     inputs.dir(iosSimulatorAppDir)
     commandLine("codesign", "--force", "--sign", "-", iosSimulatorAppDir.get().asFile.absolutePath)
+}
+
+// The desktop app's jars in one directory, to run it with plain java (classpath: that directory's jars,
+// main class krtc.meet.MainKt).
+tasks.register<Sync>("desktopClasspath") {
+    from(tasks.named("jvmJar"))
+    from(configurations.named("jvmRuntimeClasspath"))
+    into(layout.buildDirectory.dir("desktop-classpath"))
 }

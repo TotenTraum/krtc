@@ -51,7 +51,7 @@ client.participants.value.first().video.value?.let { track ->
 krtc-native/fetch-deps.sh                    # все платформы; или только нужные: fetch-deps.sh mac-arm64 android-arm64
 ```
 
-Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Windows x64 — тоже в Docker, кросс-компиляцией: clang-cl и lld-link 21, MSVC CRT и Windows SDK через xwin (`docker-build-shim.sh win`, `docker/windows/Dockerfile`; сборка образа принимает лицензию Microsoft на эти файлы). Результат — одна `krtc.dll` (прослойка, libwebrtc, JNI) для JVM и `mingwX64`. Kotlin/Native-приложению под Windows нужна `krtc.dll` рядом с `.exe`. Android — Android NDK (`ANDROID_NDK_HOME` или новейший в `~/Library/Android/sdk/ndk`).
+Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Для desktop JVM на Linux `docker-build-shim.sh <x64|arm64> jni` собирает ещё `libkrtc_jni.so`. Она изолирована так же, как библиотека Kotlin/Native: наружу видны только точки входа JNI, а libc++ и BoringSSL из libwebrtc остаются внутри. Нужна ей только glibc. Windows x64 — тоже в Docker, кросс-компиляцией: clang-cl и lld-link 21, MSVC CRT и Windows SDK через xwin (`docker-build-shim.sh win`, `docker/windows/Dockerfile`; сборка образа принимает лицензию Microsoft на эти файлы). Результат — одна `krtc.dll` (прослойка, libwebrtc, JNI) для JVM и `mingwX64`. Kotlin/Native-приложению под Windows нужна `krtc.dll` рядом с `.exe`. Android — Android NDK (`ANDROID_NDK_HOME` или новейший в `~/Library/Android/sdk/ndk`).
 
 ## Сборка
 
@@ -113,6 +113,8 @@ krtc-native-demo.exe ws://<LAN-IP>:8092 test windows-client 30 video/H264
 | `krtc-macos-arm64` | `krtc-sfu.kexe`, `krtc-native-demo.kexe` | `chmod +x *.kexe`, затем `xattr -d com.apple.quarantine *.kexe` (файл из браузера), запуск как в разделе «Демо» |
 | `krtc-ios` | демо для симулятора и для устройства (без подписи) | Симулятор: `xcrun simctl spawn booted ./krtc-native-demo-simulator.kexe ws://<LAN-IP>:8092 test ios 30`. Сборку для устройства нужно подписать самому |
 | `krtc-jvm-demo-macos` | `krtc-native-jvm-demo.zip` (JVM-клиент, macOS arm64) | Java 21+, `unzip`, затем `krtc-native-jvm-demo/bin/krtc-native-demo ws://<LAN-IP>:8092 test jvm 30` |
+| `krtc-jvm-demo-linux` | `krtc-native-jvm-demo-linux.zip` (JVM-клиент, Linux x64 и arm64) | Java 21+, `unzip`, затем `sh krtc-native-jvm-demo/bin/krtc-native-demo ws://<LAN-IP>:8092 test jvm 30` |
+| `krtc-meet-macos`, `krtc-meet-linux`, `krtc-meet-windows` | приложение krtc-meet: `.dmg`, `.deb` (x64), `.msi` (x64), без подписи | См. [krtc-meet/README.md](../krtc-meet/README.md) |
 | `krtc-linux-x64`, `krtc-linux-arm64` | `krtc-sfu.kexe`, `krtc-native-demo.kexe` (оба зависят только от glibc, OpenSSL вшит) | `chmod +x *.kexe`, затем `./krtc-sfu.kexe --announce <LAN-IP>` и демо как в разделе «Демо» |
 | `krtc-sfu-jvm` | `krtc-sfu-jvm.zip` (SFU на JVM, любая ОС) | Java 21+, `unzip`, затем `krtc-sfu-jvm/bin/krtc-sfu --announce <LAN-IP>` (Windows: `bin\krtc-sfu.bat`) и открыть `http://<host>:8080` |
 | `krtc-android` | `krtc-native-demo.apk` (arm64) | `adb install krtc-native-demo.apk`, запуск как в разделе «Демо» |
@@ -122,4 +124,8 @@ krtc-native-demo.exe ws://<LAN-IP>:8092 test windows-client 30 video/H264
 - **Windows кросс-компилируется на Linux** (clang-cl и xwin в Docker). На настоящем Windows сборки ещё не запускались ([ADR-0014](../docs/adr/0014-spike-krtc-native.md)). Нативного SFU под Windows нет: в Windows-сборке его заменяет `krtc-sfu-jvm`.
 - **Linux arm64:** прослойка собирается в эмулируемом arm64-контейнере, это самый долгий шаг.
 
-Сборки можно получить и локально, теми же задачами Gradle: `:krtc-sfu-server:jvmDistZip`, `:krtc-native:jvmDemoDistZip`, `linkDemoDebugExecutable<Target>`. Какие нативные библиотеки попадут в JVM-jar, задают свойства `-Pkrtc.jvm.macos=false` и `-Pkrtc.jvm.windows=false`.
+Сборки можно получить и локально, теми же задачами Gradle: `:krtc-sfu-server:jvmDistZip`, `:krtc-native:jvmDemoDistZip`, `linkDemoDebugExecutable<Target>`. Какие нативные библиотеки попадут в JVM-jar, задают свойства:
+- `-Pkrtc.jvm.macos=false`;
+- `-Pkrtc.jvm.windows=false`;
+- `-Pkrtc.jvm.linux=false` (Linux x64 и arm64 собираются в Docker);
+- `-Pkrtc.jvm.windowsDll=<путь>` — готовая `krtc.dll` вместо сборки в Docker. Так CI собирает `.msi` на Windows, где Docker нет.
