@@ -30,7 +30,7 @@ case "$(uname -s)-$(uname -m)" in
 Darwin-arm64) HOST=macos_arm64 ;; Darwin-x86_64) HOST=macos_x64 ;; Linux-x86_64) HOST=linux_x64 ;; *) HOST="" ;;
 esac
 KTARGET=$(echo "$TARGET" | tr - _)
-PROPS=$(ls -d "${KONAN_DATA_DIR:-$HOME/.konan}"/kotlin-native-prebuilt-*/konan/konan.properties 2>/dev/null | sort -V | tail -1)
+PROPS=$(ls -d "${KONAN_DATA_DIR:-$HOME/.konan}"/kotlin-native-prebuilt-*/konan/konan.properties 2>/dev/null | sort | tail -1)
 prop() { [ -n "$PROPS" ] && sed -n "s/^$1 *= *//p" "$PROPS" | head -1; }
 fetch() { # <dependency name>: download and unpack into $KONAN unless present
     [ -d "$KONAN/$1" ] && return 0
@@ -40,14 +40,14 @@ fetch() { # <dependency name>: download and unpack into $KONAN unless present
     curl -fsSL --retry 3 -o "$KONAN/cache/$1.tar.gz" "${BASE:-https://download.jetbrains.com/kotlin/native}/$1.tar.gz"
     tar -xzf "$KONAN/cache/$1.tar.gz" -C "$KONAN"
 }
-SYSROOT=$(ls -d "$KONAN"/$TRIPLE-gcc-*/$TRIPLE/sysroot 2>/dev/null | sort -V | tail -1)
+SYSROOT=$(ls -d "$KONAN"/$TRIPLE-gcc-*/$TRIPLE/sysroot 2>/dev/null | sort | tail -1)
 if [ -z "$SYSROOT" ]; then
     NAME=$(prop "toolchainDependency.$KTARGET")
     [ -n "$NAME" ] || { echo "no Kotlin/Native $TRIPLE sysroot in $KONAN and no konan.properties to find it" >&2; exit 1; }
     fetch "$NAME"
     SYSROOT="$KONAN/$NAME/$TRIPLE/sysroot"
 fi
-LLVM=$(ls -d "$KONAN"/llvm-*/bin 2>/dev/null | sort -V | tail -1)
+LLVM=$(ls -d "$KONAN"/llvm-*/bin 2>/dev/null | sort | tail -1)
 if [ -z "$LLVM" ]; then
     NAME=$([ -n "$HOST" ] && prop "llvm.$HOST.user")
     [ -n "$NAME" ] || { echo "no Kotlin/Native LLVM in $KONAN and no konan.properties to find it" >&2; exit 1; }
@@ -70,13 +70,15 @@ fi
 tar -xzf "$TARBALL" -C "$WORK" --strip-components=1
 
 cd "$WORK"
+LOG="$WORK/build.log"
+run() { "$@" >>"$LOG" 2>&1 || { echo "OpenSSL build failed: $*" >&2; tail -40 "$LOG" >&2; exit 1; }; }
 # Only what the SFU uses (EVP ciphers and MACs, DTLS, X.509): no shared libraries, apps, engines or loadable modules.
-CC="$LLVM/clang --target=$TRIPLE --sysroot=$SYSROOT" AR="$LLVM/llvm-ar" RANLIB="$LLVM/llvm-ar s" \
-    perl ./Configure "$CONFIG" no-shared no-dso no-engine no-module no-apps no-tests no-docs no-ui-console \
-    --prefix="$OUT" --libdir=lib -O2 -fPIC $EXTRA >/dev/null
+export CC="$LLVM/clang --target=$TRIPLE --sysroot=$SYSROOT" AR="$LLVM/llvm-ar" RANLIB="$LLVM/llvm-ar s"
+run perl ./Configure "$CONFIG" no-shared no-dso no-engine no-module no-apps no-tests no-docs no-ui-console \
+    --prefix="$OUT" --libdir=lib -O2 -fPIC $EXTRA
 JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
-make -s -j"$JOBS" build_libs >/dev/null
-make -s install_dev >/dev/null
+run make -s -j"$JOBS" build_libs
+run make -s install_dev
 echo "$VERSION" > "$OUT/VERSION"
 rm -rf "$WORK"
 echo "built OpenSSL $VERSION for $TARGET in $OUT"

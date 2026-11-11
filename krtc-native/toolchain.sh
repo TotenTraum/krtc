@@ -4,8 +4,19 @@ macos) CXX="clang++"; AR="ar"; TARGET_FLAGS="-mmacosx-version-min=11.0" ;;
 ios) CXX="xcrun --sdk iphoneos clang++"; AR="ar"; TARGET_FLAGS="-target arm64-apple-ios13.0" ;;
 ios-simulator) CXX="xcrun --sdk iphonesimulator clang++"; AR="ar"; TARGET_FLAGS="-target arm64-apple-ios13.0-simulator" ;;
 android-arm64)
-    NDK="${ANDROID_NDK_HOME:-$(ls -d "$HOME/Library/Android/sdk/ndk/"* 2>/dev/null | sort -V | tail -1)}"
-    [ -d "$NDK" ] || { echo "no Android NDK: set ANDROID_NDK_HOME" >&2; exit 1; }
+    # An NDK from the usual variables (CI runners set them), else the newest one in the Android SDK.
+    NDK=""
+    for d in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
+        if [ -n "$d" ] && [ -d "$d/toolchains/llvm" ]; then NDK="$d"; break; fi
+    done
+    if [ -z "$NDK" ]; then
+        for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+            [ -n "$sdk" ] && [ -d "$sdk/ndk" ] || continue
+            NDK=$(ls -d "$sdk/ndk/"* 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+            [ -n "$NDK" ] && break
+        done
+    fi
+    [ -n "$NDK" ] && [ -d "$NDK" ] || { echo "no Android NDK: set ANDROID_NDK_HOME" >&2; exit 1; }
     BIN="$(ls -d "$NDK"/toolchains/llvm/prebuilt/*/bin | head -1)"
     CXX="$BIN/clang++"; AR="$BIN/llvm-ar"; TARGET_FLAGS="--target=aarch64-linux-android24"
     ;;

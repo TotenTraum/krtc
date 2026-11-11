@@ -59,8 +59,8 @@ jobs:
         run: brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
       - name: libwebrtc
         run: krtc-native/fetch-deps.sh mac-arm64 ios-simulator-arm64 ios-device-arm64
-      - name: Tests and ABI
-        run: ./gradlew :krtc-sfu:macosArm64Test checkKotlinAbi
+      - name: Tests
+        run: ./gradlew :krtc-sfu:macosArm64Test
       - name: Build
         run: >
           ./gradlew
@@ -132,11 +132,10 @@ jobs:
           key: konan-linux-${{ hashFiles('gradle/libs.versions.toml') }}
       - name: libwebrtc
         run: krtc-native/fetch-deps.sh linux-x64 linux-arm64 android-arm64
-      - name: Tests
-        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:linuxX64Test :krtc-client:jvmTest
+      # The ABI check runs here: it compiles the Linux targets anyway (static OpenSSL), and infers the Apple ones.
+      - name: Tests and ABI
+        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:linuxX64Test :krtc-client:jvmTest checkKotlinAbi
       - name: Build
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: >
           ./gradlew
           :krtc-sfu-server:linkDebugExecutableLinuxX64
