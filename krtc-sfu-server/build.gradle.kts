@@ -59,3 +59,35 @@ tasks.register<JavaExec>("runJvm") {
     jvmArgs("-XX:+UseZGC", "-Xms256m")
     args = ((findProperty("sfuArgs") as String?) ?: "").split(" ").filter { it.isNotBlank() }
 }
+
+// A runnable JVM build of the server for testing on any OS with Java 21+ (CI artifact): unzip, then
+//   krtc-sfu-jvm/bin/krtc-sfu --announce <LAN-IP>        (Windows: krtc-sfu-jvm\bin\krtc-sfu.bat)
+val jvmStartScripts = tasks.register("jvmStartScripts") {
+    val dir = layout.buildDirectory.dir("dist/scripts")
+    outputs.dir(dir)
+    doLast {
+        val out = dir.get().asFile.apply { mkdirs() }
+        out.resolve("krtc-sfu").writeText(
+            "#!/bin/sh\n" +
+                "DIR=\"\$(cd \"\$(dirname \"\$0\")/..\" && pwd)\"\n" +
+                "exec java -XX:+UseZGC -cp \"\$DIR/lib/*\" krtc.sfu.server.MainKt \"\$@\"\n",
+        )
+        out.resolve("krtc-sfu.bat").writeText(
+            "@echo off\r\n" +
+                "java -XX:+UseZGC -cp \"%~dp0..\\lib\\*\" krtc.sfu.server.MainKt %*\r\n",
+        )
+    }
+}
+tasks.register<Zip>("jvmDistZip") {
+    group = "distribution"
+    archiveFileName.set("krtc-sfu-jvm.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("dist"))
+    into("krtc-sfu-jvm/lib") {
+        from(tasks.named("jvmJar"))
+        from(kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles)
+    }
+    into("krtc-sfu-jvm/bin") {
+        from(jvmStartScripts)
+        filePermissions { unix("rwxr-xr-x") }
+    }
+}

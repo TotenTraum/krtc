@@ -77,9 +77,11 @@ val jniLibraries = listOf(
 }
 
 // The desktop JVM loads libkrtc_jni from the jar (krtc/native/<os>-<arch>/, see Jni.kt).
+// -Pkrtc.jvm.windows=false leaves krtc.dll out (it is cross-compiled in Docker, which macOS CI runners lack).
+val jvmWindows = (findProperty("krtc.jvm.windows") as String?)?.toBoolean() ?: true
 val jvmJniResources = tasks.register<Sync>("jvmJniResources") {
     from(jniLibraries.getValue("MacosArm64")) { into("krtc/native/macos-arm64") }
-    from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
+    if (jvmWindows) from(shimTasks.getValue("mingwX64")) { include("krtc.dll"); into("krtc/native/windows-x64") }
     into(layout.buildDirectory.dir("generated/jni/jvm"))
 }
 
@@ -171,6 +173,35 @@ tasks.register<JavaExec>("runJvmDemo") {
     dependsOn(jvm.compilations.getByName("main").compileTaskProvider, "jvmProcessResources")
     classpath(jvm.compilations.getByName("main").output.allOutputs, jvm.compilations.getByName("main").runtimeDependencyFiles)
     mainClass.set("krtc.native.demo.MainKt")
+}
+
+// A runnable JVM demo for testing on another Mac (CI artifact): unzip, then
+//   krtc-native-jvm-demo/bin/krtc-native-demo ws://<sfu>:8092 test jvm-client 30
+val jvmDemoStartScript = tasks.register("jvmDemoStartScript") {
+    val dir = layout.buildDirectory.dir("dist/scripts")
+    outputs.dir(dir)
+    doLast {
+        val out = dir.get().asFile.apply { mkdirs() }
+        out.resolve("krtc-native-demo").writeText(
+            "#!/bin/sh\n" +
+                "# Needs Java 21+.\n" +
+                "DIR=\"\$(cd \"\$(dirname \"\$0\")/..\" && pwd)\"\n" +
+                "exec java --enable-native-access=ALL-UNNAMED -cp \"\$DIR/lib/*\" krtc.native.demo.MainKt \"\$@\"\n",
+        )
+    }
+}
+tasks.register<Zip>("jvmDemoDistZip") {
+    group = "distribution"
+    archiveFileName.set("krtc-native-jvm-demo.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("dist"))
+    into("krtc-native-jvm-demo/lib") {
+        from(tasks.named("jvmJar"))
+        from(kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles)
+    }
+    into("krtc-native-jvm-demo/bin") {
+        from(jvmDemoStartScript)
+        filePermissions { unix("rwxr-xr-x") }
+    }
 }
 
 tasks.matching { it.name.startsWith("cinteropKrtc") }.configureEach {

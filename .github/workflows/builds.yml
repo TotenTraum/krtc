@@ -1,0 +1,161 @@
+# Test builds of every platform: tests, then binaries uploaded as artifacts (Actions → run → Artifacts).
+#
+#   krtc-macos-arm64     SFU server and native demo client (Kotlin/Native)
+#   krtc-ios             demo client for the simulator (run with `xcrun simctl spawn booted …`) and the device (unsigned)
+#   krtc-jvm-demo-macos  demo client on the desktop JVM, macOS arm64 (needs Java 21+)
+#   krtc-linux-x64       demo client
+#   krtc-linux-arm64     demo client
+#   krtc-sfu-jvm         SFU server on the JVM, any OS with Java 21+
+#   krtc-android         demo APK (arm64), see krtc-native-android-demo
+#
+# How to run each one: krtc-native/README.md, section "Сборки CI".
+name: builds
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WEBRTC_RELEASE: webrtc-a545de4
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  apple:
+    name: macOS, iOS, JVM (macOS)
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Cache libwebrtc
+        uses: actions/cache@v4
+        with:
+          path: |
+            krtc-native/.deps/mac-arm64
+            krtc-native/.deps/ios-simulator-arm64
+            krtc-native/.deps/ios-device-arm64
+          key: webrtc-apple-${{ env.WEBRTC_RELEASE }}
+      - name: Cache Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-macos-${{ hashFiles('gradle/libs.versions.toml') }}
+      - name: OpenSSL 3 (SFU on Kotlin/Native)
+        run: brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+      - name: libwebrtc
+        run: krtc-native/fetch-deps.sh mac-arm64 ios-simulator-arm64 ios-device-arm64
+      - name: Tests and ABI
+        run: ./gradlew :krtc-sfu:macosArm64Test checkKotlinAbi
+      - name: Build
+        run: >
+          ./gradlew
+          :krtc-sfu-server:linkDebugExecutableMacosArm64
+          :krtc-native:linkDemoDebugExecutableMacosArm64
+          :krtc-native:linkDemoDebugExecutableIosSimulatorArm64
+          :krtc-native:linkDemoDebugExecutableIosArm64
+          :krtc-native:jvmDemoDistZip
+          -Pkrtc.jvm.windows=false
+      - name: Collect
+        run: |
+          mkdir -p out/macos out/ios out/jvm
+          cp krtc-sfu-server/build/bin/macosArm64/debugExecutable/krtc-sfu.kexe out/macos/
+          cp krtc-native/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe out/macos/
+          cp krtc-native/build/bin/iosSimulatorArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-simulator.kexe
+          cp krtc-native/build/bin/iosArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-device.kexe
+          cp krtc-native/build/dist/krtc-native-jvm-demo.zip out/jvm/
+      # Artifacts are zipped by GitHub and lose the executable bit: chmod +x after unzipping.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-macos-arm64
+          path: out/macos
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-ios
+          path: out/ios
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-jvm-demo-macos
+          path: out/jvm
+          retention-days: 14
+
+  linux-android:
+    name: Linux, Android, JVM SFU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      # The arm64 shim is compiled in an arm64 container (docker-build-shim.sh), emulated here.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Cache libwebrtc
+        uses: actions/cache@v4
+        with:
+          path: |
+            krtc-native/.deps/linux-x64
+            krtc-native/.deps/linux-arm64
+            krtc-native/.deps/android-arm64
+          key: webrtc-linux-android-${{ env.WEBRTC_RELEASE }}
+      - name: Cache Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-linux-${{ hashFiles('gradle/libs.versions.toml') }}
+      - name: libwebrtc
+        run: krtc-native/fetch-deps.sh linux-x64 linux-arm64 android-arm64
+      - name: Tests
+        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-client:jvmTest
+      - name: Build
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: >
+          ./gradlew
+          :krtc-sfu-server:jvmDistZip
+          :krtc-native:linkDemoDebugExecutableLinuxX64
+          :krtc-native:linkDemoDebugExecutableLinuxArm64
+          :krtc-native-android-demo:assembleDebug
+      - name: Collect
+        run: |
+          mkdir -p out/linux-x64 out/linux-arm64 out/jvm out/android
+          cp krtc-native/build/bin/linuxX64/demoDebugExecutable/krtc-native-demo.kexe out/linux-x64/
+          cp krtc-native/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
+          cp krtc-sfu-server/build/dist/krtc-sfu-jvm.zip out/jvm/
+          cp krtc-native-android-demo/build/outputs/apk/debug/*.apk out/android/krtc-native-demo.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-linux-x64
+          path: out/linux-x64
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-linux-arm64
+          path: out/linux-arm64
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-sfu-jvm
+          path: out/jvm
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-android
+          path: out/android
+          retention-days: 14
+
