@@ -1,4 +1,5 @@
 [versions]
+compose-multiplatform = "1.12.2"
 kotlin = "2.4.21"
 agp = "9.5.1"
 coroutines = "1.11.0"
@@ -33,6 +34,8 @@ ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
 [plugins]
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

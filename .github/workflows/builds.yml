@@ -3,6 +3,7 @@
 #   krtc-macos-arm64     SFU server and native demo client (Kotlin/Native)
 #   krtc-ios             demo client for the simulator (run with `xcrun simctl spawn booted …`) and the device (unsigned)
 #   krtc-jvm-demo-macos  demo client on the desktop JVM, macOS arm64 (needs Java 21+)
+#   krtc-meet-macos      the krtc-meet app (ADR-0018) as a .dmg, unsigned (right-click → Open the first time)
 #   krtc-linux-x64       SFU server and demo client (only glibc needed; OpenSSL is linked in)
 #   krtc-linux-arm64     SFU server and demo client
 #   krtc-sfu-jvm         SFU server on the JVM, any OS with Java 21+
@@ -69,10 +70,12 @@ jobs:
           :krtc-native:linkDemoDebugExecutableIosSimulatorArm64
           :krtc-native:linkDemoDebugExecutableIosArm64
           :krtc-native:jvmDemoDistZip
+          :krtc-meet:packageDmg
           -Pkrtc.jvm.windows=false
       - name: Collect
         run: |
-          mkdir -p out/macos out/ios out/jvm
+          mkdir -p out/macos out/ios out/jvm out/meet
+          cp krtc-meet/build/compose/binaries/main/dmg/*.dmg out/meet/
           cp krtc-sfu-server/build/bin/macosArm64/debugExecutable/krtc-sfu.kexe out/macos/
           cp krtc-native/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe out/macos/
           cp krtc-native/build/bin/iosSimulatorArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-simulator.kexe
@@ -93,6 +96,11 @@ jobs:
         with:
           name: krtc-jvm-demo-macos
           path: out/jvm
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: krtc-meet-macos
+          path: out/meet
           retention-days: 14
 
   linux-android:
