@@ -140,9 +140,13 @@ jobs:
           key: konan-linux-${{ hashFiles('gradle/libs.versions.toml') }}
       - name: libwebrtc
         run: krtc-native/fetch-deps.sh linux-x64 linux-arm64 android-arm64
-      # The ABI check runs here: it compiles the Linux targets anyway (static OpenSSL), and infers the Apple ones.
+      # The ABI check runs here: it compiles the Linux targets anyway (static OpenSSL). Apple targets cannot be built
+      # on Linux (cinterop needs the macOS SDK); with klib cross-compilation off they count as unsupported, and
+      # keepLocallyUnsupportedTargets (root build.gradle.kts) takes their dumps from api/ as they are.
       - name: Tests and ABI
-        run: ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:linuxX64Test :krtc-client:jvmTest checkKotlinAbi
+        run: >
+          ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:linuxX64Test :krtc-client:jvmTest
+          checkKotlinAbi -Pkotlin.native.enableKlibsCrossCompilation=false
       - name: Build
         run: >
           ./gradlew
