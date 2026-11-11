@@ -23,6 +23,7 @@ class ScreenShareTest {
         val offers = mutableListOf<ServerMessage.Offer>()
         val answered = mutableSetOf<Long>()
         var sharing = false
+        var sound = false
         override fun send(message: ServerMessage) { if (message is ServerMessage.Offer) offers += message }
         override fun close(reason: String) {}
     }
@@ -44,6 +45,10 @@ class ScreenShareTest {
                     lines += "a=sendonly"
                     lines += "a=ssrc:1111 cname:x"
                     lines += "a=ssrc:2222 cname:x"
+                } else lines += "a=inactive"
+                "sa" -> if (sink.sound) {
+                    lines += "a=sendonly"
+                    lines += "a=ssrc:3333 cname:x"
                 } else lines += "a=inactive"
                 else -> lines += "a=" + m.direction.reversed().sdp
             }
@@ -77,12 +82,14 @@ class ScreenShareTest {
         sinks[pb] = sb
         settle()
 
-        // Layout: uplink 0, 1, s; slot 0: 2, 3, s0. The screen uplink asks for no simulcast.
-        assertEquals(listOf("0", "1", "s", "2", "3", "s0"), media(pa).map { it.mid })
+        // Layout: uplink 0, 1, s, sa; slot 0: 2, 3, s0, sa0. The screen uplink asks for no simulcast.
+        assertEquals(listOf("0", "1", "s", "sa", "2", "3", "s0", "sa0"), media(pa).map { it.mid })
+        assertEquals("audio", media(pa).single { it.mid == "sa" }.type)
         val uplink = media(pa).single { it.mid == "s" }
         assertEquals(Direction.RECVONLY, uplink.direction)
         assertTrue(uplink.attributes("rid").isEmpty() && !uplink.hasAttribute("simulcast"))
         assertEquals(Direction.INACTIVE, media(pa).single { it.mid == "s0" }.direction)
+        assertEquals(Direction.INACTIVE, media(pa).single { it.mid == "sa0" }.direction)
         assertEquals(emptyList(), lastOffer(pa).screens)
 
         // b starts sharing: it asks for a new offer and answers `s` with sendonly.
@@ -101,8 +108,33 @@ class ScreenShareTest {
         assertFalse(pb.camera.key in pa.receivingVideo, "b has no camera")
         assertTrue(sfu.participant(pb.id)!!.sharesScreen)
 
+        // a native client keeps `sa` sending (a silent placeholder) without sharing: not a screen audio publisher.
+        sa.sound = true
+        sfu.onMessage(pa, ClientMessage.Renegotiate)
+        settle()
+        assertFalse(pa.screenAudioPublishing)
+        assertEquals(Direction.INACTIVE, media(pb).single { it.mid == "sa0" }.direction)
+        sa.sound = false
+        sfu.onMessage(pa, ClientMessage.Renegotiate)
+        settle()
+
+        // b adds the screen's sound: it goes to a's sa0, in the screen's MediaStream.
+        sb.sound = true
+        sfu.onMessage(pb, ClientMessage.Renegotiate)
+        settle()
+        assertTrue(pb.screenAudioPublishing)
+        assertEquals(setOf(3333L), pb.screenAudioSsrcs)
+        val sa0 = media(pa).single { it.mid == "sa0" }
+        assertEquals(Direction.SENDONLY, sa0.direction)
+        assertEquals(listOf(pb.screenAudioOut.ssrc), sa0.ssrcs)
+        assertEquals(listOf("screen-${pb.id} screen-audio-${pb.id}"), sa0.attributes("msid"))
+        assertEquals(listOf("s0", "sa0"), lastOffer(pa).screens)
+        assertEquals(setOf(pb.id), pa.receivingScreenAudio)
+        assertTrue(sfu.participant(pb.id)!!.sharesScreenAudio)
+
         // b stops.
         sb.sharing = false
+        sb.sound = false
         sfu.onMessage(pb, ClientMessage.Renegotiate)
         settle()
         assertFalse(pb.screen.publishing)

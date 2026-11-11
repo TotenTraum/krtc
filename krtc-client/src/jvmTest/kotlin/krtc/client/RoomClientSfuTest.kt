@@ -162,9 +162,13 @@ class RoomClientSfuTest {
             val bobOnAlice = alice.participants.first { it.isNotEmpty() }.single()
 
             val display = FakeTrack("video")
-            bob.setScreen(display)
+            val sound = FakeTrack("audio")
+            bob.setScreen(display, sound)
             val shared = bobOnAlice.screen.first { it != null }!!
             assertEquals("video", shared.kind)
+            val screenSound = bobOnAlice.screenAudio.first { it != null }!!
+            assertEquals("audio", screenSound.kind)
+            assertTrue(bobOnAlice.audio.value !== screenSound, "the screen's sound is not mistaken for the microphone")
             assertNull(bobOnAlice.video.value, "the screen is not mistaken for a camera")
             val bobPc = bobFactory.created.single()
             while (bobPc.getTransceivers().firstOrNull { it.mid == "s" }?.sender?.track !== display) kotlinx.coroutines.delay(20)
@@ -172,6 +176,7 @@ class RoomClientSfuTest {
 
             bob.setScreen(null)
             bobOnAlice.screen.first { it == null }
+            bobOnAlice.screenAudio.first { it == null }
             alice.leave()
             bob.leave()
         }

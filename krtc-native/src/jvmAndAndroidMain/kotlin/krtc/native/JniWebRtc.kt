@@ -38,7 +38,7 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual val audioDevice: AudioDevice,
     platformVideoCodecs: Boolean,
     public actual val preferredVideoCodec: String?,
-) : PeerConnectionFactory, AutoCloseable {
+) : PeerConnectionFactory, krtc.core.SilentAudioTrackFactory, AutoCloseable {
     internal val handle: Long = Jni.factoryCreate(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
         .also { check(it != 0L) { "libwebrtc factory creation failed" } }
 
@@ -75,6 +75,18 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createScreenSource(source: ScreenSource?, fps: Int, maxWidth: Int, maxHeight: Int): NativeVideoSource? =
         Jni.factoryCreateScreenSource(handle, source?.id ?: -1, source?.isWindow == true, fps, maxWidth, maxHeight).takeIf { it != 0L }?.let(::NativeVideoSource)
 
+    public actual fun createAudioSource(): NativeAudioSource =
+        NativeAudioSource(Jni.factoryCreateAudioSource(handle).also { check(it != 0L) { "audio source creation failed" } })
+
+    /** A track on a pushed audio source nobody pushes to: silent, and attached as an external source from the start. */
+    actual override fun createSilentAudioTrack(id: String): NativeTrack = createAudioSource().use { createAudioTrack(it, id) }
+
+    public actual fun createSystemAudioSource(): NativeAudioSource? =
+        Jni.factoryCreateSystemAudioSource(handle).takeIf { it != 0L }?.let(::NativeAudioSource)
+
+    public actual fun createAudioTrack(source: NativeAudioSource, id: String): NativeTrack =
+        NativeTrack(Jni.factoryCreateAudioTrackFrom(handle, id, source.handle).also { check(it != 0L) { "audio track creation failed" } })
+
     public actual fun createScreencastSource(): NativeVideoSource =
         NativeVideoSource(Jni.factoryCreateScreencastSource(handle).also { check(it != 0L) { "video source creation failed" } })
 
@@ -87,6 +99,24 @@ public actual class NativePeerConnectionFactory actual constructor(
 public actual fun nativeScreenSources(): List<ScreenSource> = parseScreenSources(Jni.screenSources().orEmpty())
 
 public actual fun nativeCameras(): List<String> = List(Jni.cameraCount()) { i -> Jni.cameraName(i) ?: "camera $i" }
+
+/** Thread-safe: pushes after [close] are ignored. */
+public actual class NativeAudioSource internal constructor(internal val handle: Long) : AutoCloseable {
+    private var closed = false
+
+    @Synchronized
+    public actual fun push(samples: ShortArray, channels: Int, sampleRate: Int, frames: Int) {
+        require(samples.size >= frames * channels) { "${samples.size} samples, need ${frames * channels}" }
+        if (!closed && frames > 0) Jni.audioSourcePush(handle, samples, frames, channels, sampleRate)
+    }
+
+    @Synchronized
+    actual override fun close() {
+        if (closed) return
+        closed = true
+        Jni.audioSourceRelease(handle)
+    }
+}
 
 /** Thread-safe: pushes after [close] are ignored, so a capture thread may outlive the source. */
 public actual class NativeVideoSource internal constructor(internal val handle: Long) : AutoCloseable {

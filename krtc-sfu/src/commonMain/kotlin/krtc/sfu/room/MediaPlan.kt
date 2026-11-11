@@ -23,8 +23,14 @@ internal object MediaPlan {
     internal const val UPLINK_VIDEO_MID: String = "1"
     internal const val UPLINK_SCREEN_MID: String = "s"
 
+    /** Uplink m-line of the screen share's audio (system or tab sound), next to [UPLINK_SCREEN_MID]. */
+    internal const val UPLINK_SCREEN_AUDIO_MID: String = "sa"
+
     /** The screen share of the participant in downlink slot [slot]. */
     internal fun screenMid(slot: Int): String = "s$slot"
+
+    /** The screen share's audio of the participant in downlink slot [slot]. */
+    internal fun screenAudioMid(slot: Int): String = "sa$slot"
 
     /** The data channel m-line (SCTP over DTLS, RFC 8841), third in every offer when data channels are on. */
     internal const val DATA_MID: String = "d"

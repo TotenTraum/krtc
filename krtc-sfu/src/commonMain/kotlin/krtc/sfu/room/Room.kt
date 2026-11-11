@@ -90,7 +90,17 @@ internal class Room(
             from.twccIn.mediaSsrc = h.ssrc
         }
         when {
-            h.payloadType == MediaPlan.OPUS_PT -> forwardAudio(from, data, plainLen, h)
+            h.payloadType == MediaPlan.OPUS_PT -> {
+                // Microphone or screen audio: by MID while the sender includes it, then by SSRC (answer or learned).
+                val mid = RtpStreamId.read(data, h, MediaPlan.MID_EXT_ID)
+                val screen = when (mid) {
+                    MediaPlan.UPLINK_SCREEN_AUDIO_MID -> true
+                    MediaPlan.UPLINK_AUDIO_MID -> false
+                    else -> h.ssrc == from.uplinkScreenAudioSsrc || h.ssrc in from.screenAudioSsrcs
+                }
+                RtpStreamId.rename(data, h, UPLINK_ONLY_EXTENSIONS, MediaPlan.IGNORED_EXT_ID)
+                if (screen) forwardScreenAudio(from, data, plainLen, h) else forwardAudio(from, data, plainLen, h)
+            }
             MediaPlan.isVideo(h.payloadType) -> {
                 if (simulatedUplinkLossPercent > 0 && lossRandom.nextInt(100) < simulatedUplinkLossPercent) return
                 forwardVideo(from.feedOf(h.ssrc, RtpStreamId.read(data, h, MediaPlan.MID_EXT_ID)), data, plainLen, h)
@@ -110,6 +120,22 @@ internal class Room(
         val out = shard.out
         for (sub in members) {
             if (sub === from || from.id !in sub.receiving) continue
+            val k = sub.keys ?: continue
+            val to = sub.remote ?: continue
+            stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
+            deliver(sub, out, k.rtpOut.protect(data, 0, plainLen, out, 0), to, sendMicros)
+        }
+    }
+
+    private fun forwardScreenAudio(from: Participant, data: ByteArray, plainLen: Int, h: RtpHeader) {
+        from.uplinkScreenAudioSsrc = h.ssrc
+        if (from.screenAudioMuted || from.screen.muted) return
+        from.screenAudioOut.rewrite(data, h)
+        val tcc = h.findExtension(data, 0, MediaPlan.TRANSPORT_CC_EXT_ID)
+        val sendMicros = nowMicros()
+        val out = shard.out
+        for (sub in members) {
+            if (sub === from || from.id !in sub.receivingScreenAudio) continue
             val k = sub.keys ?: continue
             val to = sub.remote ?: continue
             stampTransportSeq(sub, data, tcc, plainLen, sendMicros)
@@ -281,6 +307,11 @@ internal class Room(
             for (sub in members) if (sub !== from && from.id in sub.receiving) sendRtcp(sub, sr)
             return
         }
+        if (ssrc == from.uplinkScreenAudioSsrc) {
+            val sr = Rtcp.rewriteSenderReport(data, at, from.screenAudioOut.ssrc, from.screenAudioOut.mapTimestamp(srTs))
+            for (sub in members) if (sub !== from && from.id in sub.receivingScreenAudio) sendRtcp(sub, sr)
+            return
+        }
         val (feed, layer) = from.layerBySsrc(ssrc) ?: return
         for (sub in members) {
             if (sub === from || feed.key !in sub.receivingVideo) continue
@@ -418,7 +449,7 @@ internal class Room(
             downs += down
         }
         if (downs.isEmpty()) return
-        val audioStreams = snapshot.count { it !== sub && it.id in sub.receiving }
+        val audioStreams = snapshot.count { it !== sub && it.id in sub.receiving } + snapshot.count { it !== sub && it.id in sub.receivingScreenAudio }
         val budget = sub.bwe.estimateBps - audioStreams * MediaPlan.AUDIO_RESERVE_BPS
         val active = Array(downs.size) { i -> pubs[i].layers.filter { it.isActive(now) && it.index <= downs[i].preferred }.map { it.index } }
         val choice = IntArray(downs.size) { i ->

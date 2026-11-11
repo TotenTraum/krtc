@@ -24,7 +24,10 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <future>
 #if defined(_WIN32)
+#include <audioclient.h>
+#include <mmdeviceapi.h>
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
 #include "modules/desktop_capture/desktop_frame.h"
@@ -254,6 +257,70 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
         [=] { capturer->reset(); });
 }
 
+// System sound: WASAPI loopback of the default output device (shared-mode mix format: 32-bit float or 16-bit).
+std::function<void()> StartSystemAudio(PushAudioSource *source) {
+    webrtc::scoped_refptr<PushAudioSource> target(source);
+    auto running = std::make_shared<std::atomic<bool>>(true);
+    auto started = std::make_shared<std::promise<bool>>();
+    auto ok = started->get_future();
+    auto thread = std::make_shared<std::thread>([=] {
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        IMMDeviceEnumerator *enumerator = nullptr;
+        IMMDevice *device = nullptr;
+        IAudioClient *client = nullptr;
+        IAudioCaptureClient *capture = nullptr;
+        WAVEFORMATEX *format = nullptr;
+        bool ready = SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator))) &&
+                     SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) &&
+                     SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client))) &&
+                     SUCCEEDED(client->GetMixFormat(&format)) && (format->wBitsPerSample == 32 || format->wBitsPerSample == 16) &&
+                     SUCCEEDED(client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 200000, 0, format, nullptr)) &&
+                     SUCCEEDED(client->GetService(__uuidof(IAudioCaptureClient), reinterpret_cast<void **>(&capture))) &&
+                     SUCCEEDED(client->Start());
+        started->set_value(ready);
+        if (ready) {
+            const int channels = format->nChannels;
+            const int rate = static_cast<int>(format->nSamplesPerSec);
+            const bool isFloat = format->wBitsPerSample == 32;
+            std::vector<int16_t> silence;
+            while (running->load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                UINT32 packet = 0;
+                while (SUCCEEDED(capture->GetNextPacketSize(&packet)) && packet > 0) {
+                    BYTE *data = nullptr;
+                    UINT32 frames = 0;
+                    DWORD flags = 0;
+                    if (FAILED(capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) break;
+                    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                        silence.assign(static_cast<size_t>(frames) * channels, 0);
+                        target->Push(silence.data(), frames, channels, rate);
+                    } else if (isFloat) {
+                        PushFloat(target.get(), reinterpret_cast<const float *>(data), frames, channels, rate);
+                    } else {
+                        target->Push(reinterpret_cast<const int16_t *>(data), frames, channels, rate);
+                    }
+                    capture->ReleaseBuffer(frames);
+                }
+            }
+            client->Stop();
+        }
+        if (format) CoTaskMemFree(format);
+        if (capture) capture->Release();
+        if (client) client->Release();
+        if (device) device->Release();
+        if (enumerator) enumerator->Release();
+        CoUninitialize();
+    });
+    if (!ok.get()) {
+        thread->join();
+        return nullptr;
+    }
+    return [running, thread] {
+        running->store(false);
+        thread->join();
+    };
+}
+
 #elif defined(__linux__) && !defined(__ANDROID__)
 // Linux: the X11 display with XGetImage (whole frames; no XDamage), through libX11 loaded at run time, so the
 // client still has no link-time X11 dependency. Wayland sessions are not supported (they need PipeWire and the
@@ -322,10 +389,67 @@ std::function<void()> StartScreen(int64_t, bool window, int fps, int maxWidth, i
         [=] { x.close(display); });
 }
 
+// System sound: the monitor of the default sink through libpulse-simple, loaded at run time (works with PulseAudio
+// and with PipeWire's pulse server). No sound server: no system audio.
+namespace {
+struct PaSampleSpec {
+    int format; // PA_SAMPLE_S16LE = 3
+    uint32_t rate;
+    uint8_t channels;
+};
+struct PaBufferAttr {
+    uint32_t maxlength, tlength, prebuf, minreq, fragsize;
+};
+struct PulseFunctions {
+    void *(*open)(const char *, const char *, int, const char *, const char *, const PaSampleSpec *, const void *, const PaBufferAttr *, int *) = nullptr;
+    int (*read)(void *, void *, size_t, int *) = nullptr;
+    void (*free)(void *) = nullptr;
+    bool ok = false;
+};
+const PulseFunctions &Pulse() {
+    static const PulseFunctions f = [] {
+        PulseFunctions f;
+        void *lib = dlopen("libpulse-simple.so.0", RTLD_LAZY | RTLD_LOCAL);
+        if (!lib) return f;
+        f.open = reinterpret_cast<decltype(f.open)>(dlsym(lib, "pa_simple_new"));
+        f.read = reinterpret_cast<decltype(f.read)>(dlsym(lib, "pa_simple_read"));
+        f.free = reinterpret_cast<decltype(f.free)>(dlsym(lib, "pa_simple_free"));
+        f.ok = f.open && f.read && f.free;
+        return f;
+    }();
+    return f;
+}
+}  // namespace
+
+std::function<void()> StartSystemAudio(PushAudioSource *source) {
+    const PulseFunctions &pa = Pulse();
+    if (!pa.ok) return nullptr;
+    const int rate = 48000, channels = 2, block = rate / 100; // 10 ms
+    PaSampleSpec spec{3, static_cast<uint32_t>(rate), static_cast<uint8_t>(channels)};
+    PaBufferAttr attr{UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, static_cast<uint32_t>(block * channels * 2)};
+    int error = 0;
+    void *stream = pa.open(nullptr, "krtc", 2 /* PA_STREAM_RECORD */, "@DEFAULT_MONITOR@", "screen sound", &spec, nullptr, &attr, &error);
+    if (!stream) return nullptr;
+    webrtc::scoped_refptr<PushAudioSource> target(source);
+    auto running = std::make_shared<std::atomic<bool>>(true);
+    auto thread = std::make_shared<std::thread>([=, &pa] {
+        std::vector<int16_t> pcm(static_cast<size_t>(block) * channels);
+        int err = 0;
+        while (running->load() && pa.read(stream, pcm.data(), pcm.size() * 2, &err) >= 0) target->Push(pcm.data(), block, channels, rate);
+        pa.free(stream);
+    });
+    return [running, thread] {
+        running->store(false); // the blocking read returns within 10 ms
+        thread->join();
+    };
+}
+
 #else
-// Android: the application captures with MediaProjection (AndroidScreenCapture) into a screencast source.
+// Android: the application captures with MediaProjection (AndroidScreenCapture) into a screencast source, and the
+// sound with AudioPlaybackCapture into a pushed audio source.
 std::vector<ScreenSource> ScreenSources() { return {}; }
 std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource *) { return nullptr; }
+std::function<void()> StartSystemAudio(PushAudioSource *) { return nullptr; }
 #endif
 
 }  // namespace krtc

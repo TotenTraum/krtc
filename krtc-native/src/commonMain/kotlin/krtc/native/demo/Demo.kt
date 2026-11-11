@@ -2,6 +2,7 @@ package krtc.native.demo
 
 import krtc.client.RoomClient
 import krtc.client.RoomState
+import krtc.native.NativeAudioSource
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
 import krtc.native.NativeVideoSource
@@ -28,8 +29,10 @@ public suspend fun runDemo(
     args: Array<String>,
     /** How `camera` opens one (Android passes Camera2 capture into a pushed source). */
     openCamera: (NativePeerConnectionFactory) -> NativeVideoSource? = { it.createCameraSource(0, 1280, 720, 30) },
-    /** How `screen` captures (Android passes MediaProjection capture into a screencast source). */
-    openScreen: suspend (NativePeerConnectionFactory) -> NativeVideoSource? = { it.createScreenSource() },
+    /** How `screen` captures: the picture and, if there is one, the sound (Android: MediaProjection and AudioPlaybackCapture). */
+    openScreen: suspend (NativePeerConnectionFactory) -> Pair<NativeVideoSource, NativeAudioSource?>? = { f ->
+        f.createScreenSource()?.let { it to f.createSystemAudioSource() }
+    },
 ): Unit = coroutineScope {
     val url = args.getOrElse(0) { "ws://127.0.0.1:8080" }
     val room = args.getOrElse(1) { "test" }
@@ -61,11 +64,16 @@ public suspend fun runDemo(
     println("joined ${connected.room} as ${connected.selfId}")
     var screenSource: NativeVideoSource? = null
     var screenTrack: NativeTrack? = null
+    var screenAudioSource: NativeAudioSource? = null
+    var screenAudioTrack: NativeTrack? = null
     if ("screen" in flags) {
-        screenSource = openScreen(factory) ?: error("screen capture unavailable (no source, or not permitted)")
-        screenTrack = factory.createVideoTrack(screenSource, "screen")
-        client.setScreen(screenTrack)
-        println("sharing the screen")
+        val (video, audio) = openScreen(factory) ?: error("screen capture unavailable (no source, or not permitted)")
+        screenSource = video
+        screenAudioSource = audio
+        screenTrack = factory.createVideoTrack(video, "screen")
+        screenAudioTrack = audio?.let { factory.createAudioTrack(it, "screen-audio") }
+        client.setScreen(screenTrack, screenAudioTrack)
+        println("sharing the screen ${if (audio != null) "with" else "without"} its sound")
     }
 
     // Room messages: print what arrives; with the `chat` flag also send one every second.
@@ -91,8 +99,9 @@ public suspend fun runDemo(
             }
             val stats = video?.videoStats()
             val screen = (p.screen.value as NativeTrack?)?.videoStats()
+            val screenSound = p.screenAudio.value != null
             "${p.name}: audio=${p.audio.value != null} video=${stats?.let { "${it.frames} frames ${it.width}x${it.height}" } ?: "none"}" +
-                (screen?.let { " screen=${it.frames} frames ${it.width}x${it.height}" } ?: "")
+                (screen?.let { " screen=${it.frames} frames ${it.width}x${it.height}" } ?: "") + (if (screenSound) " +sound" else "")
         }
         if ((second + 1) % 5 == 0) {
             val stats = client.peerConnection?.getStats().orEmpty().values
@@ -115,6 +124,8 @@ public suspend fun runDemo(
     source?.close()
     screenSource?.close()
     screenTrack?.release()
+    screenAudioSource?.close()
+    screenAudioTrack?.release()
     coroutineContext[kotlinx.coroutines.Job]?.children?.forEach { it.cancel() }
     mic.release()
     camera.release()

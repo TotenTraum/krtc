@@ -61,6 +61,11 @@ internal object Jni {
     @JvmStatic external fun factoryCreateScreenSource(factory: Long, id: Long, window: Boolean, fps: Int, maxWidth: Int, maxHeight: Int): Long
     @JvmStatic external fun factoryCreateScreencastSource(factory: Long): Long
     @JvmStatic external fun videoSourceRelease(source: Long)
+    @JvmStatic external fun factoryCreateAudioSource(factory: Long): Long
+    @JvmStatic external fun factoryCreateSystemAudioSource(factory: Long): Long
+    @JvmStatic external fun factoryCreateAudioTrackFrom(factory: Long, id: String, source: Long): Long
+    @JvmStatic external fun audioSourcePush(source: Long, samples: ShortArray, frames: Int, channels: Int, sampleRate: Int)
+    @JvmStatic external fun audioSourceRelease(source: Long)
 
     @JvmStatic external fun pcCreate(factory: Long, listener: Listener): Long
     @JvmStatic external fun pcSetRemoteDescription(pc: Long, type: String, sdp: String, done: Done)

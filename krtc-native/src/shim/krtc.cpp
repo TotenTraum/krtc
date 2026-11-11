@@ -197,6 +197,14 @@ struct krtc_video_source {
     }
 };
 
+struct krtc_audio_source {
+    scoped_refptr<krtc::PushAudioSource> source;
+    std::function<void()> stop_capture;
+    ~krtc_audio_source() {
+        if (stop_capture) stop_capture();
+    }
+};
+
 struct krtc_track {
     scoped_refptr<MediaStreamTrackInterface> track;
     std::unique_ptr<FrameCounter> counter;
@@ -439,6 +447,64 @@ KRTC_API krtc_track *krtc_factory_create_video_track(krtc_factory *factory, cons
 }
 
 KRTC_API void krtc_video_source_release(krtc_video_source *s) { delete s; }
+
+namespace krtc {
+void PushAudioSource::AddSink(AudioTrackSinkInterface *sink) {
+    std::lock_guard<std::mutex> g(lock_);
+    sinks_.push_back(sink);
+}
+
+void PushAudioSource::RemoveSink(AudioTrackSinkInterface *sink) {
+    std::lock_guard<std::mutex> g(lock_);
+    sinks_.erase(std::remove(sinks_.begin(), sinks_.end(), sink), sinks_.end());
+}
+
+void PushAudioSource::Push(const int16_t *samples, size_t frames, int channels, int sampleRate) {
+    if (channels <= 0 || sampleRate <= 0) return;
+    std::lock_guard<std::mutex> g(lock_);
+    if (channels != channels_ || sampleRate != rate_) {
+        pending_.clear(); // format changed: start the 10 ms framing over
+        channels_ = channels;
+        rate_ = sampleRate;
+    }
+    pending_.insert(pending_.end(), samples, samples + frames * channels);
+    const size_t chunk = static_cast<size_t>(sampleRate / 100) * channels;
+    size_t at = 0;
+    for (; pending_.size() - at >= chunk; at += chunk) {
+        for (auto *sink : sinks_) sink->OnData(pending_.data() + at, 16, sampleRate, channels, chunk / channels);
+    }
+    pending_.erase(pending_.begin(), pending_.begin() + at);
+    if (pending_.size() > chunk * 50) pending_.clear(); // nobody consuming for half a second: drop, do not grow
+}
+
+void PushFloat(PushAudioSource *source, const float *samples, size_t frames, int channels, int sampleRate) {
+    std::vector<int16_t> pcm(frames * channels);
+    for (size_t i = 0; i < pcm.size(); i++) pcm[i] = static_cast<int16_t>(std::clamp(samples[i], -1.0f, 1.0f) * 32767.0f);
+    source->Push(pcm.data(), frames, channels, sampleRate);
+}
+}  // namespace krtc
+
+KRTC_API krtc_audio_source *krtc_factory_create_audio_source(krtc_factory *) {
+    return new krtc_audio_source{make_ref_counted<krtc::PushAudioSource>(), nullptr};
+}
+
+KRTC_API krtc_audio_source *krtc_factory_create_system_audio_source(krtc_factory *) {
+    auto source = make_ref_counted<krtc::PushAudioSource>();
+    std::function<void()> stop = krtc::StartSystemAudio(source.get());
+    if (!stop) return nullptr;
+    return new krtc_audio_source{source, std::move(stop)};
+}
+
+KRTC_API void krtc_audio_source_push(krtc_audio_source *s, const int16_t *samples, int frames, int channels, int sample_rate) {
+    if (frames > 0) s->source->Push(samples, static_cast<size_t>(frames), channels, sample_rate);
+}
+
+KRTC_API krtc_track *krtc_factory_create_audio_track_from(krtc_factory *factory, const char *id, krtc_audio_source *s) {
+    scoped_refptr<AudioTrackInterface> track = factory->factory->CreateAudioTrack(id, s->source.get());
+    return track ? new krtc_track{track, nullptr} : nullptr;
+}
+
+KRTC_API void krtc_audio_source_release(krtc_audio_source *s) { delete s; }
 
 KRTC_API krtc_pc *krtc_pc_create(krtc_factory *factory, krtc_event_fn on_event, void *user) {
     auto *p = new krtc_pc();

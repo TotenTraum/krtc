@@ -219,7 +219,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val p = sessions[participantId]?.participant ?: return false
         audio?.let { p.audioMuted = it }
         video?.let { p.videoMuted = it }
-        screen?.let { p.screen.muted = it }
+        screen?.let { p.screen.muted = it; p.screenAudioMuted = it }
         return true
     }
 
@@ -256,7 +256,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     private fun info(s: PeerSession): ParticipantInfo {
         val p = s.participant
-        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking, p.screen.publishing, p.screen.muted)
+        return ParticipantInfo(p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking, p.screen.publishing, p.screen.muted, p.screenAudioPublishing)
     }
 
     private fun announceSpeaking(p: Participant, speaking: Boolean) {
@@ -357,6 +357,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         private var version = 0L
         private var inFlight: Long = -1
         private var inFlightSlots: List<Participant?> = emptyList()
+        private var inFlightScreenAudio: Set<String> = emptySet()
         private var inFlightVideo: Set<String> = emptySet()
         private var pending = false
         private val slots = ArrayList<Participant?>()
@@ -384,6 +385,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             inFlightVideo = inFlightSlots.filterNotNull().flatMap { pub ->
                 pub.feeds.filter { it.publishing && (it.kind == VideoKind.CAMERA || config.screenShare) }.map { it.key }
             }.toSet()
+            inFlightScreenAudio = if (config.screenShare) inFlightSlots.filterNotNull().filter { it.screenAudioPublishing }.map { it.id }.toSet() else emptySet()
             val sdp = offers.build(participant, sessionId, version, inFlightSlots).toString()
             val screens = ArrayList<String>()
             val mids = buildMap {
@@ -394,6 +396,10 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                         if (pub.screen.key in inFlightVideo) {
                             put(MediaPlan.screenMid(i), pub.id)
                             screens += MediaPlan.screenMid(i)
+                        }
+                        if (pub.id in inFlightScreenAudio) {
+                            put(MediaPlan.screenAudioMid(i), pub.id)
+                            screens += MediaPlan.screenAudioMid(i)
                         }
                     }
                 }
@@ -410,16 +416,22 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 participant.receiving = inFlightSlots.filterNotNull().map { it.id }.toSet()
                 // New video subscriptions pick a layer and request a key frame on their first packet (Room.forwardVideo).
                 participant.receivingVideo = inFlightVideo
+                participant.receivingScreenAudio = inFlightScreenAudio
                 fun sends(mid: String) = answer.media.firstOrNull { it.mid == mid }?.let { m ->
                     m.port != 0 && (m.direction == Direction.SENDONLY || m.direction == Direction.SENDRECV)
                 } ?: false
                 val publishes = sends(MediaPlan.UPLINK_VIDEO_MID)
                 val sharing = config.screenShare && sends(MediaPlan.UPLINK_SCREEN_MID)
                 if (sharing) answer.media.firstOrNull { it.mid == MediaPlan.UPLINK_SCREEN_MID }?.let { participant.screenSsrcs = it.ssrcs.toSet() }
+                // Screen audio counts only while the screen is shared: native clients keep `sa` sending a silent track
+                // from the start (ADR-0017).
+                val sound = sharing && sends(MediaPlan.UPLINK_SCREEN_AUDIO_MID)
+                if (sound) answer.media.firstOrNull { it.mid == MediaPlan.UPLINK_SCREEN_AUDIO_MID }?.let { participant.screenAudioSsrcs = it.ssrcs.toSet() }
                 val cameraChanged = publishes != participant.publishesVideo
-                val screenChanged = sharing != participant.screen.publishing
+                val screenChanged = sharing != participant.screen.publishing || sound != participant.screenAudioPublishing
                 participant.publishesVideo = publishes
                 participant.screen.publishing = sharing
+                participant.screenAudioPublishing = sound
                 inFlight = -1
                 if (pending) {
                     pending = false

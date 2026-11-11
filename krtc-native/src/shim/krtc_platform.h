@@ -6,7 +6,11 @@
 #include <vector>
 #include <cstdint>
 
+#include <mutex>
+
 #include "api/environment/environment.h"
+#include "api/media_stream_interface.h"
+#include "api/notifier.h"
 #include "api/video/video_frame.h"
 #include "api/video_codecs/video_decoder_factory.h"
 #include "api/video_codecs/video_encoder_factory.h"
@@ -29,6 +33,41 @@ public:
 private:
     const bool screencast_;
 };
+
+/**
+ * An audio source fed with PCM by the application or a capture (screen sound), independent of the factory's audio
+ * device. Any rate and channel count; delivered to the sending tracks in 10 ms frames. Thread-safe.
+ * LiveKit's libwebrtc keeps device audio out of a send stream with an external source only if the source is attached
+ * before the stream starts; a source attached to a running stream gets device audio mixed in (ADR-0017).
+ */
+class PushAudioSource : public webrtc::Notifier<webrtc::AudioSourceInterface> {
+public:
+    SourceState state() const override { return kLive; }
+    bool remote() const override { return false; }
+    bool is_external_source() const override { return true; }
+    void AddSink(webrtc::AudioTrackSinkInterface *sink) override;
+    void RemoveSink(webrtc::AudioTrackSinkInterface *sink) override;
+    /** 16-bit interleaved samples, [frames] per channel. */
+    void Push(const int16_t *samples, size_t frames, int channels, int sampleRate);
+
+private:
+    std::mutex lock_;
+    std::vector<webrtc::AudioTrackSinkInterface *> sinks_;
+    std::vector<int16_t> pending_;
+    int channels_ = 0;
+    int rate_ = 0;
+};
+
+/**
+ * Captures the system's sound (what plays on the default output) into [source], for screen sharing. macOS:
+ * ScreenCaptureKit (needs Screen Recording permission, macOS 13+); Linux: the PulseAudio/PipeWire monitor of the
+ * default sink; Windows: WASAPI loopback; iOS: the app's own sound while the ReplayKit screen capture runs.
+ * Returns a stop function, or nullptr if unavailable (Android: the app captures with AudioPlaybackCapture).
+ */
+std::function<void()> StartSystemAudio(PushAudioSource *source);
+
+/** Converts float samples (-1..1) to 16-bit and pushes them. */
+void PushFloat(PushAudioSource *source, const float *samples, size_t frames, int channels, int sampleRate);
 
 // Hardware-accelerated factories where the platform has them (Apple: VideoToolbox H.264/H.265 + libvpx/AV1);
 // nullptr where none is built in, and the shim falls back to software VP8.

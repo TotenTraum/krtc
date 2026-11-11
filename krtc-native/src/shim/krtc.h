@@ -23,6 +23,7 @@ typedef struct krtc_transceiver krtc_transceiver;
 typedef struct krtc_track krtc_track;
 typedef struct krtc_video_source krtc_video_source;
 typedef struct krtc_data_channel krtc_data_channel;
+typedef struct krtc_audio_source krtc_audio_source;
 
 /* Completion of an asynchronous operation. `error` is NULL on success; `sdp` is set by create_answer. */
 typedef void (*krtc_done_fn)(void *user, const char *sdp, const char *error);
@@ -97,6 +98,17 @@ krtc_video_source *krtc_factory_create_screen_source(krtc_factory *factory, int6
 krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *factory);
 
 krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *id, krtc_video_source *source);
+
+/* Audio sources apart from the factory's audio device: PCM pushed by the application, or the system's sound for a
+ * screen share (macOS ScreenCaptureKit, Linux PulseAudio/PipeWire monitor, Windows WASAPI loopback, iOS this app's
+ * sound during ReplayKit capture; NULL where unavailable or not permitted, e.g. Android, where the app captures with
+ * AudioPlaybackCapture and pushes). Pushed PCM: 16-bit interleaved, any rate and channel count. Releasing a source
+ * stops its capture; tracks keep their own reference. */
+krtc_audio_source *krtc_factory_create_audio_source(krtc_factory *factory);
+krtc_audio_source *krtc_factory_create_system_audio_source(krtc_factory *factory);
+void krtc_audio_source_push(krtc_audio_source *source, const int16_t *samples, int frames, int channels, int sample_rate);
+krtc_track *krtc_factory_create_audio_track_from(krtc_factory *factory, const char *id, krtc_audio_source *source);
+void krtc_audio_source_release(krtc_audio_source *source);
 void krtc_video_source_release(krtc_video_source *source);
 
 /* Peer connection (Unified Plan). */

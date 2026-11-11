@@ -55,9 +55,12 @@ class DemoActivity : Activity() {
                         },
                         openScreen = { factory ->
                             screenConsent?.let { (code, data) ->
-                                factory.createScreencastSource().also { source ->
-                                    screen = AndroidScreenCapture(this@DemoActivity, code, data, source).apply { start() }
-                                }
+                                val video = factory.createScreencastSource()
+                                // The sound needs RECORD_AUDIO (grant it with adb or accept the prompt).
+                                val audio = if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) factory.createAudioSource() else null
+                                screen = AndroidScreenCapture(this@DemoActivity, code, data, video, audio = audio).apply { start() }
+                                if ("tone" in args) playTone()
+                                video to audio
                             }
                         },
                     )
@@ -67,6 +70,29 @@ class DemoActivity : Activity() {
             screen?.close()
             println("demo finished")
             running = false
+        }
+    }
+
+    /** Test only (`tone` flag): a quiet 660 Hz media tone for the screen sound capture to pick up. */
+    private fun playTone() {
+        thread(name = "krtc-tone") {
+            val rate = 48_000
+            val track = android.media.AudioTrack.Builder()
+                .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
+                .setAudioFormat(android.media.AudioFormat.Builder().setSampleRate(rate).setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                .setBufferSizeInBytes(rate / 5)
+                .build()
+            track.play()
+            val block = ShortArray(rate / 100)
+            var phase = 0.0
+            while (running) {
+                for (i in block.indices) {
+                    block[i] = (kotlin.math.sin(phase) * 3000).toInt().toShort()
+                    phase += 2 * Math.PI * 660 / rate
+                }
+                track.write(block, 0, block.size)
+            }
+            track.release()
         }
     }
 

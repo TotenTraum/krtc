@@ -220,3 +220,7 @@ public final class krtc/core/RTCTrackEvent {
 	public final fun getTransceiver ()Lkrtc/core/RTCRtpTransceiver;
 }
 
+public abstract interface class krtc/core/SilentAudioTrackFactory {
+	public abstract fun createSilentAudioTrack (Ljava/lang/String;)Lkrtc/core/MediaStreamTrack;
+}
+

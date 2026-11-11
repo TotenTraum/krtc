@@ -46,26 +46,39 @@ internal class OfferBuilder(
             add(MediaPlan.UPLINK_AUDIO_MID)
             add(MediaPlan.UPLINK_VIDEO_MID)
             if (dataChannels) add(MediaPlan.DATA_MID)
-            if (screenShare) add(MediaPlan.UPLINK_SCREEN_MID)
+            if (screenShare) {
+                add(MediaPlan.UPLINK_SCREEN_MID)
+                add(MediaPlan.UPLINK_SCREEN_AUDIO_MID)
+            }
             for (i in slots.indices) {
                 add("${2 + 2 * i}")
                 add("${3 + 2 * i}")
-                if (screenShare) add(MediaPlan.screenMid(i))
+                if (screenShare) {
+                    add(MediaPlan.screenMid(i))
+                    add(MediaPlan.screenAudioMid(i))
+                }
             }
         }
         sd.attributes += SdpAttribute("group", "BUNDLE " + mids.joinToString(" "))
         sd.attributes += SdpAttribute("msid-semantic", " WMS *")
-        sd.media += audio(p, mid = MediaPlan.UPLINK_AUDIO_MID, direction = Direction.RECVONLY, publisher = null)
+        sd.media += audio(p, mid = MediaPlan.UPLINK_AUDIO_MID, direction = Direction.RECVONLY, publisher = null, screen = false)
         sd.media += video(p, mid = MediaPlan.UPLINK_VIDEO_MID, direction = Direction.RECVONLY, feed = null, simulcast = true)
         if (dataChannels) sd.media += application(p)
-        if (screenShare) sd.media += video(p, mid = MediaPlan.UPLINK_SCREEN_MID, direction = Direction.RECVONLY, feed = null, simulcast = false)
+        if (screenShare) {
+            sd.media += video(p, mid = MediaPlan.UPLINK_SCREEN_MID, direction = Direction.RECVONLY, feed = null, simulcast = false)
+            sd.media += audio(p, mid = MediaPlan.UPLINK_SCREEN_AUDIO_MID, direction = Direction.RECVONLY, publisher = null, screen = true)
+        }
         slots.forEachIndexed { i, publisher ->
-            sd.media += audio(p, "${2 + 2 * i}", if (publisher == null) Direction.INACTIVE else Direction.SENDONLY, publisher)
+            sd.media += audio(p, "${2 + 2 * i}", if (publisher == null) Direction.INACTIVE else Direction.SENDONLY, publisher, screen = false)
             val kinds = if (screenShare) listOf(VideoKind.CAMERA, VideoKind.SCREEN) else listOf(VideoKind.CAMERA)
             for (kind in kinds) {
                 val feed = (if (kind == VideoKind.CAMERA) publisher?.camera else publisher?.screen)?.takeIf { it.publishing }
                 val mid = if (kind == VideoKind.CAMERA) "${3 + 2 * i}" else MediaPlan.screenMid(i)
                 sd.media += video(p, mid, if (feed != null) Direction.SENDONLY else Direction.INACTIVE, feed, simulcast = false)
+            }
+            if (screenShare) {
+                val sound = publisher?.takeIf { it.screenAudioPublishing }
+                sd.media += audio(p, MediaPlan.screenAudioMid(i), if (sound != null) Direction.SENDONLY else Direction.INACTIVE, sound, screen = true)
             }
         }
         return sd
@@ -98,10 +111,12 @@ internal class OfferBuilder(
         return m
     }
 
-    private fun audio(p: Participant, mid: String, direction: Direction, publisher: Participant?): MediaDescription {
+    private fun audio(p: Participant, mid: String, direction: Direction, publisher: Participant?, screen: Boolean): MediaDescription {
         val m = MediaDescription("audio", port, "UDP/TLS/RTP/SAVPF", mutableListOf("${MediaPlan.OPUS_PT}"))
         transport(p, m, mid)
         val a = m.attributes
+        // Uplinks carry MID so the SFU tells the microphone from the screen audio (renamed away before forwarding).
+        if (publisher == null && direction == Direction.RECVONLY) a += SdpAttribute("extmap", "${MediaPlan.MID_EXT_ID} ${RtpStreamId.MID_URI}")
         a += SdpAttribute("extmap", "${MediaPlan.AUDIO_LEVEL_EXT_ID} ${AudioLevel.URI}")
         a += SdpAttribute("extmap", "${MediaPlan.TRANSPORT_CC_EXT_ID} ${TransportCc.URI}")
         a += SdpAttribute(direction.sdp)
@@ -111,10 +126,12 @@ internal class OfferBuilder(
         a += SdpAttribute("fmtp", "${MediaPlan.OPUS_PT} minptime=10;useinbandfec=1;usedtx=1")
         a += SdpAttribute("rtcp-fb", "${MediaPlan.OPUS_PT} transport-cc")
         if (publisher != null) {
-            val (stream, track) = msid(publisher, "audio")
+            // Screen audio shares the screen's MediaStream, so receivers keep picture and sound in sync.
+            val (stream, track) = if (screen) "screen-${publisher.id}" to "screen-audio-${publisher.id}" else msid(publisher, "audio")
+            val ssrc = if (screen) publisher.screenAudioOut.ssrc else publisher.audioOut.ssrc
             a += SdpAttribute("msid", "$stream $track")
-            a += SdpAttribute("ssrc", "${publisher.audioOut.ssrc} cname:${publisher.cname}")
-            a += SdpAttribute("ssrc", "${publisher.audioOut.ssrc} msid:$stream $track")
+            a += SdpAttribute("ssrc", "$ssrc cname:${publisher.cname}")
+            a += SdpAttribute("ssrc", "$ssrc msid:$stream $track")
         }
         return m
     }

@@ -164,6 +164,16 @@ public fun interface PeerConnectionFactory {
     public fun createPeerConnection(configuration: RTCConfiguration): RTCPeerConnection
 }
 
+/**
+ * Optional backend capability: a silent audio track to send on an audio m-line before its real audio exists, then
+ * swapped with `replaceTrack`. Backends whose send streams must have their audio source attached when they start
+ * (krtc-native: libwebrtc otherwise also feeds them from the audio device) implement it on their factory;
+ * `RoomClient` uses it for the screen-audio uplink (ADR-0017).
+ */
+public interface SilentAudioTrackFactory {
+    public fun createSilentAudioTrack(id: String): MediaStreamTrack
+}
+
 /** Entry point: the platform backend installs its factory here (ADR-0012). */
 public object Krtc {
     private var installed: PeerConnectionFactory? = null

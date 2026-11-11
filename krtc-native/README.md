@@ -30,8 +30,10 @@ client.sendData(cursorBytes, topic = "cursor", reliable = false)              //
 
 // Демонстрация экрана (ADR-0017): дисплей или окно; на Android — AndroidScreenCapture после диалога согласия.
 val screen = factory.createScreenSource(nativeScreenSources().firstOrNull())   // null — нет захвата или не разрешено
-screen?.let { client.setScreen(factory.createVideoTrack(it, "screen")) }       // client.setScreen(null) — прекратить
-// Экран собеседника: participant.screen (StateFlow трека), выводится так же, как камера.
+val sound = factory.createSystemAudioSource()                                  // системный звук; null — недоступно
+screen?.let { client.setScreen(factory.createVideoTrack(it, "screen"), sound?.let { s -> factory.createAudioTrack(s, "screen-audio") }) }
+// client.setScreen(null) — прекратить. Свой PCM: factory.createAudioSource().push(samples, channels, sampleRate).
+// Экран собеседника: participant.screen и participant.screenAudio (StateFlow треков).
 
 // Вывод: каждый кадр собеседника в ARGB (0xAARRGGBB), уже повёрнутый.
 client.participants.value.first().video.value?.let { track ->
@@ -69,7 +71,8 @@ Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Windows
 - `screen` — показ экрана после входа:
   - macOS: запускать из Terminal.app, первый раз система спросит разрешение на запись экрана, и показ заработает со следующего запуска;
   - Linux: нужен X11 (`DISPLAY`);
-  - Android: системный диалог, выбрать «весь экран».
+  - Android: системный диалог, выбрать «весь экран»; звук других приложений идёт вместе с экраном (нужен RECORD_AUDIO);
+  - звук экрана берётся автоматически: macOS — ScreenCaptureKit, Linux — монитор PulseAudio или PipeWire, Windows — WASAPI loopback.
 
 Принятое видео отрисовывается через frame listener, демо печатает средний цвет кадра.
 

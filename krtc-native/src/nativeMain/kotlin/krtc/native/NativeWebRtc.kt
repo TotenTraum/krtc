@@ -63,7 +63,7 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual val audioDevice: AudioDevice,
     platformVideoCodecs: Boolean,
     public actual val preferredVideoCodec: String?,
-) : PeerConnectionFactory, AutoCloseable {
+) : PeerConnectionFactory, krtc.core.SilentAudioTrackFactory, AutoCloseable {
     internal val handle: CPointer<krtc_factory> =
         krtc_factory_create_with(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
             ?: error("libwebrtc factory creation failed")
@@ -105,6 +105,17 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun createScreenSource(source: ScreenSource?, fps: Int, maxWidth: Int, maxHeight: Int): NativeVideoSource? =
         krtc_factory_create_screen_source(handle, source?.id ?: -1, if (source?.isWindow == true) 1 else 0, fps, maxWidth, maxHeight)?.let(::NativeVideoSource)
 
+    public actual fun createAudioSource(): NativeAudioSource =
+        NativeAudioSource(krtc_factory_create_audio_source(handle) ?: error("audio source creation failed"))
+
+    /** A track on a pushed audio source nobody pushes to: silent, and attached as an external source from the start. */
+    actual override fun createSilentAudioTrack(id: String): NativeTrack = createAudioSource().use { createAudioTrack(it, id) }
+
+    public actual fun createSystemAudioSource(): NativeAudioSource? = krtc_factory_create_system_audio_source(handle)?.let(::NativeAudioSource)
+
+    public actual fun createAudioTrack(source: NativeAudioSource, id: String): NativeTrack =
+        NativeTrack(krtc_factory_create_audio_track_from(handle, id, source.handle) ?: error("audio track creation failed"))
+
     public actual fun createScreencastSource(): NativeVideoSource =
         NativeVideoSource(krtc_factory_create_screencast_source(handle) ?: error("video source creation failed"))
 
@@ -121,6 +132,25 @@ public actual fun nativeScreenSources(): List<ScreenSource> =
 
 public actual fun nativeCameras(): List<String> =
     List(krtc_camera_count()) { i -> krtc_camera_name(i)?.let { p -> p.toKString().also { krtc_free(p) } } ?: "camera $i" }
+
+/** Thread-safe: pushes after [close] are ignored. */
+public actual class NativeAudioSource internal constructor(internal val handle: CPointer<cnames.structs.krtc_audio_source>) : AutoCloseable {
+    private val lock = SynchronizedObject()
+    private var closed = false
+
+    public actual fun push(samples: ShortArray, channels: Int, sampleRate: Int, frames: Int) {
+        require(samples.size >= frames * channels) { "${samples.size} samples, need ${frames * channels}" }
+        synchronized(lock) {
+            if (!closed && frames > 0) samples.usePinned { krtc_audio_source_push(handle, it.addressOf(0), frames, channels, sampleRate) }
+        }
+    }
+
+    actual override fun close(): Unit = synchronized(lock) {
+        if (closed) return
+        closed = true
+        krtc_audio_source_release(handle)
+    }
+}
 
 /** Thread-safe: pushes after [close] are ignored, so a capture thread may outlive the source. */
 public actual class NativeVideoSource internal constructor(internal val handle: CPointer<krtc_video_source>) : AutoCloseable {

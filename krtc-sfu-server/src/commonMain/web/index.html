@@ -67,7 +67,7 @@ const params = new URLSearchParams(location.search);
 if (params.get('mute') === '1') $('play').checked = false;
 if (params.get('video')) $('video').value = params.get('video');
 
-const state = { ws: null, pc: null, myId: null, audio: null, video: null, screen: null, peers: new Map(), midToPeer: new Map(), screenMids: new Set(), messages: [] };
+const state = { ws: null, pc: null, myId: null, audio: null, video: null, screen: null, screenAudio: null, peers: new Map(), midToPeer: new Map(), screenMids: new Set(), messages: [] };
 window.krtc = state; // for automated checks
 
 function fakeAudio() {
@@ -169,10 +169,12 @@ $('say').onsubmit = (e) => {
   if (text && sendData('chat', text)) { say('вы', text); $('text').value = ''; }
 };
 
-// Screen share: the `s` uplink sends while there is a screen track; starting and stopping ask the SFU for a new offer.
-async function shareScreen(track) {
+// Screen share: the `s` uplink (and `sa` for its sound) sends while there is a track; starting and stopping ask the
+// SFU for a new offer.
+async function shareScreen(track, audio = null) {
   if (state.screen) state.screen.onended = null;
   state.screen = track;
+  state.screenAudio = track ? audio : null;
   if (track) {
     track.contentHint = 'detail'; // keep resolution and sharpness, drop frame rate under pressure
     track.onended = () => shareScreen(null); // the browser's "stop sharing"
@@ -180,17 +182,20 @@ async function shareScreen(track) {
     me.querySelector('video').srcObject = new MediaStream([track]);
   } else {
     $('tile-' + state.myId + '-screen')?.remove();
-    const t = state.pc.getTransceivers().find((x) => x.mid === 's');
-    if (t) await t.sender.replaceTrack(null); // stop sending right away
+    for (const mid of ['s', 'sa']) {
+      const t = state.pc.getTransceivers().find((x) => x.mid === mid);
+      if (t) await t.sender.replaceTrack(null); // stop sending right away
+    }
   }
   $('share').textContent = track ? 'Остановить показ' : 'Показать экран';
   state.ws.send(JSON.stringify({ type: 'renegotiate' }));
 }
 state.shareScreen = shareScreen;
 $('share').onclick = async () => {
-  if (state.screen) { state.screen.stop(); return shareScreen(null); }
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
-  await shareScreen(stream.getVideoTracks()[0]);
+  if (state.screen) { state.screen.stop(); state.screenAudio?.stop(); return shareScreen(null); }
+  // audio: the tab's or system sound where the browser offers it (Chrome: a checkbox in the picker).
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: true });
+  await shareScreen(stream.getVideoTracks()[0], stream.getAudioTracks()[0] ?? null);
 };
 
 function tile(id, name, layers = true) {
@@ -242,13 +247,15 @@ async function onOffer(msg) {
       await t.sender.replaceTrack(track);
     }
   }
-  const s = pc.getTransceivers().find((x) => x.mid === 's');
-  if (s && state.screen) {
-    s.direction = 'sendonly';
-    if (s.sender.track !== state.screen) await s.sender.replaceTrack(state.screen);
-  } else if (s && s.direction !== 'inactive') {
-    await s.sender.replaceTrack(null);
-    s.direction = 'inactive';
+  for (const [mid, track] of [['s', state.screen], ['sa', state.screenAudio]]) {
+    const s = pc.getTransceivers().find((x) => x.mid === mid);
+    if (s && track) {
+      s.direction = 'sendonly';
+      if (s.sender.track !== track) await s.sender.replaceTrack(track);
+    } else if (s && s.direction !== 'inactive') {
+      await s.sender.replaceTrack(null);
+      s.direction = 'inactive';
+    }
   }
   // Screen shares that ended.
   const sharing = new Set([...state.screenMids].map((m) => state.midToPeer.get(m)));
@@ -262,6 +269,10 @@ async function summary() {
   const stats = await state.pc.getStats();
   stats.forEach((s) => {
     if (s.type === 'outbound-rtp' && s.kind === 'audio') out.sent.audioBytes += s.bytesSent;
+    if (s.type === 'outbound-rtp' && s.mid === 'sa') {
+      out.sent.screenAudioBytes = s.bytesSent;
+      return;
+    }
     if (s.type === 'outbound-rtp' && s.kind === 'video' && s.mid === 's') {
       out.sent.screen = { frames: s.framesEncoded ?? 0, width: s.frameWidth ?? 0, height: s.frameHeight ?? 0 };
       return;
@@ -274,8 +285,12 @@ async function summary() {
     if (s.type !== 'inbound-rtp') return;
     const peer = state.midToPeer.get(s.mid);
     if (!peer) return;
+    if (state.screenMids.has(s.mid) && s.kind === 'audio') {
+      Object.assign((out.screens ||= {})[peer] ||= {}, { audioPackets: s.packetsReceived, audioLevel: s.audioLevel ?? 0, audioEnergy: s.totalAudioEnergy ?? 0 });
+      return;
+    }
     if (state.screenMids.has(s.mid)) {
-      (out.screens ||= {})[peer] = { framesDecoded: s.framesDecoded ?? 0, width: s.frameWidth ?? 0, height: s.frameHeight ?? 0, codec: stats.get(s.codecId)?.mimeType };
+      Object.assign((out.screens ||= {})[peer] ||= {}, { framesDecoded: s.framesDecoded ?? 0, width: s.frameWidth ?? 0, height: s.frameHeight ?? 0, codec: stats.get(s.codecId)?.mimeType });
       return;
     }
     const p = (out.peers[peer] ||= {});
@@ -304,7 +319,12 @@ $('join').onsubmit = async (e) => {
   openChannels(pc); // they open once the SFU's offer brings the SCTP m-line and DTLS is up
   pc.ontrack = (ev) => {
     const peer = state.midToPeer.get(ev.transceiver.mid);
-    if (state.screenMids.has(ev.transceiver.mid)) {
+    if (state.screenMids.has(ev.transceiver.mid) && ev.track.kind === 'audio') {
+      const audio = new Audio(); // the screen's sound
+      audio.autoplay = true;
+      audio.muted = !$('play').checked;
+      audio.srcObject = new MediaStream([ev.track]);
+    } else if (state.screenMids.has(ev.transceiver.mid)) {
       const el = tile(peer + '-screen', (state.peers.get(peer)?.name ?? peer) + ' — экран', false);
       el.classList.add('screen');
       el.dataset.peer = peer;

@@ -166,6 +166,8 @@ public data class ParticipantInfo(
     val speaking: Boolean,
     val sharesScreen: Boolean = false,
     val screenMuted: Boolean = false,
+    /** Its screen share carries sound (system or tab audio). */
+    val sharesScreenAudio: Boolean = false,
 )
 
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)

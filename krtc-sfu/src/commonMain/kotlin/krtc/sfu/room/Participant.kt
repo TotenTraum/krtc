@@ -326,6 +326,17 @@ internal class Participant(
     /** This participant's media as forwarded to everyone else, under SSRCs the SFU chose. */
     internal val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
 
+    /** Its screen share's audio (system or tab sound), forwarded like the microphone but without speaking detection. */
+    internal val screenAudioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
+    @Volatile internal var screenAudioPublishing: Boolean = false
+    @Volatile internal var screenAudioMuted: Boolean = false
+
+    /** SSRCs the answer declared for the screen audio uplink. */
+    @Volatile internal var screenAudioSsrcs: Set<Long> = emptySet()
+
+    /** Publishers whose screen audio m-lines this participant has accepted (last applied answer). */
+    @Volatile internal var receivingScreenAudio: Set<String> = emptySet()
+
     /** Its video uplinks: the camera (simulcast) and a screen share (one layer). */
     internal val camera: VideoFeed = VideoFeed(this, VideoKind.CAMERA)
     internal val screen: VideoFeed = VideoFeed(this, VideoKind.SCREEN)
@@ -353,6 +364,7 @@ internal class Participant(
     // --- media state, shard thread only ---
     internal var keys: SrtpSessionKeys? = null
     internal var uplinkAudioSsrc = -1L
+    internal var uplinkScreenAudioSsrc = -1L
     internal val layers: Array<VideoLayer> get() = camera.layers
     internal val downlinks = HashMap<String, DownlinkVideo>() // by feed key
     private val feedBySsrc = HashMap<Long, VideoFeed>()

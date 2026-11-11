@@ -159,6 +159,10 @@ abstract interface krtc.core/RTCRtpTransceiver { // krtc.core/RTCRtpTransceiver|
         abstract fun <set-direction>(krtc.core/RTCRtpTransceiverDirection) // krtc.core/RTCRtpTransceiver.direction.<set-direction>|<set-direction>(krtc.core.RTCRtpTransceiverDirection){}[0]
 }
 
+abstract interface krtc.core/SilentAudioTrackFactory { // krtc.core/SilentAudioTrackFactory|null[0]
+    abstract fun createSilentAudioTrack(kotlin/String): krtc.core/MediaStreamTrack // krtc.core/SilentAudioTrackFactory.createSilentAudioTrack|createSilentAudioTrack(kotlin.String){}[0]
+}
+
 final class krtc.core/RTCConfiguration { // krtc.core/RTCConfiguration|null[0]
     constructor <init>(kotlin.collections/List<krtc.core/RTCIceServer> = ...) // krtc.core/RTCConfiguration.<init>|<init>(kotlin.collections.List<krtc.core.RTCIceServer>){}[0]
 

@@ -63,7 +63,7 @@ public expect class NativePeerConnectionFactory(
     audioDevice: AudioDevice = AudioDevice.SYNTHETIC,
     platformVideoCodecs: Boolean = true,
     preferredVideoCodec: String? = null,
-) : PeerConnectionFactory, AutoCloseable {
+) : PeerConnectionFactory, krtc.core.SilentAudioTrackFactory, AutoCloseable {
     public val audioDevice: AudioDevice
     public val preferredVideoCodec: String?
 
@@ -118,6 +118,23 @@ public expect class NativePeerConnectionFactory(
     /** A video track on [source]; several tracks may share one source. */
     public fun createVideoTrack(source: NativeVideoSource, id: String = "video"): NativeTrack
 
+    /** An audio source the application feeds with PCM ([NativeAudioSource.push]), apart from the factory's audio device. */
+    public fun createAudioSource(): NativeAudioSource
+
+    /**
+     * The system's sound, for a screen share (`RoomClient.setScreen(video, audio)`): macOS (ScreenCaptureKit, needs
+     * Screen Recording permission, macOS 13+; the call's own sound is left out), Linux (the PulseAudio/PipeWire
+     * monitor of the default output), Windows (WASAPI loopback; includes the call's own sound), iOS (this app's sound
+     * while the screen capture runs). Null where unavailable (Android: `AndroidScreenCapture(audio = ...)`).
+     */
+    public fun createSystemAudioSource(): NativeAudioSource?
+
+    /** An audio track on [source]. */
+    public fun createAudioTrack(source: NativeAudioSource, id: String = "audio"): NativeTrack
+
+    /** A silent track on a pushed source nobody pushes to (for an audio m-line that must send before its audio exists). */
+    override fun createSilentAudioTrack(id: String): NativeTrack
+
     override fun close()
 }
 
@@ -141,6 +158,14 @@ internal fun parseScreenSources(text: String): List<ScreenSource> = text.lineSeq
     val id = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
     ScreenSource(id, parts.getOrNull(1) == "w", parts.getOrNull(2).orEmpty())
 }.toList()
+
+/** An audio source: PCM pushed by the application or a system sound capture. [close] stops a capture. */
+public expect class NativeAudioSource : AutoCloseable {
+    /** Pushes 16-bit interleaved PCM: [frames] samples per channel, any rate and channel count. Thread-safe. */
+    public fun push(samples: ShortArray, channels: Int = 1, sampleRate: Int = 48_000, frames: Int = samples.size / channels)
+
+    override fun close()
+}
 
 /** A video source: frames pushed by the application, a camera or a screen capture. [close] stops a capture. */
 public expect class NativeVideoSource : AutoCloseable {

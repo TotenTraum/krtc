@@ -224,6 +224,17 @@ KRTC_JNI(jlong, factoryCreateScreenSource)(JNIEnv *, jclass, jlong f, jlong id, 
     return J(krtc_factory_create_screen_source(H<krtc_factory>(f), id, window ? 1 : 0, fps, maxW, maxH));
 }
 KRTC_JNI(jlong, factoryCreateScreencastSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_screencast_source(H<krtc_factory>(f))); }
+KRTC_JNI(jlong, factoryCreateAudioSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_audio_source(H<krtc_factory>(f))); }
+KRTC_JNI(jlong, factoryCreateSystemAudioSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_system_audio_source(H<krtc_factory>(f))); }
+KRTC_JNI(jlong, factoryCreateAudioTrackFrom)(JNIEnv *env, jclass, jlong f, jstring id, jlong s) {
+    return J(krtc_factory_create_audio_track_from(H<krtc_factory>(f), Utf(env, id).get(), H<krtc_audio_source>(s)));
+}
+KRTC_JNI(void, audioSourcePush)(JNIEnv *env, jclass, jlong s, jshortArray samples, jint frames, jint channels, jint rate) {
+    jshort *p = env->GetShortArrayElements(samples, nullptr);
+    krtc_audio_source_push(H<krtc_audio_source>(s), p, frames, channels, rate);
+    env->ReleaseShortArrayElements(samples, p, JNI_ABORT);
+}
+KRTC_JNI(void, audioSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_audio_source_release(H<krtc_audio_source>(s)); }
 KRTC_JNI(void, videoSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_video_source_release(H<krtc_video_source>(s)); }
 
 // Peer connection.
