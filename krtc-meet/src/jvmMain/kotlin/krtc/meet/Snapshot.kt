@@ -3,7 +3,6 @@ package krtc.meet
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.use
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.concurrent.thread
@@ -21,13 +20,23 @@ internal object Snapshot {
         scheduled = true
         thread(isDaemon = true, name = "krtc-meet-snapshot") {
             Thread.sleep(afterSeconds * 1000)
-            ImageComposeScene(width, height, Density(1f), content = content).use { scene ->
-                var image = scene.render(0)
+            // Composed and rendered on the UI thread, like the window: two compositions of the same state on different
+            // threads break Compose's snapshots.
+            fun <T> ui(block: () -> T): T {
+                var result: Result<T>? = null
+                javax.swing.SwingUtilities.invokeAndWait { result = runCatching(block) }
+                return result!!.getOrThrow()
+            }
+            val scene = ui { ImageComposeScene(width, height, Density(1f), content = content) }
+            try {
+                var image = ui { scene.render(0) }
                 for (i in 1..30) {
                     Thread.sleep(33)
-                    image = scene.render(i * 33_000_000L)
+                    image = ui { scene.render(i * 33_000_000L) }
                 }
                 File(file).writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
+            } finally {
+                ui { scene.close() }
             }
             println("snapshot written to $file")
         }

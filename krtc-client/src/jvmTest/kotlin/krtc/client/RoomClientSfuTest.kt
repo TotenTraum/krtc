@@ -10,9 +10,11 @@ import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import krtc.sfu.ktor.krtcSfu
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -47,6 +49,115 @@ class RoomClientSfuTest {
     fun stop() {
         server.stop(100, 500)
         sfu.close()
+    }
+
+    /** A TCP relay in front of the signaling server whose connections can be cut like a lost network: no close frame. */
+    private class Relay(private val target: Int) : AutoCloseable {
+        private val server = java.net.ServerSocket(0)
+        private val sockets = java.util.concurrent.CopyOnWriteArrayList<java.net.Socket>()
+        val port: Int = server.localPort
+
+        /** While set, new connections are reset at once: the network is down. */
+        @Volatile var down = false
+
+        init {
+            thread(isDaemon = true) {
+                while (!server.isClosed) {
+                    val client = runCatching { server.accept() }.getOrNull() ?: break
+                    if (down) {
+                        runCatching { client.setSoLinger(true, 0); client.close() }
+                        continue
+                    }
+                    val upstream = java.net.Socket("127.0.0.1", target)
+                    sockets += client
+                    sockets += upstream
+                    for ((from, to) in listOf(client to upstream, upstream to client)) thread(isDaemon = true) {
+                        runCatching { from.getInputStream().copyTo(to.getOutputStream()) }
+                        runCatching { from.close() }
+                        runCatching { to.close() }
+                    }
+                }
+            }
+        }
+
+        /** Drops every connection at once, without WebSocket close frames (RST). */
+        fun cut() {
+            for (s in sockets) runCatching { s.setSoLinger(true, 0); s.close() }
+            sockets.clear()
+        }
+
+        override fun close() {
+            server.close()
+            cut()
+        }
+    }
+
+    /** The network drops: clients reconnect and resume their sessions under the same ids, media untouched. */
+    @Test
+    fun reconnectsAndResumesAfterSignalingDrops(): Unit = runBlocking {
+        val port = server.engine.resolvedConnectors().first().port
+        Relay(port).use { relay ->
+            withTimeout(30_000) {
+                val alice = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
+                val bob = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
+                alice.join("resume", "Alice", microphone = FakeTrack("audio"))
+                bob.join("resume", "Bob", microphone = FakeTrack("audio"))
+                val aliceId = (alice.state.first { it is RoomState.Connected } as RoomState.Connected).selfId
+                val aliceAtBob = bob.participants.first { it.size == 1 }.single()
+
+                relay.cut()
+                alice.state.first { it is RoomState.Reconnecting }
+                assertEquals(aliceId, (alice.state.first { it is RoomState.Connected } as RoomState.Connected).selfId)
+                bob.state.first { it is RoomState.Connected }
+                assertTrue(bob.participants.value.single() === aliceAtBob, "the participant object (and its tracks) survive")
+                assertEquals(2, sfu.room("resume")!!.participants.size)
+                // Signaling works again: a mute reaches the other side.
+                alice.setMediaState(audioMuted = true, videoMuted = false)
+                aliceAtBob.audioMuted.first { it }
+
+                // Leaving properly is final at once, no grace period.
+                alice.leave()
+                bob.participants.first { it.isEmpty() }
+                bob.leave()
+            }
+        }
+    }
+
+    /** The server forgot the session (its grace period passed): the client joins again under a new id. */
+    @Test
+    fun rejoinsWhenTheSessionIsGone(): Unit = runBlocking {
+        val shortSfu = Sfu(SfuConfig(udpPort = 0, shards = 1, resumeTimeoutMillis = 200))
+        val s2 = embeddedServer(CIO, port = 0) {
+            install(WebSockets)
+            routing { krtcSfu(shortSfu, "/ws") }
+        }.also { it.start(wait = false) }
+        val relay = Relay(s2.engine.resolvedConnectors().first().port)
+        try {
+            withTimeout(30_000) {
+                val alice = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
+                val bob = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
+                alice.join("gone", "Alice", microphone = FakeTrack("audio"))
+                bob.join("gone", "Bob", microphone = FakeTrack("audio"))
+                val firstId = (alice.state.first { it is RoomState.Connected } as RoomState.Connected).selfId
+                bob.participants.first { it.size == 1 }
+
+                // Keep the relay down until the server has dropped both, then let them back in.
+                relay.down = true
+                relay.cut()
+                while (shortSfu.room("gone") != null) delay(50)
+                relay.down = false
+                val again = withTimeout(10_000) { alice.state.first { it is RoomState.Connected && it.selfId != firstId } }
+                bob.state.first { it is RoomState.Connected }
+                bob.participants.first { list -> list.any { it.id == (again as RoomState.Connected).selfId } }.single().audio.first { it != null }
+                assertEquals(2, shortSfu.room("gone")!!.participants.size)
+                alice.leave()
+                bob.leave()
+            }
+        } finally {
+            relay.close()
+            s2.stop(0, 100)
+            shortSfu.close()
+        }
     }
 
     @Test

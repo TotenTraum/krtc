@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
@@ -168,40 +172,77 @@ private fun CameraChoice.label(): String = when (this) {
     is CameraChoice.Device -> name
 }
 
+/** One tile on the call screen: this user's camera or screen, or a participant's camera or screen share. */
+private sealed class TileSpec(val key: String) {
+    data object Self : TileSpec(MeetSession.SELF)
+    data object SelfScreen : TileSpec(MeetSession.SELF_SCREEN)
+    class Camera(val p: RemoteParticipant) : TileSpec(MeetSession.tileKey(p.id, screen = false))
+    class Screen(val p: RemoteParticipant) : TileSpec(MeetSession.tileKey(p.id, screen = true))
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CallScreen(session: MeetSession, room: String) {
     val participants by session.participants.collectAsState()
     val local by session.localVideo.collectAsState()
-    val micOn by session.micOn.collectAsState()
-    val cameraOn by session.cameraOn.collectAsState()
-    val selfSpeaking by session.selfSpeaking.collectAsState()
     val ownScreen by session.screen.collectAsState()
+    val sharing by session.sharing.collectAsState()
     val chatOpen by session.chatOpen.collectAsState()
     val unread by session.unread.collectAsState()
     val notice by session.notice.collectAsState()
-    val name = session.settings?.name ?: ""
+    val reconnecting by session.reconnecting.collectAsState()
+    val layout by session.layout.collectAsState()
+    val pinned by session.pinned.collectAsState()
+    val speaker by session.activeSpeaker.collectAsState()
+    val micOn by session.micOn.collectAsState()
+    val cameraOn by session.cameraOn.collectAsState()
+
+    val tiles = buildList {
+        add(TileSpec.Self)
+        if (ownScreen != null) add(TileSpec.SelfScreen)
+        participants.forEach { add(TileSpec.Camera(it)) }
+        participants.filter { it.id in sharing }.forEach { add(TileSpec.Screen(it)) }
+    }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text("$room · ${participants.size + 1} в звонке", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
-        notice?.let { n ->
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(n, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSecondaryContainer)
-                TextButton(onClick = session::dismissNotice) { Text("OK") }
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("$room · ${participants.size + 1} в звонке", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            ConnectionBadge(session)
+            TextButton(onClick = { session.setLayout(if (layout == Layout.GRID) Layout.SPEAKER else Layout.GRID) }) {
+                Text(if (layout == Layout.GRID) "Докладчик" else "Сетка")
             }
         }
+        reconnecting?.let { attempt ->
+            Banner("Нет связи с сервером, переподключение… (попытка $attempt)", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+        }
+        notice?.let { n -> Banner(n, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, session::dismissNotice) }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val wide = maxWidth >= 720.dp
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!chatOpen || wide) {
-                    LazyVerticalGrid(GridCells.Adaptive(minSize = 300.dp), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item(key = "self") { Tile(local.takeIf { cameraOn }, "$name (вы)", selfSpeaking && micOn, mirror = true, muted = !micOn) }
-                        ownScreen?.let { item(key = "self/screen") { Tile(it, "Ваш экран", speaking = false, fit = true) } }
-                        items(participants, key = { it.id }) { p -> RemoteTile(session, p) }
-                        items(participants, key = { it.id + "/screen" }) { p -> RemoteScreenTile(session, p) }
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        val tile: @Composable (TileSpec, Modifier) -> Unit = { spec, m -> TileFor(session, spec, pinned == spec.key, m) }
+                        if (layout == Layout.GRID) {
+                            LazyVerticalGrid(GridCells.Adaptive(minSize = 300.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(tiles, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxWidth().aspectRatio(16f / 9f)) }
+                            }
+                        } else {
+                            // The large tile: what the user pinned, else a screen share, else whoever spoke last.
+                            val main = tiles.firstOrNull { it.key == pinned }
+                                ?: tiles.firstOrNull { it is TileSpec.Screen }
+                                ?: tiles.firstOrNull { it is TileSpec.Camera && it.p.id == speaker }
+                                ?: tiles.firstOrNull { it is TileSpec.Camera }
+                                ?: tiles.first()
+                            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                tile(main, Modifier.weight(1f).fillMaxWidth())
+                                val others = tiles.filter { it !== main }
+                                if (others.isNotEmpty()) {
+                                    LazyRow(Modifier.fillMaxWidth().height(110.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(others, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxHeight().aspectRatio(16f / 9f)) }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 if (chatOpen) ChatPanel(session, if (wide) Modifier.width(320.dp).fillMaxHeight() else Modifier.fillMaxSize())
@@ -221,6 +262,57 @@ fun CallScreen(session: MeetSession, room: String) {
             SoundMenu(session)
             Button(onClick = session::leave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Выйти") }
         }
+    }
+}
+
+@Composable
+private fun Banner(text: String, background: Color, foreground: Color, onDismiss: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp)).background(background).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, Modifier.weight(1f).padding(vertical = 6.dp), color = foreground)
+        if (onDismiss != null) TextButton(onClick = onDismiss) { Text("OK") }
+    }
+}
+
+private fun LinkQuality.label() = when (this) {
+    LinkQuality.GOOD -> "хорошая"
+    LinkQuality.FAIR -> "средняя"
+    LinkQuality.POOR -> "плохая"
+}
+
+private fun LinkQuality.color() = when (this) {
+    LinkQuality.GOOD -> Speaking
+    LinkQuality.FAIR -> Color(0xFFE0B03A)
+    LinkQuality.POOR -> Color(0xFFE5534B)
+}
+
+/** The call's own connection: quality, round trip and loss, from getStats. */
+@Composable
+private fun ConnectionBadge(session: MeetSession) {
+    val info = session.connection.collectAsState().value ?: return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(info.quality.color()))
+        val details = listOfNotNull(info.rttMillis?.let { "$it мс" }, if (info.lossPercent >= 0.5) "потери ${info.lossPercent.roundToInt()} %" else null)
+        Text("Связь ${info.quality.label()}" + if (details.isEmpty()) "" else " · " + details.joinToString(" · "), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun TileFor(session: MeetSession, spec: TileSpec, pinned: Boolean, modifier: Modifier) {
+    val pin = { session.togglePin(spec.key) }
+    when (spec) {
+        TileSpec.Self -> {
+            val local by session.localVideo.collectAsState()
+            val cameraOn by session.cameraOn.collectAsState()
+            val micOn by session.micOn.collectAsState()
+            val speaking by session.selfSpeaking.collectAsState()
+            Tile(local.takeIf { cameraOn }, "${session.settings?.name ?: ""} (вы)", speaking && micOn, modifier, mirror = true, muted = !micOn, pinned = pinned, onClick = pin)
+        }
+        TileSpec.SelfScreen -> Tile(session.screen.collectAsState().value, "Ваш экран", speaking = false, modifier, fit = true, pinned = pinned, onClick = pin)
+        is TileSpec.Camera -> RemoteTile(session, spec.p, pinned, modifier, pin)
+        is TileSpec.Screen -> RemoteScreenTile(session, spec.p, pinned, modifier, pin)
     }
 }
 
@@ -315,27 +407,34 @@ private fun ChatPanel(session: MeetSession, modifier: Modifier) {
 }
 
 @Composable
-private fun RemoteTile(session: MeetSession, p: RemoteParticipant) {
+private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val video by p.video.collectAsState()
     val speaking by p.speaking.collectAsState()
     val audioMuted by p.audioMuted.collectAsState()
     val videoMuted by p.videoMuted.collectAsState()
-    Tile(video.takeIf { !videoMuted }, p.name, speaking && !audioMuted, muted = audioMuted) {
+    val quality = session.connection.collectAsState().value?.peers?.get(p.id)
+    // The SFU sends the simulcast layer that fills this tile; none needed while it is off screen.
+    DisposableEffect(p) { onDispose { session.setTileHeight(p, 0) } }
+    Tile(
+        video.takeIf { !videoMuted }, p.name, speaking && !audioMuted,
+        modifier.onSizeChanged { session.setTileHeight(p, it.height) },
+        muted = audioMuted, pinned = pinned, onClick = onClick,
+        warning = quality?.takeIf { it != LinkQuality.GOOD }?.let { "связь ${it.label()}" },
+    ) {
         VolumeMenu(session, p, screen = false, Modifier.align(Alignment.TopEnd))
     }
 }
 
 /**
- * A participant's screen share, while there is one: the picture when subscribed, otherwise an offer to connect
- * (nothing is received meanwhile).
+ * A participant's screen share: the picture when subscribed, otherwise an offer to connect (nothing is received
+ * meanwhile).
  */
 @Composable
-private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant) {
+private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val screen by p.screen.collectAsState()
     val subscribed by p.screenSubscribed.collectAsState()
     val sound by p.screenAudio.collectAsState()
-    val track = screen ?: return
-    Tile(track.takeIf { subscribed }, "${p.name} — экран", speaking = false, fit = true, placeholder = !subscribed) {
+    Tile(screen.takeIf { subscribed }, "${p.name} — экран", speaking = false, modifier, fit = true, placeholder = !subscribed, pinned = pinned, onClick = onClick) {
         if (subscribed) {
             Row(Modifier.align(Alignment.TopEnd)) {
                 if (sound != null) VolumeMenu(session, p, screen = true)
@@ -384,24 +483,31 @@ private fun Tile(
     track: MediaStreamTrack?,
     label: String,
     speaking: Boolean,
+    modifier: Modifier,
     mirror: Boolean = false,
     muted: Boolean = false,
     fit: Boolean = false,
     placeholder: Boolean = false,
+    pinned: Boolean = false,
+    warning: String? = null,
+    onClick: (() -> Unit)? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val shape = RoundedCornerShape(10.dp)
     Box(
-        Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape).background(Color(0xFF1E1F24))
-            .border(BorderStroke(3.dp, if (speaking) Speaking else Color.Transparent), shape),
+        modifier.clip(shape).background(Color(0xFF1E1F24))
+            .border(BorderStroke(3.dp, if (speaking) Speaking else Color.Transparent), shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         VideoView(track, Modifier.fillMaxSize(), mirror = mirror, contentScale = if (fit) ContentScale.Fit else ContentScale.Crop)
         if (track == null && !placeholder) Text(label.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, modifier = Modifier.align(Alignment.Center))
-        Text(
-            label + if (muted) " · микрофон выключен" else "",
-            color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-        )
+        Column(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+            warning?.let { Text(it, color = Color(0xFFFFC857), style = MaterialTheme.typography.labelSmall) }
+            Text(
+                label + (if (muted) " · микрофон выключен" else "") + (if (pinned) " · закреплено" else ""),
+                color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
         overlay()
     }
 }

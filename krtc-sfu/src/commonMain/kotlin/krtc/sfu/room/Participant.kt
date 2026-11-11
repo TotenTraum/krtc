@@ -292,8 +292,17 @@ internal class Participant(
     override val id: String,
     override val name: String,
     internal val room: Room,
-    internal val sink: SignalSink,
+    sink: SignalSink,
 ) : SfuParticipant {
+    /** Where its signaling goes; replaced when the client resumes on a new connection. */
+    @Volatile internal var sink: SignalSink = sink
+
+    /** Secret that lets the client take this session over after its connection dropped (ServerMessage.Welcome.resume). */
+    internal val resumeToken: String = randomIceString(24)
+
+    /** When its signaling transport dropped (Sfu.disconnected), or -1 while connected. */
+    @Volatile internal var detachedAtMillis: Long = -1
+
     override val roomName: String get() = room.name
 
     /** Server-side mute: the SFU stops forwarding this participant's audio / video. */

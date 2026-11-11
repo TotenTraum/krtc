@@ -46,7 +46,7 @@ final class krtc.client/RemoteParticipant { // krtc.client/RemoteParticipant|nul
 }
 
 final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
-    constructor <init>(kotlin/String, krtc.core/PeerConnectionFactory = ..., krtc.core/RTCConfiguration = ..., io.ktor.client/HttpClient = ..., kotlinx.coroutines/CoroutineScope? = ...) // krtc.client/RoomClient.<init>|<init>(kotlin.String;krtc.core.PeerConnectionFactory;krtc.core.RTCConfiguration;io.ktor.client.HttpClient;kotlinx.coroutines.CoroutineScope?){}[0]
+    constructor <init>(kotlin/String, krtc.core/PeerConnectionFactory = ..., krtc.core/RTCConfiguration = ..., io.ktor.client/HttpClient = ..., kotlinx.coroutines/CoroutineScope? = ..., kotlin/Long = ...) // krtc.client/RoomClient.<init>|<init>(kotlin.String;krtc.core.PeerConnectionFactory;krtc.core.RTCConfiguration;io.ktor.client.HttpClient;kotlinx.coroutines.CoroutineScope?;kotlin.Long){}[0]
 
     final val connectionState // krtc.client/RoomClient.connectionState|{}connectionState[0]
         final fun <get-connectionState>(): kotlinx.coroutines.flow/StateFlow<krtc.core/RTCPeerConnectionState>? // krtc.client/RoomClient.connectionState.<get-connectionState>|<get-connectionState>(){}[0]
@@ -68,6 +68,7 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
         final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<krtc.client/RoomState> // krtc.client/RoomClient.state.<get-state>|<get-state>(){}[0]
 
     final fun leave() // krtc.client/RoomClient.leave|leave(){}[0]
+    final fun participantOfMid(kotlin/String): kotlin/String? // krtc.client/RoomClient.participantOfMid|participantOfMid(kotlin.String){}[0]
     final fun sendData(kotlin/ByteArray, kotlin/String = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ...): kotlin/Boolean // krtc.client/RoomClient.sendData|sendData(kotlin.ByteArray;kotlin.String;kotlin.collections.List<kotlin.String>;kotlin.Boolean){}[0]
     final suspend fun join(kotlin/String, kotlin/String, krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ..., krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.join|join(kotlin.String;kotlin.String;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
     final suspend fun restartIce() // krtc.client/RoomClient.restartIce|restartIce(){}[0]
@@ -122,6 +123,22 @@ sealed class krtc.client/RoomState { // krtc.client/RoomState|null[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Disconnected.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // krtc.client/RoomState.Disconnected.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // krtc.client/RoomState.Disconnected.toString|toString(){}[0]
+    }
+
+    final class Reconnecting : krtc.client/RoomState { // krtc.client/RoomState.Reconnecting|null[0]
+        constructor <init>(kotlin/Int, kotlin/String?) // krtc.client/RoomState.Reconnecting.<init>|<init>(kotlin.Int;kotlin.String?){}[0]
+
+        final val attempt // krtc.client/RoomState.Reconnecting.attempt|{}attempt[0]
+            final fun <get-attempt>(): kotlin/Int // krtc.client/RoomState.Reconnecting.attempt.<get-attempt>|<get-attempt>(){}[0]
+        final val reason // krtc.client/RoomState.Reconnecting.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String? // krtc.client/RoomState.Reconnecting.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/Int // krtc.client/RoomState.Reconnecting.component1|component1(){}[0]
+        final fun component2(): kotlin/String? // krtc.client/RoomState.Reconnecting.component2|component2(){}[0]
+        final fun copy(kotlin/Int = ..., kotlin/String? = ...): krtc.client/RoomState.Reconnecting // krtc.client/RoomState.Reconnecting.copy|copy(kotlin.Int;kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // krtc.client/RoomState.Reconnecting.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // krtc.client/RoomState.Reconnecting.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // krtc.client/RoomState.Reconnecting.toString|toString(){}[0]
     }
 
     final object Connecting : krtc.client/RoomState { // krtc.client/RoomState.Connecting|null[0]

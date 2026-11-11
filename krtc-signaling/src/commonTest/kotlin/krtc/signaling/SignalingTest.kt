@@ -16,6 +16,11 @@ class SignalingTest {
         assertEquals("""{"type":"media-state","audioMuted":true,"videoMuted":false}""", SignalingProtocol.encode(ClientMessage.MediaState(true, false)))
         assertEquals("""{"type":"subscribe","peer":"a","feed":"screen","enabled":false}""", SignalingProtocol.encode(ClientMessage.Subscribe("a", ClientMessage.Subscribe.FEED_SCREEN, false)))
         assertEquals("""{"type":"peer-state","id":"a","audioMuted":false,"videoMuted":true}""", SignalingProtocol.encode(ServerMessage.PeerState("a", false, true)))
+        assertEquals("""{"type":"leave"}""", SignalingProtocol.encode(ClientMessage.Leave))
+        assertEquals(
+            """{"type":"welcome","id":"1","room":"r","peers":[],"protocol":1,"resume":"t"}""",
+            SignalingProtocol.encode(ServerMessage.Welcome("1", "r", emptyList(), resume = "t")),
+        )
         // Welcomes from servers without mute state still decode.
         assertEquals(PeerInfo("2", "Bob"), SignalingProtocol.decodeServer("""{"type":"welcome","id":"1","room":"r","peers":[{"id":"2","name":"Bob"}]}""").let { (it as ServerMessage.Welcome).peers.single() })
         // Offers from servers that predate screen sharing still decode.

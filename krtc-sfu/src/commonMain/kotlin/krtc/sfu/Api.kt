@@ -57,6 +57,12 @@ public data class SfuConfig(
     val screenShare: Boolean = true,
     /** Decides what happens to each data message a participant sends. Defaults to relaying it unchanged. */
     val dataPolicy: DataPolicy = DataPolicy.Relay,
+    /**
+     * How long a participant whose signaling transport dropped ([Sfu.disconnected]) stays in the room, so its
+     * client can take the session over on a new connection ([JoinRequest.resumeToken]) with media uninterrupted.
+     * 0 removes it at once.
+     */
+    val resumeTimeoutMillis: Long = 20_000,
     /** Testing only: percentage of downlink video packets to drop, to exercise NACK/RTX recovery. */
     val simulatedLossPercent: Int = 0,
     /** Testing only: percentage of incoming video packets to drop, to exercise upstream NACK/RTX recovery. */
@@ -115,6 +121,11 @@ public data class JoinRequest(
     val displayName: String,
     val credentials: String? = null,
     val attributes: Map<String, String> = emptyMap(),
+    /**
+     * The `resume` secret from an earlier `welcome`: takes over that session in [room] (same id, media continues)
+     * if it is still there. Unknown or expired tokens join as usual, through the join policy.
+     */
+    val resumeToken: String? = null,
 )
 
 public sealed class JoinDecision {
@@ -146,6 +157,12 @@ public sealed class SfuEvent {
     public data class RoomClosed(override val room: String) : SfuEvent()
     public data class ParticipantJoined(override val room: String, val participantId: String, val name: String) : SfuEvent()
     public data class ParticipantLeft(override val room: String, val participantId: String, val reason: String) : SfuEvent()
+
+    /** The participant's signaling transport dropped; it stays for [SfuConfig.resumeTimeoutMillis] unless it resumes. */
+    public data class ParticipantDisconnected(override val room: String, val participantId: String) : SfuEvent()
+
+    /** The participant took its session over on a new signaling transport. */
+    public data class ParticipantResumed(override val room: String, val participantId: String) : SfuEvent()
 
     /** ICE and DTLS completed: media can flow. */
     public data class MediaConnected(override val room: String, val participantId: String, val srtpProfile: String) : SfuEvent()

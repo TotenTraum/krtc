@@ -66,6 +66,14 @@ public final class krtc/signaling/ClientMessage$Layer$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final class krtc/signaling/ClientMessage$Leave : krtc/signaling/ClientMessage {
+	public static final field INSTANCE Lkrtc/signaling/ClientMessage$Leave;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class krtc/signaling/ClientMessage$MediaState : krtc/signaling/ClientMessage {
 	public static final field Companion Lkrtc/signaling/ClientMessage$MediaState$Companion;
 	public fun <init> (ZZ)V
@@ -383,18 +391,20 @@ public final class krtc/signaling/ServerMessage$Speaking$Companion {
 
 public final class krtc/signaling/ServerMessage$Welcome : krtc/signaling/ServerMessage {
 	public static final field Companion Lkrtc/signaling/ServerMessage$Welcome$Companion;
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;I)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/util/List;
 	public final fun component4 ()I
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;I)Lkrtc/signaling/ServerMessage$Welcome;
-	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Welcome;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;IILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Welcome;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/String;)Lkrtc/signaling/ServerMessage$Welcome;
+	public static synthetic fun copy$default (Lkrtc/signaling/ServerMessage$Welcome;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/String;ILjava/lang/Object;)Lkrtc/signaling/ServerMessage$Welcome;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getId ()Ljava/lang/String;
 	public final fun getPeers ()Ljava/util/List;
 	public final fun getProtocol ()I
+	public final fun getResume ()Ljava/lang/String;
 	public final fun getRoom ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

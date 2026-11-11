@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -149,6 +150,17 @@ class MeetSessionTest {
             assertTrue(b.sendChat("hi"))
             waitUntil("alice got the reply") { a.chat.value.any { it.text == "hi" && it.from == "bob" } }
 
+            // The tile size picks the simulcast layer the SFU forwards (0 = lowest).
+            fun layerAtBob() = sfu.linkStats().firstOrNull { it.participantId != aliceAtBob.id }?.videoLayers?.get(aliceAtBob.id)
+            b.setTileHeight(aliceAtBob, 120)
+            waitUntil("low layer for a small tile") { layerAtBob() == 0 }
+            b.setTileHeight(aliceAtBob, 1080)
+            waitUntil("a higher layer for a large tile") { (layerAtBob() ?: 0) > 0 }
+
+            // Connection quality from getStats: localhost is good, and alice is attributed by her mids.
+            waitUntil("connection stats") { b.connection.value?.peers?.containsKey(aliceAtBob.id) == true }
+            assertEquals(LinkQuality.GOOD, b.connection.value!!.quality)
+
             // Screen share: received, paused by unsubscribing, resumed by subscribing again.
             a.startScreen(a.screens().single(), withAudio = false)
             waitUntil("bob receiving alice's screen") { frames(aliceAtBob.screen.value) > 10 }
@@ -204,5 +216,76 @@ class MeetSessionTest {
         }
         delay(500) // coroutines still running after close must fail cleanly, not crash the process
         assertEquals(0, sfu.metrics().participants, sfu.rooms().toString())
+    }
+
+    /** A TCP relay whose connections can be cut like a lost network (no WebSocket close frames). */
+    private class Relay(private val target: Int) : AutoCloseable {
+        private val server = java.net.ServerSocket(0)
+        private val sockets = java.util.concurrent.CopyOnWriteArrayList<java.net.Socket>()
+        val port: Int = server.localPort
+
+        init {
+            thread(isDaemon = true) {
+                while (!server.isClosed) {
+                    val client = runCatching { server.accept() }.getOrNull() ?: break
+                    val upstream = java.net.Socket("127.0.0.1", target)
+                    sockets += client
+                    sockets += upstream
+                    for ((from, to) in listOf(client to upstream, upstream to client)) thread(isDaemon = true) {
+                        runCatching { from.getInputStream().copyTo(to.getOutputStream()) }
+                        runCatching { from.close() }
+                        runCatching { to.close() }
+                    }
+                }
+            }
+        }
+
+        fun cut() {
+            for (s in sockets) runCatching { s.setSoLinger(true, 0); s.close() }
+            sockets.clear()
+        }
+
+        override fun close() {
+            server.close()
+            cut()
+        }
+    }
+
+    /** Signaling drops mid-call: both sides show it, resume the same session, and the media never stops. */
+    @Test
+    fun signalingDropIsResumedWithoutInterruptingMedia(): Unit = runBlocking(main) {
+        val port = server.engine.resolvedConnectors().first().port
+        Relay(port).use { relay ->
+            val a = MeetSession(scope, TestPlatform())
+            val b = MeetSession(scope, TestPlatform())
+            try {
+                a.join(JoinSettings("ws://127.0.0.1:${relay.port}", "drop", "alice", CameraChoice.TestPattern, testAudio = true))
+                b.join(JoinSettings("ws://127.0.0.1:${relay.port}", "drop", "bob", CameraChoice.TestPattern, testAudio = true))
+                val aliceAtBob = withTimeout(15_000) { b.participants.first { it.isNotEmpty() }.single() }
+                waitUntil("video at bob") { frames(aliceAtBob.video.value) > 10 }
+
+                // Resuming through a local relay takes milliseconds: count the SFU's resume events rather than catch the
+                // short Reconnecting state.
+                val resumed = java.util.concurrent.atomic.AtomicInteger()
+                val events = scope.launch { sfu.events.collect { if (it is krtc.sfu.SfuEvent.ParticipantResumed) resumed.incrementAndGet() } }
+                kotlinx.coroutines.yield()
+                val before = frames(aliceAtBob.video.value)
+                relay.cut()
+                waitUntil("both sessions resumed") { resumed.get() == 2 }
+                events.cancel()
+                val during = before
+                waitUntil("bob back in the call") { b.reconnecting.value == null && b.phase.value is CallPhase.InCall }
+                assertTrue(b.participants.value.single() === aliceAtBob, "same session: same participant and tracks")
+                waitUntil("video kept flowing") { frames(aliceAtBob.video.value) > during + 30 }
+                assertEquals(2, sfu.metrics().participants)
+
+                // Signaling works again after the resume.
+                waitUntil("chat after resume") { a.sendChat("still here") }
+                waitUntil("bob got it") { b.chat.value.any { it.text == "still here" } }
+            } finally {
+                a.close()
+                b.close()
+            }
+        }
     }
 }

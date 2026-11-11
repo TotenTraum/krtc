@@ -10,7 +10,7 @@ import androidx.compose.ui.window.rememberWindowState
 /**
  * Desktop entry point. Defaults come from the environment, which also lets tests drive the app:
  *   KRTC_MEET_SERVER (ws://localhost:8080), KRTC_MEET_ROOM (test), KRTC_MEET_NAME, KRTC_MEET_TEST_AUDIO=1,
- *   KRTC_MEET_CAMERA=test|none, KRTC_MEET_AUTOJOIN=1 joins at once,
+ *   KRTC_MEET_CAMERA=test|none, KRTC_MEET_AUTOJOIN=1 joins at once, KRTC_MEET_LAYOUT=speaker,
  *   KRTC_MEET_SNAPSHOT=<file.png> renders the window to a PNG after KRTC_MEET_SNAPSHOT_AFTER seconds (default 10).
  */
 fun main() = application {
@@ -30,7 +30,7 @@ fun main() = application {
     var current: MeetSession? = null
     Window(onCloseRequest = { current?.close(); exitApplication() }, title = "krtc meet", state = state) {
         val scope = rememberCoroutineScope()
-        val session = remember { MeetSession(scope) }.also { current = it }
+        val session = remember { MeetSession(scope).also { if (env["KRTC_MEET_LAYOUT"] == "speaker") it.setLayout(Layout.SPEAKER) } }.also { current = it }
         remember { if (env["KRTC_MEET_AUTOJOIN"] == "1") session.join(defaults) }
         env["KRTC_MEET_SNAPSHOT"]?.let { file ->
             Snapshot.schedule(1100, 760, file, (env["KRTC_MEET_SNAPSHOT_AFTER"] ?: "10").toLong()) { App(session, defaults) }

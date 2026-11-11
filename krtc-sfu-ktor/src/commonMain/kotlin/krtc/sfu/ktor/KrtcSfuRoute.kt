@@ -15,7 +15,10 @@ import krtc.sfu.JoinRequest
 import krtc.sfu.SignalSink
 import krtc.sfu.Sfu
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Builds the [JoinRequest] for an incoming WebSocket. The default reads `room` and `name` query
@@ -32,6 +35,7 @@ public val DefaultJoinRequest: JoinRequestFactory = { call ->
             room = it,
             displayName = q["name"]?.takeIf { n -> n.isNotBlank() } ?: "guest",
             credentials = call.request.headers["Authorization"]?.removePrefix("Bearer ")?.trim() ?: q["token"],
+            resumeToken = q["resume"]?.takeIf { r -> r.isNotBlank() },
         )
     }
 }
@@ -64,14 +68,14 @@ public suspend fun DefaultWebSocketServerSession.serve(sfu: Sfu, request: JoinRe
         return
     }
     val outbox = Channel<String>(outboxCapacity)
-    var closeReason: String? = null
+    var serverReason: String? = null
     val sink = object : SignalSink {
         override fun send(message: ServerMessage) {
             if (outbox.trySend(SignalingProtocol.encode(message)).isFailure) close("signaling backlog")
         }
 
         override fun close(reason: String) {
-            closeReason = closeReason ?: reason
+            serverReason = serverReason ?: reason
             outbox.close()
         }
     }
@@ -84,15 +88,22 @@ public suspend fun DefaultWebSocketServerSession.serve(sfu: Sfu, request: JoinRe
     val ws = this
     val writer = launch {
         for (m in outbox) send(Frame.Text(m))
-        ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, (closeReason ?: "closed by server").take(120)))
+        ws.close(CloseReason(CloseReason.Codes.GOING_AWAY, (serverReason ?: "closed by server").take(120)))
     }
     try {
         for (frame in incoming) {
             if (frame is Frame.Text) sfu.onMessage(participant, frame.readText())
         }
     } finally {
-        sfu.leave(participant, closeReason ?: "disconnected")
+        // A client that closes the socket properly is leaving. One that just vanished (no close frame: network lost,
+        // app killed) may come back and resume. When the server ended it (kick, bye), it is gone.
+        val clientClose = withContext(NonCancellable) { withTimeoutOrNull(500) { runCatching { closeReason.await() }.getOrNull() } }
+        val clientLeft = clientClose != null && clientClose.code != CLOSED_ABNORMALLY
+        sfu.disconnected(participant, sink, serverReason ?: if (clientLeft) "left" else "disconnected", resumable = serverReason == null && !clientLeft)
         outbox.close()
         writer.cancel()
     }
 }
+
+/** RFC 6455 1006: the connection was lost without a close frame (reported locally, never sent). */
+private const val CLOSED_ABNORMALLY: Short = 1006

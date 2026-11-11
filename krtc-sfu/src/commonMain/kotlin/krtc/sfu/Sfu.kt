@@ -100,6 +100,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
      */
     public suspend fun join(request: JoinRequest, sink: SignalSink): SfuParticipant {
         check(!closed.load()) { "Sfu is closed" }
+        request.resumeToken?.let { token -> resume(request.room, token, sink)?.let { return it } }
         val decision = config.joinPolicy.decide(request)
         if (decision is JoinDecision.Deny) throw JoinDeniedException(decision.reason)
         val allow = decision as JoinDecision.Allow
@@ -121,7 +122,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             Triple(p, session, room.add(p))
         }
         if (opened) eventFlow.tryEmit(SfuEvent.RoomOpened(roomName))
-        sink.send(ServerMessage.Welcome(p.id, roomName, others.map { PeerInfo(it.id, it.name, it.announcedAudioMuted, it.announcedVideoMuted) }))
+        sink.send(welcome(p, others))
         val joined = ServerMessage.PeerJoined(p.id, p.name)
         others.forEach { it.sink.send(joined) }
         session.negotiate()
@@ -129,6 +130,48 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         eventFlow.tryEmit(SfuEvent.ParticipantJoined(roomName, p.id, p.name))
         log.info("$p joined room $roomName (${others.size + 1} members)")
         return p
+    }
+
+    private fun welcome(p: Participant, others: List<Participant>) = ServerMessage.Welcome(
+        p.id, p.room.name, others.map { PeerInfo(it.id, it.name, it.announcedAudioMuted, it.announcedVideoMuted) },
+        resume = if (config.resumeTimeoutMillis > 0) p.resumeToken else null,
+    )
+
+    /**
+     * Takes over the session with this resume token in [room] on [sink]: a fresh `welcome` (same id, current peers)
+     * and a new offer. Null if there is no such session.
+     */
+    private fun resume(room: String, token: String, sink: SignalSink): Participant? {
+        if (config.resumeTimeoutMillis <= 0) return null
+        val (p, session, others) = synchronized(lock) {
+            val session = sessions.values.firstOrNull { it.participant.resumeToken == token && it.participant.room.name == room } ?: return null
+            val p = session.participant
+            p.sink = sink
+            p.detachedAtMillis = -1
+            Triple(p, session, p.room.members.filter { it !== p })
+        }
+        sink.send(welcome(p, others))
+        session.resync()
+        eventFlow.tryEmit(SfuEvent.ParticipantResumed(room, p.id))
+        log.info("$p resumed its session")
+        return p
+    }
+
+    /**
+     * The signaling transport behind [sink] is gone. Ignored if [participant] has since resumed on another one.
+     * With [resumable] (the client went away, the host did not end it) and [SfuConfig.resumeTimeoutMillis] > 0, the
+     * participant stays and its media keeps flowing until its client resumes or the timeout passes; otherwise it
+     * leaves at once ([leave]). Whatever the SFU sends meanwhile goes to the old [sink]: the resumed client gets the
+     * current state again.
+     */
+    public fun disconnected(participant: SfuParticipant, sink: SignalSink, reason: String = "disconnected", resumable: Boolean = true) {
+        val p = participant as? Participant ?: return
+        if (p.sink !== sink) return
+        if (!resumable || config.resumeTimeoutMillis <= 0) return leave(p, reason)
+        if (sessions[p.id]?.participant !== p) return
+        p.detachedAtMillis = nowMillis()
+        eventFlow.tryEmit(SfuEvent.ParticipantDisconnected(p.room.name, p.id))
+        log.info("$p signaling dropped, waiting ${config.resumeTimeoutMillis} ms for it to resume")
     }
 
     /** Handles one message from [participant]'s client. */
@@ -142,6 +185,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             }
             ClientMessage.RestartIce -> restartIce(p)
             ClientMessage.Renegotiate -> sessions[p.id]?.takeIf { it.participant === p }?.negotiate()
+            ClientMessage.Leave -> leave(p, "left")
             is ClientMessage.MediaState -> {
                 p.selfAudioMuted = message.audioMuted
                 p.selfVideoMuted = message.videoMuted
@@ -375,6 +419,11 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                     log.info("$p consent expired")
                     kick(p.id, "consent expired")
                 }
+                val detached = p.detachedAtMillis
+                if (detached >= 0 && now - detached > config.resumeTimeoutMillis) {
+                    log.info("$p did not resume")
+                    leave(p, "disconnected")
+                }
             }
         }
     }
@@ -395,6 +444,13 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         @Volatile var dtls: DtlsEndpoint? = null
         @Volatile var mediaConnected: Boolean = false
         private val earlyDtls = ArrayList<ByteArray>()
+
+        /** After a resume: offers sent to the old connection are lost, so start over with a new one. */
+        fun resync() = synchronized(negotiation) {
+            inFlight = -1
+            pending = false
+            negotiate()
+        }
 
         /** Sends a new offer reflecting current room membership, or queues one if an offer is outstanding. */
         fun negotiate() = synchronized(negotiation) {

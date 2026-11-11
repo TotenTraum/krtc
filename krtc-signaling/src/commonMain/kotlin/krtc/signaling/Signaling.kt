@@ -38,12 +38,17 @@ public data class PeerInfo(val id: String, val name: String, val audioMuted: Boo
 /** Server → client. */
 @Serializable
 public sealed class ServerMessage {
+    /**
+     * [resume]: a secret the client presents (`resume` query parameter) to take this session over on a new
+     * connection after its socket dropped, within the server's grace period; null if the server does not resume.
+     */
     @Serializable @SerialName("welcome")
     public data class Welcome(
         val id: String,
         val room: String,
         val peers: List<PeerInfo>,
         val protocol: Int = SignalingProtocol.VERSION,
+        val resume: String? = null,
     ) : ServerMessage()
 
     /**
@@ -102,6 +107,10 @@ public sealed class ClientMessage {
      */
     @Serializable @SerialName("renegotiate")
     public data object Renegotiate : ClientMessage()
+
+    /** The client leaves for good: the server removes it at once instead of waiting for it to resume. */
+    @Serializable @SerialName("leave")
+    public data object Leave : ClientMessage()
 
     /** The client muted or unmuted its microphone or camera; the server tells the others ([ServerMessage.PeerState]). */
     @Serializable @SerialName("media-state")

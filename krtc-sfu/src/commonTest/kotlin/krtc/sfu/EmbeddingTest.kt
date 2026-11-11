@@ -43,6 +43,53 @@ class EmbeddingTest {
     }
 
     @Test
+    fun droppedSignalingResumesTheSameSession() = runTest {
+        Sfu(SfuConfig(udpPort = 0, shards = 1, resumeTimeoutMillis = 60_000)).use { sfu ->
+            val aSink = Sink()
+            val bSink = Sink()
+            val a = sfu.join(JoinRequest("r", "a"), aSink)
+            sfu.join(JoinRequest("r", "b"), bSink)
+            val token = aSink.messages.filterIsInstance<ServerMessage.Welcome>().single().resume!!
+
+            // The socket drops: a stays in the room, nobody is told it left.
+            sfu.disconnected(a, aSink)
+            assertEquals(2, sfu.room("r")!!.participants.size)
+            assertTrue(bSink.messages.none { it is ServerMessage.PeerLeft })
+
+            // A new connection with the token takes over: same id, a fresh welcome and offer on the new sink.
+            val newSink = Sink()
+            val resumed = sfu.join(JoinRequest("r", "a", resumeToken = token), newSink)
+            assertEquals(a.id, resumed.id)
+            assertEquals(a.id, newSink.messages.filterIsInstance<ServerMessage.Welcome>().single().id)
+            assertTrue(newSink.messages.any { it is ServerMessage.Offer })
+            assertEquals(2, sfu.room("r")!!.participants.size)
+
+            // The old transport's late close changes nothing; a wrong token is an ordinary join.
+            sfu.disconnected(a, aSink)
+            assertEquals(-1L, (resumed as krtc.sfu.room.Participant).detachedAtMillis)
+            val other = sfu.join(JoinRequest("r", "c", resumeToken = "nope"), Sink())
+            assertNotEquals(a.id, other.id)
+
+            // The host ending it is final.
+            sfu.disconnected(resumed, newSink, "kicked", resumable = false)
+            assertNull(sfu.participant(a.id))
+        }
+    }
+
+    @Test
+    fun unresumedParticipantLeavesAfterTheTimeout() = runTest {
+        Sfu(SfuConfig(udpPort = 0, shards = 1, resumeTimeoutMillis = 200)).use { sfu ->
+            val sink = Sink()
+            val a = sfu.join(JoinRequest("r", "a"), sink)
+            sfu.disconnected(a, sink)
+            assertTrue(sfu.participant(a.id) != null)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                kotlinx.coroutines.withTimeout(5_000) { while (sfu.participant(a.id) != null) kotlinx.coroutines.delay(50) }
+            }
+        }
+    }
+
+    @Test
     fun mediaStateReachesTheRoom() = runTest {
         Sfu(SfuConfig(udpPort = 0, shards = 1)).use { sfu ->
             val aSink = Sink()

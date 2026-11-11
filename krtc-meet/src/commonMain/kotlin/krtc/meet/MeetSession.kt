@@ -3,6 +3,7 @@ package krtc.meet
 import krtc.client.RemoteParticipant
 import krtc.client.RoomClient
 import krtc.client.RoomState
+import krtc.client.VideoQuality
 import krtc.core.MediaStreamTrack
 import krtc.native.AudioDevice
 import krtc.native.NativePeerConnectionFactory
@@ -43,6 +44,17 @@ data class AudioProcessing(
     /** Adaptive input: keeps quiet and loud voices at one level. */
     val autoGainControl: Boolean = true,
 )
+
+/** How the call's connection is doing, from `getStats` every few seconds. */
+enum class LinkQuality { GOOD, FAIR, POOR }
+
+/**
+ * [rttMillis]: round trip to the SFU; [lossPercent]: media lost on the way here over the last interval;
+ * [peers]: the quality of what each participant's media looks like on arrival (their uplink plus ours).
+ */
+data class ConnectionInfo(val quality: LinkQuality, val rttMillis: Int?, val lossPercent: Double, val peers: Map<String, LinkQuality>)
+
+enum class Layout { GRID, SPEAKER }
 
 /** A chat line; [from] is null for the server, [mine] for this user's own lines. */
 data class ChatMessage(val from: String?, val text: String, val mine: Boolean = false)
@@ -93,6 +105,27 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
 
     /** A short message for the user (e.g. a screen share that could not start); cleared by [dismissNotice]. */
     val notice: StateFlow<String?> = noticeFlow.asStateFlow()
+
+    private val reconnectingFlow = MutableStateFlow<Int?>(null)
+    private val connectionFlow = MutableStateFlow<ConnectionInfo?>(null)
+    private val layoutFlow = MutableStateFlow(Layout.GRID)
+    private val pinnedFlow = MutableStateFlow<String?>(null)
+    private val activeSpeakerFlow = MutableStateFlow<String?>(null)
+    private val sharingFlow = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Participants whose screen share is on. */
+    val sharing: StateFlow<Set<String>> = sharingFlow.asStateFlow()
+
+    /** Reconnect attempt while the signaling connection is down (media may still flow), null otherwise. */
+    val reconnecting: StateFlow<Int?> = reconnectingFlow.asStateFlow()
+    val connection: StateFlow<ConnectionInfo?> = connectionFlow.asStateFlow()
+    val layout: StateFlow<Layout> = layoutFlow.asStateFlow()
+
+    /** The tile shown large in [Layout.SPEAKER] whatever happens ([tileKey]); null: follow screens and speakers. */
+    val pinned: StateFlow<String?> = pinnedFlow.asStateFlow()
+
+    /** The participant who spoke last. */
+    val activeSpeaker: StateFlow<String?> = activeSpeakerFlow.asStateFlow()
 
     /** Playout volume per participant ([volumeKey]): 1 as received, 0 silent, up to [MAX_VOLUME]. */
     val volumes: StateFlow<Map<String, Float>> = volumesFlow.asStateFlow()
@@ -196,9 +229,16 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                     launch {
                         c.participants.collect { list ->
                             participantsFlow.value = list
-                            for (p in list) if (watched.add(p.id)) launch { applyVolumes(p) }
+                            for (p in list) if (watched.add(p.id)) {
+                                launch { applyVolumes(p) }
+                                launch { p.speaking.collect { if (it) activeSpeakerFlow.value = p.id } }
+                                launch { p.screen.collect { t -> sharingFlow.update { if (t != null) it + p.id else it - p.id } } }
+                            }
+                            val keys = list.flatMap { listOf(tileKey(it.id, false), tileKey(it.id, true)) } + listOf(SELF, SELF_SCREEN)
+                            if (pinnedFlow.value?.let { it !in keys } == true) pinnedFlow.value = null
                         }
                     }
+                    launch { watchConnection(c) }
                     launch { c.selfSpeaking.collect { selfSpeakingFlow.value = it } }
                     launch {
                         c.data.collect { d ->
@@ -210,7 +250,11 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                     }
                     c.state.collectLatest { s ->
                         when (s) {
-                            is RoomState.Connected -> phaseFlow.value = CallPhase.InCall(s.room)
+                            is RoomState.Connected -> {
+                                reconnectingFlow.value = null
+                                phaseFlow.value = CallPhase.InCall(s.room)
+                            }
+                            is RoomState.Reconnecting -> reconnectingFlow.value = s.attempt
                             is RoomState.Disconnected -> if (phaseFlow.value !is CallPhase.Ended) end(s.reason)
                             else -> {}
                         }
@@ -322,6 +366,85 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         noticeFlow.value = null
     }
 
+    // ---------------------------------------------------------------- layout, simulcast, connection quality
+
+    fun setLayout(layout: Layout) {
+        layoutFlow.value = layout
+    }
+
+    /** Pins a tile ([tileKey]) as the large one, or unpins it if it already is. */
+    fun togglePin(key: String) {
+        pinnedFlow.value = if (pinnedFlow.value == key) null else key
+        if (pinnedFlow.value != null) layoutFlow.value = Layout.SPEAKER
+    }
+
+    private val requestedQuality = HashMap<String, VideoQuality>()
+
+    /**
+     * How tall [participant]'s camera tile is on screen, in pixels (0: not shown). The SFU then sends the simulcast
+     * layer that fills it: small tiles get the low one, which saves the bandwidth and the decoding and copying of
+     * frames nobody sees at full size.
+     */
+    fun setTileHeight(participant: RemoteParticipant, heightPx: Int) {
+        val quality = when {
+            heightPx <= LOW_LAYER_MAX_PX -> VideoQuality.LOW
+            heightPx <= MEDIUM_LAYER_MAX_PX -> VideoQuality.MEDIUM
+            else -> VideoQuality.HIGH
+        }
+        if (requestedQuality[participant.id] == quality) return
+        requestedQuality[participant.id] = quality
+        val c = client ?: return
+        scope.launch { runCatching { c.setVideoQuality(participant.id, quality) } }
+    }
+
+    /** Samples `getStats` every [STATS_INTERVAL_MILLIS] into [connection]. */
+    private suspend fun watchConnection(c: RoomClient) {
+        var previous: Map<String, Pair<Long, Long>> = emptyMap() // inbound-rtp id -> (received, lost)
+        while (true) {
+            kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS)
+            val pc = c.peerConnection ?: continue
+            val report = runCatching { pc.getStats() }.getOrNull() ?: continue
+            val rtt = report.values.firstOrNull { it.type == "candidate-pair" && it.members["nominated"] == true && it.members["state"] == "succeeded" }
+                ?.members?.get("currentRoundTripTime")?.let { (it as? Number)?.toDouble() }?.let { (it * 1000).toInt() }
+            val now = HashMap<String, Pair<Long, Long>>()
+            var received = 0L
+            var lost = 0L
+            val perPeer = HashMap<String, Pair<Long, Long>>()
+            for (s in report.values) {
+                if (s.type != "inbound-rtp") continue
+                val r = (s.members["packetsReceived"] as? Number)?.toLong() ?: continue
+                val l = ((s.members["packetsLost"] as? Number)?.toLong() ?: 0L).coerceAtLeast(0)
+                now[s.id] = r to l
+                val (r0, l0) = previous[s.id] ?: (0L to 0L)
+                val dr = (r - r0).coerceAtLeast(0)
+                val dl = (l - l0).coerceAtLeast(0)
+                received += dr
+                lost += dl
+                val peer = (s.members["mid"] as? String)?.let(c::participantOfMid) ?: continue
+                val (pr, pl) = perPeer[peer] ?: (0L to 0L)
+                perPeer[peer] = (pr + dr) to (pl + dl)
+            }
+            val hadMedia = previous.isNotEmpty()
+            previous = now
+            fun loss(r: Long, l: Long) = if (r + l == 0L) 0.0 else l * 100.0 / (r + l)
+            val total = loss(received, lost)
+            // Nothing arriving at all (the network is down) is no loss to measure, but the worst quality there is.
+            val stalled = hadMedia && now.isNotEmpty() && received == 0L
+            connectionFlow.value = ConnectionInfo(
+                quality = if (stalled) LinkQuality.POOR else grade(rtt, total),
+                rttMillis = rtt,
+                lossPercent = total,
+                peers = perPeer.mapValues { (_, v) -> if (stalled) LinkQuality.POOR else grade(rtt, loss(v.first, v.second)) },
+            )
+        }
+    }
+
+    private fun grade(rttMillis: Int?, lossPercent: Double): LinkQuality = when {
+        lossPercent >= 8 || (rttMillis ?: 0) >= 600 -> LinkQuality.POOR
+        lossPercent >= 2 || (rttMillis ?: 0) >= 300 -> LinkQuality.FAIR
+        else -> LinkQuality.GOOD
+    }
+
     // ---------------------------------------------------------------- volume and processing
 
     /** Sets the playout volume of a participant's voice, or of its screen's sound with [screen]. */
@@ -383,6 +506,12 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         unreadFlow.value = 0
         volumesFlow.value = emptyMap()
         noticeFlow.value = null
+        reconnectingFlow.value = null
+        connectionFlow.value = null
+        pinnedFlow.value = null
+        activeSpeakerFlow.value = null
+        sharingFlow.value = emptySet()
+        requestedQuality.clear()
         localVideoFlow.value = null
         openedCamera?.close()
         openedCamera = null
@@ -401,6 +530,18 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         /** Data channel topic of chat lines: UTF-8 text, sent reliably. */
         const val CHAT_TOPIC: String = "chat"
         const val MAX_VOLUME: Float = 3f
+        const val STATS_INTERVAL_MILLIS: Long = 2_000
+
+        /** Tiles up to this many pixels tall get the low simulcast layer (180p), up to the next the middle one (360p). */
+        const val LOW_LAYER_MAX_PX: Int = 240
+        const val MEDIUM_LAYER_MAX_PX: Int = 480
+
+        /** [tileKey]s of this user's own tiles. */
+        const val SELF: String = "self"
+        const val SELF_SCREEN: String = "self/screen"
+
+        /** Identifies a tile: a participant's camera, or its screen share with [screen]. */
+        fun tileKey(participantId: String, screen: Boolean): String = if (screen) "$participantId/screen" else participantId
 
         fun volumeKey(participantId: String, screen: Boolean): String = if (screen) "$participantId/screen" else participantId
     }

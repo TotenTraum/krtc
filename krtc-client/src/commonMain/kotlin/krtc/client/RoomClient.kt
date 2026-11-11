@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,6 +56,12 @@ public sealed class RoomState {
     public data object Idle : RoomState()
     public data object Connecting : RoomState()
     public data class Connected(val room: String, val selfId: String) : RoomState()
+
+    /**
+     * The signaling connection dropped ([reason]); trying again ([attempt] so far). Media keeps flowing meanwhile if
+     * its path still works; the session is resumed (same id) if the server still has it, otherwise joined anew.
+     */
+    public data class Reconnecting(val attempt: Int, val reason: String?) : RoomState()
     public data class Disconnected(val reason: String?) : RoomState()
 }
 
@@ -118,6 +125,8 @@ public class RoomClient(
     private val configuration: RTCConfiguration = RTCConfiguration(),
     private val http: HttpClient = HttpClient { install(WebSockets) },
     parentScope: CoroutineScope? = null,
+    /** How long to keep reconnecting after the signaling connection drops before giving up; 0 never reconnects. */
+    private val reconnectTimeoutMillis: Long = 60_000,
 ) {
     private val scope = CoroutineScope((parentScope?.coroutineContext ?: Dispatchers.Default) + SupervisorJob())
     private val stateFlow = MutableStateFlow<RoomState>(RoomState.Idle)
@@ -164,8 +173,17 @@ public class RoomClient(
     private var midToPeer: Map<String, String> = emptyMap()
     private var reliableChannel: RTCDataChannel? = null
     private var lossyChannel: RTCDataChannel? = null
-    private val offers = Channel<ServerMessage.Offer>(Channel.UNLIMITED)
     private var job: Job? = null
+    private var roomName = ""
+    private var displayName = ""
+    private var resumeToken: String? = null
+    private var link: Link? = null
+
+    /** Screen shares this client stopped receiving ([setSubscribed]); sent again to a new session. */
+    private val unsubscribedScreens = HashSet<String>()
+
+    /** One peer connection and the coroutines that serve it; replaced when the server lost the session. */
+    private class Link(val pc: RTCPeerConnection, val offers: Channel<ServerMessage.Offer>, val job: Job)
 
     /** The underlying peer connection once joined (for getStats and advanced use). */
     public val peerConnection: RTCPeerConnection? get() = pc
@@ -188,43 +206,129 @@ public class RoomClient(
         this.microphone = microphone
         this.camera = camera
         this.screen = screen
+        this.roomName = roomName
+        this.displayName = displayName
         stateFlow.value = RoomState.Connecting
+        startLink()
+        val ws = openSocket() ?: return
+        session = ws
+        job = scope.launch { signaling(ws) }
+    }
+
+    /** A new peer connection with its track, offer and ICE-restart handling. */
+    private fun startLink() {
         val peerConnection = factory.createPeerConnection(configuration)
+        val offers = Channel<ServerMessage.Offer>(Channel.UNLIMITED)
+        val linkJob = scope.launch {
+            launch { peerConnection.ontrack.collect { ev -> onTrack(ev.transceiver.mid, ev.track) } }
+            launch { for (offer in offers) answer(peerConnection, offer) }
+            launch { restartIceWhenStuck(peerConnection) }
+        }
         pc = peerConnection
-        val url = serverUrl.trimEnd('/') + "/ws?room=" + roomName.encodeURLParameter() + "&name=" + displayName.encodeURLParameter()
-        // Not cancellable: a handshake that completes as the caller gives up would leave an open socket nobody closes,
-        // and the SFU would keep a ghost participant. Closed here instead if the caller left or was cancelled.
+        link = Link(peerConnection, offers, linkJob)
+    }
+
+    /**
+     * The server lost this client's session (it rejoined under a new id): drop the old peer connection and everything
+     * received on it; the new session's offers bring the media back.
+     */
+    private fun restartLink() {
+        link?.let { old ->
+            old.job.cancel()
+            old.offers.close()
+            old.pc.close()
+        }
+        reliableChannel = null
+        lossyChannel = null
+        dataOpenFlow.value = false
+        midToPeer = emptyMap()
+        screenMids = emptySet()
+        for (p in participantsFlow.value) {
+            p.audioState.value = null
+            p.videoState.value = null
+            p.screenState.value = null
+            p.screenAudioState.value = null
+        }
+        startLink()
+    }
+
+    /**
+     * Opens the signaling socket, resuming the session if there is a token. Null if the client left meanwhile.
+     * Not cancellable: a handshake that completes as the caller gives up would leave an open socket nobody closes,
+     * and the SFU would keep a ghost participant. Closed here instead if the caller left or was cancelled.
+     */
+    private suspend fun openSocket(): WebSocketSession? {
+        val url = serverUrl.trimEnd('/') + "/ws?room=" + roomName.encodeURLParameter() + "&name=" + displayName.encodeURLParameter() +
+            (resumeToken?.let { "&resume=" + it.encodeURLParameter() } ?: "")
         val ws = withContext(NonCancellable) { http.webSocketSession(url) }
         if (left || !currentCoroutineContext().isActive) {
             withContext(NonCancellable) { runCatching { ws.close() } }
             currentCoroutineContext().ensureActive()
-            return
+            return null
         }
-        session = ws
-        job = scope.launch {
-            launch { peerConnection.ontrack.collect { ev -> onTrack(ev.transceiver.mid, ev.track) } }
-            launch { for (offer in offers) answer(peerConnection, offer) }
-            launch { restartIceWhenStuck(peerConnection) }
-            try {
+        return ws
+    }
+
+    /** Reads signaling until the client leaves, the server ends the session, or reconnecting gives up. */
+    private suspend fun signaling(first: WebSocketSession) {
+        var ws = first
+        while (true) {
+            val reason = try {
                 for (frame in ws.incoming) {
                     if (frame is Frame.Text) SignalingProtocol.decodeServer(frame.readText())?.let(::onMessage)
                 }
-                if (stateFlow.value !is RoomState.Disconnected) stateFlow.value = RoomState.Disconnected("closed by server")
+                "closed by server"
             } catch (t: Throwable) {
-                if (stateFlow.value !is RoomState.Disconnected) stateFlow.value = RoomState.Disconnected(t.message)
-            } finally {
-                offers.close()
+                t.message ?: t.toString()
             }
+            if (left || stateFlow.value is RoomState.Disconnected) return // left, or the server said bye
+            ws = reconnect(reason) ?: return
+            session = ws
         }
+    }
+
+    /** Opens a new socket, retrying with backoff for [reconnectTimeoutMillis]; null (and Disconnected) if it never does. */
+    private suspend fun reconnect(reason: String): WebSocketSession? {
+        val giveUpAt = kotlin.time.TimeSource.Monotonic.markNow() + kotlin.time.Duration.parse("${reconnectTimeoutMillis}ms")
+        var attempt = 0
+        while (!left && reconnectTimeoutMillis > 0 && giveUpAt.hasNotPassedNow()) {
+            attempt++
+            stateFlow.value = RoomState.Reconnecting(attempt, reason)
+            val ws = runCatching { openSocket() }.getOrElse { null }
+            if (ws != null) return ws
+            if (left) return null
+            delay(minOf(RECONNECT_MAX_DELAY_MILLIS, RECONNECT_FIRST_DELAY_MILLIS shl minOf(attempt - 1, 4)))
+        }
+        if (!left) stateFlow.value = RoomState.Disconnected(reason)
+        return null
     }
 
     private fun onMessage(message: ServerMessage) {
         when (message) {
             is ServerMessage.Welcome -> {
+                val previous = selfId
+                val resumed = previous == message.id
+                if (previous != null && !resumed) restartLink()
                 selfId = message.id
-                participantsFlow.value = message.peers.map { RemoteParticipant(it.id, it.name, it.audioMuted, it.videoMuted) }
+                resumeToken = message.resume
+                // Participants that are still there keep their objects (and, when resumed, their tracks).
+                val known = participantsFlow.value.associateBy { it.id }
+                participantsFlow.value = message.peers.map { info ->
+                    (known[info.id] ?: RemoteParticipant(info.id, info.name)).also {
+                        it.audioMutedState.value = info.audioMuted
+                        it.videoMutedState.value = info.videoMuted
+                        it.speakingState.value = false
+                    }
+                }
+                selfSpeakingFlow.value = false
                 stateFlow.value = RoomState.Connected(message.room, message.id)
-                if (mediaState.audioMuted || mediaState.videoMuted) scope.launch { send(mediaState) }
+                val newSession = !resumed
+                val stillThere = message.peers.map { it.id }.toSet()
+                unsubscribedScreens.retainAll(stillThere)
+                scope.launch {
+                    if (mediaState.audioMuted || mediaState.videoMuted) send(mediaState)
+                    if (newSession && previous != null) for (id in unsubscribedScreens) send(ClientMessage.Subscribe(id, ClientMessage.Subscribe.FEED_SCREEN, false))
+                }
             }
             is ServerMessage.PeerJoined -> participantsFlow.update { list ->
                 if (list.any { it.id == message.id }) list else list + RemoteParticipant(message.id, message.name)
@@ -241,7 +345,7 @@ public class RoomClient(
             is ServerMessage.Speaking ->
                 if (message.id == selfId) selfSpeakingFlow.value = message.speaking
                 else participant(message.id)?.speakingState?.value = message.speaking
-            is ServerMessage.Offer -> offers.trySend(message)
+            is ServerMessage.Offer -> link?.offers?.trySend(message)
             is ServerMessage.Bye -> stateFlow.value = RoomState.Disconnected(message.reason)
         }
     }
@@ -341,7 +445,10 @@ public class RoomClient(
      * [ICE_RESTART_RETRY_MILLIS] until it reconnects.
      */
     private suspend fun restartIceWhenStuck(peerConnection: RTCPeerConnection) {
-        peerConnection.connectionState.collectLatest { s ->
+        // Also re-evaluated when signaling comes back: a network change usually breaks both, and the restart can only
+        // be asked for once the socket is up again.
+        combine(peerConnection.connectionState, stateFlow) { s, room -> s to (room is RoomState.Connected) }.collectLatest { (s, signaling) ->
+            if (!signaling) return@collectLatest
             if (s != RTCPeerConnectionState.DISCONNECTED && s != RTCPeerConnectionState.FAILED) return@collectLatest
             if (s == RTCPeerConnectionState.DISCONNECTED) delay(ICE_RESTART_GRACE_MILLIS)
             while (stateFlow.value is RoomState.Connected) {
@@ -416,10 +523,19 @@ public class RoomClient(
      * frame. Everything is received by default.
      */
     public suspend fun setSubscribed(participantId: String, enabled: Boolean, screen: Boolean = true) {
-        if (screen) participant(participantId)?.screenSubscribedState?.value = enabled
+        if (screen) {
+            participant(participantId)?.screenSubscribedState?.value = enabled
+            if (enabled) unsubscribedScreens -= participantId else unsubscribedScreens += participantId
+        }
         val feed = if (screen) ClientMessage.Subscribe.FEED_SCREEN else ClientMessage.Subscribe.FEED_CAMERA
         send(ClientMessage.Subscribe(participantId, feed, enabled))
     }
+
+    /**
+     * The participant whose media a downlink m-line carries (per the latest offer), e.g. to attribute `inbound-rtp`
+     * stats (their `mid`) to participants. Null for this client's own uplinks and unused m-lines.
+     */
+    public fun participantOfMid(mid: String): String? = midToPeer[mid]
 
     /** Asks the SFU for a simulcast layer of [participantId]'s video. */
     public suspend fun setVideoQuality(participantId: String, quality: VideoQuality) {
@@ -436,6 +552,8 @@ public class RoomClient(
         val ws = session
         val peer = pc
         pc = null
+        link?.job?.cancel()
+        link = null
         session = null
         reliableChannel = null
         lossyChannel = null
@@ -447,7 +565,12 @@ public class RoomClient(
         placeholder = null
         participantsFlow.value = emptyList()
         stateFlow.value = RoomState.Disconnected("left")
-        scope.launch { runCatching { ws?.close() } }.invokeOnCompletion { scope.cancel() }
+        // Saying so lets the server remove this client at once; a socket that merely closes could be a dropped
+        // connection, which the server keeps for a while in case the client resumes.
+        scope.launch {
+            runCatching { ws?.send(Frame.Text(SignalingProtocol.encode(ClientMessage.Leave))) }
+            runCatching { ws?.close() }
+        }.invokeOnCompletion { scope.cancel() }
     }
 
     private companion object {
@@ -457,5 +580,7 @@ public class RoomClient(
         const val UPLINK_SCREEN_AUDIO_MID = "sa"
         const val ICE_RESTART_GRACE_MILLIS = 2_000L
         const val ICE_RESTART_RETRY_MILLIS = 5_000L
+        const val RECONNECT_FIRST_DELAY_MILLIS = 500L
+        const val RECONNECT_MAX_DELAY_MILLIS = 5_000L
     }
 }

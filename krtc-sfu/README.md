@@ -68,10 +68,16 @@ val sink = object : SignalSink {
     override fun send(message: ServerMessage) { myConnection.trySend(SignalingProtocol.encode(message)) }
     override fun close(reason: String) { myConnection.close(reason) }
 }
-val participant = sfu.join(JoinRequest(room, name, credentials = token), sink)   // JoinDeniedException при отказе
+val participant = sfu.join(JoinRequest(room, name, credentials = token, resumeToken = resume), sink)   // JoinDeniedException при отказе
 myConnection.onText { text -> sfu.onMessage(participant, text) }
-myConnection.onClose { sfu.leave(participant) }
+myConnection.onClose { sfu.disconnected(participant, sink) }   // или sfu.leave(participant), если возобновление не нужно
 ```
+
+**Возобновление после обрыва.** В `welcome` клиент получает секрет `resume`. Если сигнализация оборвалась, хост вызывает `disconnected`: участник остаётся в комнате на `SfuConfig.resumeTimeoutMillis` (по умолчанию 20 с), медиа продолжают идти. Клиент подключается заново с этим секретом (`JoinRequest.resumeToken`, в маршруте Ktor — параметр `resume`). Он возвращается под тем же id, получает свежий `welcome` и новое предложение. Не вернулся вовремя — выходит из комнаты.
+
+Как маршрут Ktor отличает обрыв от выхода:
+- клиент сам закрыл сокет (кадр закрытия) или прислал `leave` — выход сразу;
+- соединение пропало без кадра закрытия — участника ждут.
 
 **Управление и мониторинг:**
 
