@@ -81,6 +81,12 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setAudioProcessing(echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean): Unit =
         krtc_factory_set_audio_processing(handle, if (echoCancellation) 1 else 0, if (noiseSuppression) 1 else 0, if (autoGainControl) 1 else 0)
 
+    public actual fun setInputGate(gate: InputGate, threshold: Double, holdMillis: Int): Unit =
+        krtc_factory_set_input_gate(handle, gate.ordinal, threshold, holdMillis)
+
+    public actual val inputLevel: Double get() = krtc_factory_input_level(handle)
+    public actual val inputGateOpen: Boolean get() = krtc_factory_input_gate_open(handle) != 0
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public actual val videoCodecs: List<String>
         get() = krtc_factory_video_codecs(handle)!!.let { p -> p.toKString().also { krtc_free(p) } }.split(' ').filter { it.isNotEmpty() }

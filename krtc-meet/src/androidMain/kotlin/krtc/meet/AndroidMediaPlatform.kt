@@ -49,11 +49,13 @@ class AndroidMediaPlatform(
 
     override fun screens(): List<ScreenChoice> = listOf(ScreenChoice("Экран или приложение (выбор в системном окне)"))
 
-    override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int): OpenedScreen? {
+    override suspend fun openScreen(
+        factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
+    ): OpenedScreen? {
         val (code, data) = requestScreenConsent() ?: return null
         val video = factory.createScreencastSource()
         val audio = if (withAudio) factory.createAudioSource() else null
-        return runCatching { AndroidScreenCapture(context, code, data, video, fps = fps, audio = audio).apply { start() } }
+        return runCatching { AndroidScreenCapture(context, code, data, video, maxWidth = maxWidth, maxHeight = maxHeight, fps = fps, audio = audio).apply { start() } }
             .map { OpenedScreen(video, audio, it) }
             .getOrElse { video.close(); audio?.close(); null }
     }

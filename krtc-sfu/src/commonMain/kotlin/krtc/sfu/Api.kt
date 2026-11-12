@@ -191,6 +191,8 @@ public data class ParticipantInfo(
     /** The participant muted its microphone / camera itself (its client said so); [audioMuted] and [videoMuted] are the host's mute. */
     val audioMutedByClient: Boolean = false,
     val videoMutedByClient: Boolean = false,
+    /** The participant turned the room's sound off for itself (its client said so). */
+    val deafened: Boolean = false,
 )
 
 public data class RoomInfo(val name: String, val participants: List<ParticipantInfo>)

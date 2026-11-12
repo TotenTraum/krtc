@@ -1,6 +1,22 @@
 package krtc.meet
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -197,6 +213,11 @@ fun CallScreen(session: MeetSession, room: String) {
     val speaker by session.activeSpeaker.collectAsState()
     val micOn by session.micOn.collectAsState()
     val cameraOn by session.cameraOn.collectAsState()
+    val deafened by session.deafened.collectAsState()
+    val input by session.inputSettings.collectAsState()
+    val expanded by session.expanded.collectAsState()
+    var membersOpen by remember { mutableStateOf<Boolean?>(null) } // null: shown on wide windows
+    var typing by remember { mutableStateOf(false) }
 
     val tiles = buildList {
         add(TileSpec.Self)
@@ -205,10 +226,22 @@ fun CallScreen(session: MeetSession, room: String) {
         participants.filter { it.id in sharing }.forEach { add(TileSpec.Screen(it)) }
     }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    // Keyboard shortcuts work wherever the focus is inside the call screen.
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val keys = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { handleKey(session, it, typing) }
+
+    // A tile expanded to the whole window (a stream being watched): nothing else on screen.
+    tiles.firstOrNull { it.key == expanded }?.let { spec ->
+        Box(Modifier.fillMaxSize().then(keys)) { TileFor(session, spec, pinned = false, expanded = true, Modifier.fillMaxSize()) }
+        return
+    }
+
+    Column(Modifier.fillMaxSize().then(keys).padding(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("$room · ${participants.size + 1} в звонке", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             ConnectionBadge(session)
+            TextButton(onClick = { membersOpen = !(membersOpen ?: true) }) { Text("Участники") }
             TextButton(onClick = { session.setLayout(if (layout == Layout.GRID) Layout.SPEAKER else Layout.GRID) }) {
                 Text(if (layout == Layout.GRID) "Докладчик" else "Сетка")
             }
@@ -220,12 +253,15 @@ fun CallScreen(session: MeetSession, room: String) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val wide = maxWidth >= 720.dp
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!chatOpen || wide) {
+                // On a phone the list takes the place of the tiles while it is open.
+                val members = membersOpen ?: wide
+                if (members && (wide || !chatOpen)) MembersPanel(session, participants, sharing, if (wide) Modifier.width(230.dp).fillMaxHeight() else Modifier.fillMaxSize())
+                if ((!chatOpen || wide) && (wide || !members)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        val tile: @Composable (TileSpec, Modifier) -> Unit = { spec, m -> TileFor(session, spec, pinned == spec.key, m) }
+                        val tile: @Composable (TileSpec, Modifier, Boolean) -> Unit = { spec, m, compact -> TileFor(session, spec, pinned == spec.key, expanded = false, m, compact) }
                         if (layout == Layout.GRID) {
                             LazyVerticalGrid(GridCells.Adaptive(minSize = 300.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(tiles, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxWidth().aspectRatio(16f / 9f)) }
+                                items(tiles, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxWidth().aspectRatio(16f / 9f), false) }
                             }
                         } else {
                             // The large tile: what the user pinned, else a screen share, else whoever spoke last.
@@ -235,18 +271,18 @@ fun CallScreen(session: MeetSession, room: String) {
                                 ?: tiles.firstOrNull { it is TileSpec.Camera }
                                 ?: tiles.first()
                             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                tile(main, Modifier.weight(1f).fillMaxWidth())
+                                tile(main, Modifier.weight(1f).fillMaxWidth(), false)
                                 val others = tiles.filter { it !== main }
                                 if (others.isNotEmpty()) {
                                     LazyRow(Modifier.fillMaxWidth().height(110.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        items(others, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxHeight().aspectRatio(16f / 9f)) }
+                                        items(others, key = { it.key }) { spec -> tile(spec, Modifier.fillMaxHeight().aspectRatio(16f / 9f), true) }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                if (chatOpen) ChatPanel(session, if (wide) Modifier.width(320.dp).fillMaxHeight() else Modifier.fillMaxSize())
+                if (chatOpen) ChatPanel(session, if (wide) Modifier.width(320.dp).fillMaxHeight() else Modifier.fillMaxSize()) { typing = it }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -256,13 +292,111 @@ fun CallScreen(session: MeetSession, room: String) {
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilledTonalButton(onClick = session::toggleMic) { Text(if (micOn) "Выключить микрофон" else "Включить микрофон") }
+            FilledTonalButton(onClick = session::toggleMic) { Text(if (micOn && !deafened) "Выключить микрофон" else "Включить микрофон") }
+            if (input.mode == InputMode.PUSH_TO_TALK && micOn && !deafened) PushToTalkButton(session)
+            FilledTonalButton(onClick = session::toggleDeafen) { Text(if (deafened) "Включить звук" else "Заглушить всё") }
             FilledTonalButton(onClick = session::toggleCamera, enabled = local != null) { Text(if (cameraOn) "Выключить камеру" else "Включить камеру") }
             ScreenShareButton(session, sharing = ownScreen != null)
             FilledTonalButton(onClick = { session.setChatOpen(!chatOpen) }) { Text(if (unread > 0 && !chatOpen) "Чат ($unread)" else "Чат") }
             SoundMenu(session)
             Button(onClick = session::leave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Выйти") }
         }
+    }
+}
+
+/**
+ * Shortcuts: Ctrl/Cmd+Shift+M mutes, Ctrl/Cmd+Shift+D deafens, Esc leaves the expanded tile, and ` (the key under Esc)
+ * is push-to-talk while that mode is on and no text is being typed. They work while the window has the focus.
+ */
+private fun handleKey(session: MeetSession, e: KeyEvent, typing: Boolean): Boolean {
+    val down = e.type == KeyEventType.KeyDown
+    val shortcut = (e.isCtrlPressed || e.isMetaPressed) && e.isShiftPressed
+    return when {
+        down && shortcut && e.key == Key.M -> { session.toggleMic(); true }
+        down && shortcut && e.key == Key.D -> { session.toggleDeafen(); true }
+        down && e.key == Key.Escape && session.expanded.value != null -> { session.setExpanded(null); true }
+        e.key == Key.Grave && !typing && session.inputSettings.value.mode == InputMode.PUSH_TO_TALK -> {
+            session.setPushToTalk(down)
+            true
+        }
+        else -> false
+    }
+}
+
+/** Push-to-talk for touch screens (and the mouse): transmits while pressed. */
+@Composable
+private fun PushToTalkButton(session: MeetSession) {
+    val transmitting by session.transmitting.collectAsState()
+    Box(
+        Modifier.clip(RoundedCornerShape(20.dp))
+            .background(if (transmitting) Speaking else MaterialTheme.colorScheme.primaryContainer)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    session.setPushToTalk(true)
+                    tryAwaitRelease()
+                    session.setPushToTalk(false)
+                })
+            }
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+    ) { Text(if (transmitting) "Говорите…" else "Удерживайте, чтобы говорить", color = if (transmitting) Color.Black else MaterialTheme.colorScheme.onPrimaryContainer) }
+}
+
+/** Who is in the call: speaking, muted, deafened, live; click a name to pin it, a stream to watch or leave it. */
+@Composable
+private fun MembersPanel(session: MeetSession, participants: List<RemoteParticipant>, sharing: Set<String>, modifier: Modifier) {
+    val micOn by session.micOn.collectAsState()
+    val deafened by session.deafened.collectAsState()
+    val transmitting by session.transmitting.collectAsState()
+    val selfSpeaking by session.selfSpeaking.collectAsState()
+    val ownScreen by session.screen.collectAsState()
+    Column(modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("В звонке — ${participants.size + 1}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
+        LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            item(key = "self") {
+                MemberRow(
+                    name = "${session.settings?.name ?: ""} (вы)", speaking = selfSpeaking && transmitting,
+                    status = listOfNotNull("заглушён".takeIf { deafened }, "микрофон выключен".takeIf { !micOn && !deafened }),
+                    live = ownScreen != null, onClick = { session.togglePin(MeetSession.SELF) },
+                )
+            }
+            items(participants, key = { it.id }) { p ->
+                val speaking by p.speaking.collectAsState()
+                val audioMuted by p.audioMuted.collectAsState()
+                val deaf by p.deafened.collectAsState()
+                val watching by p.screenSubscribed.collectAsState()
+                MemberRow(
+                    name = p.name, speaking = speaking && !audioMuted,
+                    status = listOfNotNull("заглушён".takeIf { deaf }, "микрофон выключен".takeIf { audioMuted && !deaf }),
+                    live = p.id in sharing, onClick = { session.togglePin(MeetSession.tileKey(p.id, screen = false)) },
+                ) {
+                    if (p.id in sharing) OverlayButton(if (watching) "Не смотреть" else "Смотреть") { session.setScreenSubscribed(p, !watching) }
+                    VolumeMenu(session, p, screen = false, compact = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberRow(name: String, speaking: Boolean, status: List<String>, live: Boolean, onClick: () -> Unit, actions: (@Composable () -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The initial in a circle, ringed while speaking.
+            Box(
+                Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.surface)
+                    .border(BorderStroke(2.dp, if (speaking) Speaking else Color.Transparent), RoundedCornerShape(15.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.labelLarge) }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (live) Text("В ЭФИРЕ", color = Color.White, maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFFE5534B)).padding(horizontal = 4.dp, vertical = 1.dp))
+                }
+                if (status.isNotEmpty()) Text(status.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        // Volume and stream controls under the name, so a narrow panel does not squeeze the name out.
+        if (actions != null) Row(Modifier.padding(start = 32.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
     }
 }
 
@@ -301,19 +435,26 @@ private fun ConnectionBadge(session: MeetSession) {
 }
 
 @Composable
-private fun TileFor(session: MeetSession, spec: TileSpec, pinned: Boolean, modifier: Modifier) {
+private fun TileFor(session: MeetSession, spec: TileSpec, pinned: Boolean, expanded: Boolean, modifier: Modifier, compact: Boolean = false) {
     val pin = { session.togglePin(spec.key) }
+    // Small tiles (the strip under the large one) have no room for it: click to make them large first.
+    val expand: (() -> Unit)? = if (compact) null else ({ session.setExpanded(if (expanded) null else spec.key) })
     when (spec) {
         TileSpec.Self -> {
             val local by session.localVideo.collectAsState()
             val cameraOn by session.cameraOn.collectAsState()
             val micOn by session.micOn.collectAsState()
             val speaking by session.selfSpeaking.collectAsState()
-            Tile(local.takeIf { cameraOn }, "${session.settings?.name ?: ""} (вы)", speaking && micOn, modifier, mirror = true, muted = !micOn, pinned = pinned, onClick = pin)
+            val transmitting by session.transmitting.collectAsState()
+            val deafened by session.deafened.collectAsState()
+            Tile(
+                local.takeIf { cameraOn }, "${session.settings?.name ?: ""} (вы)", speaking && transmitting, modifier, mirror = true,
+                muted = !micOn && !deafened, deafened = deafened, pinned = pinned, expanded = expanded, onExpand = expand, onClick = pin,
+            )
         }
-        TileSpec.SelfScreen -> Tile(session.screen.collectAsState().value, "Ваш экран", speaking = false, modifier, fit = true, pinned = pinned, onClick = pin)
-        is TileSpec.Camera -> RemoteTile(session, spec.p, pinned, modifier, pin)
-        is TileSpec.Screen -> RemoteScreenTile(session, spec.p, pinned, modifier, pin)
+        TileSpec.SelfScreen -> Tile(session.screen.collectAsState().value, "Ваш экран", speaking = false, modifier, fit = true, pinned = pinned, expanded = expanded, onExpand = expand, onClick = pin)
+        is TileSpec.Camera -> RemoteTile(session, spec.p, pinned, expanded, expand, modifier, compact, pin)
+        is TileSpec.Screen -> RemoteScreenTile(session, spec.p, pinned, expanded, expand, modifier, pin)
     }
 }
 
@@ -334,6 +475,13 @@ private fun ScreenShareButton(session: MeetSession, sharing: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { withAudio = !withAudio }.padding(end = 12.dp)) {
                 Checkbox(withAudio, { withAudio = it })
                 Text("Со звуком")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("Разрешение", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
+                val height by session.screenHeight.collectAsState()
+                MeetSession.SCREEN_HEIGHT_CHOICES.forEach { choice ->
+                    FilterChip(selected = height == choice, onClick = { session.setScreenHeight(choice) }, label = { Text(if (choice == MeetSession.SOURCE_HEIGHT) "Исходное" else "${choice}p") })
+                }
             }
             // Frame rate: 15 is enough for slides and code, 30 and 60 for video and scrolling.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -362,7 +510,8 @@ private fun SoundMenu(session: MeetSession) {
             Column(Modifier.width(360.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (session.settings?.testAudio == false && session.audioDeviceChoice) AudioDevicePickers(session)
                 val processing by session.audioProcessing.collectAsState()
-                Text("Микрофон", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                InputModeSettings(session)
+                Text("Обработка микрофона", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 CheckRow("Адаптивная громкость (автоусиление)", processing.autoGainControl) { session.setAudioProcessing(processing.copy(autoGainControl = it)) }
                 CheckRow("Шумоподавление", processing.noiseSuppression) { session.setAudioProcessing(processing.copy(noiseSuppression = it)) }
                 CheckRow("Эхоподавление", processing.echoCancellation) { session.setAudioProcessing(processing.copy(echoCancellation = it)) }
@@ -370,6 +519,34 @@ private fun SoundMenu(session: MeetSession) {
         }
     }
 }
+
+/** When the microphone transmits: always, by voice (with a threshold and a live level meter) or by push-to-talk. */
+@Composable
+private fun InputModeSettings(session: MeetSession) {
+    val input by session.inputSettings.collectAsState()
+    val level by session.inputLevel.collectAsState()
+    val transmitting by session.transmitting.collectAsState()
+    val cues by session.cues.collectAsState()
+    Text("Режим ввода", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+    for ((mode, label) in listOf(InputMode.OPEN to "Микрофон всегда включён", InputMode.VOICE_ACTIVITY to "Активация по голосу", InputMode.PUSH_TO_TALK to "Нажми и говори (клавиша ` или кнопка)")) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { session.setInputSettings(input.copy(mode = mode)) }) {
+            RadioButton(selected = input.mode == mode, onClick = { session.setInputSettings(input.copy(mode = mode)) })
+            Text(label)
+        }
+    }
+    // The meter: the level now (green while it gets through), with the threshold as the slider under it.
+    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth((level / METER_FULL_SCALE).coerceIn(0f, 1f)).background(if (transmitting) Speaking else MaterialTheme.colorScheme.outline))
+    }
+    if (input.mode == InputMode.VOICE_ACTIVITY) {
+        Text("Порог срабатывания: говорите и подвиньте его чуть ниже уровня голоса", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Slider(input.threshold, { session.setInputSettings(input.copy(threshold = it)) }, valueRange = 0f..METER_FULL_SCALE)
+    }
+    CheckRow("Звуки входа, выхода и микрофона", cues, session::setCues)
+}
+
+/** The level that fills the input meter; speech peaks rarely go above half of full scale. */
+private const val METER_FULL_SCALE = 0.5f
 
 @Composable
 private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
@@ -380,7 +557,7 @@ private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Uni
 }
 
 @Composable
-private fun ChatPanel(session: MeetSession, modifier: Modifier) {
+private fun ChatPanel(session: MeetSession, modifier: Modifier, onTyping: (Boolean) -> Unit = {}) {
     val messages by session.chat.collectAsState()
     var draft by remember { mutableStateOf("") }
     val list = rememberLazyListState()
@@ -407,7 +584,8 @@ private fun ChatPanel(session: MeetSession, modifier: Modifier) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
-                draft, { draft = it }, placeholder = { Text("Сообщение") }, singleLine = true, modifier = Modifier.weight(1f),
+                draft, { draft = it }, placeholder = { Text("Сообщение") }, singleLine = true,
+                modifier = Modifier.weight(1f).onFocusChanged { onTyping(it.isFocused) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }),
             )
             Button(onClick = send, enabled = draft.isNotBlank()) { Text("➤") }
@@ -416,21 +594,22 @@ private fun ChatPanel(session: MeetSession, modifier: Modifier) {
 }
 
 @Composable
-private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, expanded: Boolean, onExpand: (() -> Unit)?, modifier: Modifier, compact: Boolean, onClick: () -> Unit) {
     val video by p.video.collectAsState()
     val speaking by p.speaking.collectAsState()
     val audioMuted by p.audioMuted.collectAsState()
     val videoMuted by p.videoMuted.collectAsState()
+    val deafened by p.deafened.collectAsState()
     val quality = session.connection.collectAsState().value?.peers?.get(p.id)
     // The SFU sends the simulcast layer that fills this tile; none needed while it is off screen.
     DisposableEffect(p) { onDispose { session.setTileHeight(p, 0) } }
     Tile(
         video.takeIf { !videoMuted }, p.name, speaking && !audioMuted,
         modifier.onSizeChanged { session.setTileHeight(p, it.height) },
-        muted = audioMuted, pinned = pinned, onClick = onClick,
+        muted = audioMuted && !deafened, deafened = deafened, pinned = pinned, expanded = expanded, onExpand = onExpand, onClick = onClick,
         warning = quality?.takeIf { it != LinkQuality.GOOD }?.let { "связь ${it.label()}" },
     ) {
-        VolumeMenu(session, p, screen = false, Modifier.align(Alignment.TopEnd))
+        VolumeMenu(session, p, screen = false, Modifier.align(Alignment.TopEnd), compact = compact)
     }
 }
 
@@ -439,11 +618,11 @@ private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boole
  * meanwhile).
  */
 @Composable
-private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, expanded: Boolean, onExpand: (() -> Unit)?, modifier: Modifier, onClick: () -> Unit) {
     val screen by p.screen.collectAsState()
     val subscribed by p.screenSubscribed.collectAsState()
     val sound by p.screenAudio.collectAsState()
-    Tile(screen.takeIf { subscribed }, "${p.name} — экран", speaking = false, modifier, fit = true, placeholder = !subscribed, pinned = pinned, onClick = onClick) {
+    Tile(screen.takeIf { subscribed }, "${p.name} — экран", speaking = false, modifier, fit = true, placeholder = !subscribed, pinned = pinned, expanded = expanded, onExpand = onExpand?.takeIf { subscribed }, onClick = onClick) {
         if (subscribed) {
             Row(Modifier.align(Alignment.TopEnd)) {
                 if (sound != null) VolumeMenu(session, p, screen = true)
@@ -460,12 +639,12 @@ private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned:
 
 /** Volume of a participant's voice (or its screen's sound), 0–300 %. */
 @Composable
-private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boolean, modifier: Modifier = Modifier) {
+private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boolean, modifier: Modifier = Modifier, compact: Boolean = false) {
     val volumes by session.volumes.collectAsState()
     val volume = volumes[MeetSession.volumeKey(p.id, screen)] ?: 1f
     Box(modifier) {
         var open by remember { mutableStateOf(false) }
-        OverlayButton(if (volume == 0f) "Без звука" else "Громкость ${(volume * 100).roundToInt()} %") { open = true }
+        OverlayButton(if (volume == 0f) "Без звука" else if (compact) "${(volume * 100).roundToInt()} %" else "Громкость ${(volume * 100).roundToInt()} %") { open = true }
         DropdownMenu(open, onDismissRequest = { open = false }) {
             Column(Modifier.width(280.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(if (screen) "Звук экрана: ${p.name}" else "Голос: ${p.name}", style = MaterialTheme.typography.labelLarge)
@@ -482,7 +661,7 @@ private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boole
 @Composable
 private fun OverlayButton(label: String, onClick: () -> Unit) {
     Text(
-        label, color = Color.White, style = MaterialTheme.typography.labelMedium,
+        label, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false,
         modifier = Modifier.padding(6.dp).clip(RoundedCornerShape(6.dp)).background(Color(0x99000000)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }
@@ -499,6 +678,9 @@ private fun Tile(
     placeholder: Boolean = false,
     pinned: Boolean = false,
     warning: String? = null,
+    deafened: Boolean = false,
+    expanded: Boolean = false,
+    onExpand: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -513,10 +695,11 @@ private fun Tile(
         Column(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
             warning?.let { Text(it, color = Color(0xFFFFC857), style = MaterialTheme.typography.labelSmall) }
             Text(
-                label + (if (muted) " · микрофон выключен" else "") + (if (pinned) " · закреплено" else ""),
+                label + (if (deafened) " · заглушён" else if (muted) " · микрофон выключен" else "") + (if (pinned) " · закреплено" else ""),
                 color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         overlay()
+        if (onExpand != null) Box(Modifier.align(Alignment.TopStart)) { OverlayButton(if (expanded) "Свернуть" else "Развернуть", onExpand) }
     }
 }

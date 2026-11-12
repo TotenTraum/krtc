@@ -13,9 +13,9 @@ class SignalingTest {
         )
         assertEquals("""{"type":"layer","peer":"a","layer":"q"}""", SignalingProtocol.encode(ClientMessage.Layer("a", "q")))
         assertEquals("""{"type":"renegotiate"}""", SignalingProtocol.encode(ClientMessage.Renegotiate))
-        assertEquals("""{"type":"media-state","audioMuted":true,"videoMuted":false}""", SignalingProtocol.encode(ClientMessage.MediaState(true, false)))
+        assertEquals("""{"type":"media-state","audioMuted":true,"videoMuted":false,"deafened":false}""", SignalingProtocol.encode(ClientMessage.MediaState(true, false)))
         assertEquals("""{"type":"subscribe","peer":"a","feed":"screen","enabled":false}""", SignalingProtocol.encode(ClientMessage.Subscribe("a", ClientMessage.Subscribe.FEED_SCREEN, false)))
-        assertEquals("""{"type":"peer-state","id":"a","audioMuted":false,"videoMuted":true}""", SignalingProtocol.encode(ServerMessage.PeerState("a", false, true)))
+        assertEquals("""{"type":"peer-state","id":"a","audioMuted":false,"videoMuted":true,"deafened":false}""", SignalingProtocol.encode(ServerMessage.PeerState("a", false, true)))
         assertEquals("""{"type":"leave"}""", SignalingProtocol.encode(ClientMessage.Leave))
         assertEquals(
             """{"type":"welcome","id":"1","room":"r","peers":[],"protocol":1,"resume":"t"}""",

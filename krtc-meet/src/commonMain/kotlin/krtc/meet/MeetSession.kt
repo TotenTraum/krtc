@@ -6,6 +6,7 @@ import krtc.client.RoomState
 import krtc.client.VideoQuality
 import krtc.core.MediaStreamTrack
 import krtc.native.AudioDevice
+import krtc.native.InputGate
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
 import krtc.native.NativeVideoSource
@@ -55,6 +56,27 @@ enum class LinkQuality { GOOD, FAIR, POOR }
 data class ConnectionInfo(val quality: LinkQuality, val rttMillis: Int?, val lossPercent: Double, val peers: Map<String, LinkQuality>)
 
 enum class Layout { GRID, SPEAKER }
+
+/** When the microphone transmits (while it is not muted). */
+enum class InputMode {
+    /** Always. */
+    OPEN,
+
+    /** While the input level is above [InputSettings.threshold], and a moment after. */
+    VOICE_ACTIVITY,
+
+    /** While the push-to-talk key or button is held. */
+    PUSH_TO_TALK,
+}
+
+/** [threshold]: the input level (0..1, as in `getStats` audioLevel) that opens the microphone with [InputMode.VOICE_ACTIVITY]. */
+data class InputSettings(val mode: InputMode = InputMode.OPEN, val threshold: Float = 0.05f)
+
+/** Short sounds for what happens in the call. */
+enum class Cue { JOIN, LEAVE, MUTE, UNMUTE, DEAFEN, UNDEAFEN }
+
+/** Plays [cue] on the device's speakers, without blocking. */
+expect fun playCue(cue: Cue)
 
 /** A chat line; [from] is null for the server, [mine] for this user's own lines. */
 data class ChatMessage(val from: String?, val text: String, val mine: Boolean = false)
@@ -107,6 +129,27 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         screenFpsFlow.value = fps.coerceIn(1, 60)
     }
 
+    private val screenHeightFlow = MutableStateFlow(DEFAULT_SCREEN_HEIGHT)
+
+    /**
+     * Resolution of the next screen share, as a height ([SCREEN_HEIGHT_CHOICES]; [SOURCE_HEIGHT]: as captured, up to
+     * 4K). Lower is lighter for everyone watching.
+     */
+    val screenHeight: StateFlow<Int> = screenHeightFlow.asStateFlow()
+
+    fun setScreenHeight(height: Int) {
+        screenHeightFlow.value = height
+    }
+
+    private val expandedFlow = MutableStateFlow<String?>(null)
+
+    /** The tile ([tileKey]) that fills the whole window, e.g. a stream being watched; null: the normal layout. */
+    val expanded: StateFlow<String?> = expandedFlow.asStateFlow()
+
+    fun setExpanded(key: String?) {
+        expandedFlow.value = key
+    }
+
     /** This user's screen share, while it runs. */
     val screen: StateFlow<MediaStreamTrack?> = screenFlow.asStateFlow()
     val chat: StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
@@ -117,6 +160,27 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
 
     /** A short message for the user (e.g. a screen share that could not start); cleared by [dismissNotice]. */
     val notice: StateFlow<String?> = noticeFlow.asStateFlow()
+
+    private val inputFlowSettings = MutableStateFlow(InputSettings())
+    private val inputLevelFlow = MutableStateFlow(0f)
+    private val transmittingFlow = MutableStateFlow(false)
+    private val deafenedFlow = MutableStateFlow(false)
+    private val cuesFlow = MutableStateFlow(true)
+
+    /** When the microphone transmits: always, by voice or by push-to-talk. */
+    val inputSettings: StateFlow<InputSettings> = inputFlowSettings.asStateFlow()
+
+    /** The microphone's level (0..1) a few times a second, also while it does not transmit. */
+    val inputLevel: StateFlow<Float> = inputLevelFlow.asStateFlow()
+
+    /** Whether the microphone is sending right now: not muted, and its [InputMode] lets it. */
+    val transmitting: StateFlow<Boolean> = transmittingFlow.asStateFlow()
+
+    /** The room's sound is off for this user, and so is the microphone; the others see it. */
+    val deafened: StateFlow<Boolean> = deafenedFlow.asStateFlow()
+
+    /** Whether join, leave and mute sounds play. */
+    val cues: StateFlow<Boolean> = cuesFlow.asStateFlow()
 
     private val reconnectingFlow = MutableStateFlow<Int?>(null)
     private val connectionFlow = MutableStateFlow<ConnectionInfo?>(null)
@@ -231,6 +295,9 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                 }
                 localVideoFlow.value = camera
                 micOnFlow.value = true
+                deafenedFlow.value = false
+                pttHeld = false
+                applyGate()
                 cameraOnFlow.value = camera != null
                 val c = RoomClient(settings.server, f)
                 client = c
@@ -240,6 +307,12 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                     val watched = HashSet<String>()
                     launch {
                         c.participants.collect { list ->
+                            val before = participantsFlow.value.map { it.id }.toSet()
+                            val now = list.map { it.id }.toSet()
+                            // Not for the people already there on joining, nor while reconnecting.
+                            if (phaseFlow.value is CallPhase.InCall && reconnectingFlow.value == null) {
+                                if ((now - before).isNotEmpty()) cue(Cue.JOIN) else if ((before - now).isNotEmpty()) cue(Cue.LEAVE)
+                            }
                             participantsFlow.value = list
                             for (p in list) if (watched.add(p.id)) {
                                 launch { applyVolumes(p) }
@@ -251,6 +324,7 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
                         }
                     }
                     launch { watchConnection(c) }
+                    launch { watchInput() }
                     launch { c.selfSpeaking.collect { selfSpeakingFlow.value = it } }
                     launch {
                         c.data.collect { d ->
@@ -281,10 +355,81 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
     }
 
     fun toggleMic() {
-        val track = mic ?: return
-        track.enabled = !track.enabled
-        micOnFlow.value = track.enabled
+        if (mic == null) return
+        if (deafenedFlow.value) deafenedFlow.value = false // unmuting also ends deafen: you want to be heard and to hear
+        else micOnFlow.value = !micOnFlow.value
+        cue(if (micOnFlow.value) Cue.UNMUTE else Cue.MUTE)
+        applyGate()
         announceMediaState()
+    }
+
+    /** Turns the room's sound off (and the microphone with it) or back on; the microphone returns to how it was. */
+    fun toggleDeafen() {
+        deafenedFlow.value = !deafenedFlow.value
+        cue(if (deafenedFlow.value) Cue.DEAFEN else Cue.UNDEAFEN)
+        applyGate()
+        announceMediaState()
+    }
+
+    fun setInputSettings(settings: InputSettings) {
+        inputFlowSettings.value = settings.copy(threshold = settings.threshold.coerceIn(0f, 1f))
+        applyGate()
+    }
+
+    /** Push-to-talk: the key or button went down or up. */
+    fun setPushToTalk(held: Boolean) {
+        if (pttHeld == held) return
+        pttHeld = held
+        if (!held) pttReleasedAt = clock.markNow()
+        applyGate()
+        if (!held && inputFlowSettings.value.mode == InputMode.PUSH_TO_TALK) {
+            scope.launch { kotlinx.coroutines.delay(PTT_RELEASE_MILLIS + 20); applyGate() } // close after the tail
+        }
+    }
+
+    fun setCues(enabled: Boolean) {
+        cuesFlow.value = enabled
+    }
+
+    private fun cue(cue: Cue) {
+        // Not with test audio: that mode is for running without sound hardware.
+        if (cuesFlow.value && settings?.testAudio == false) runCatching { playCue(cue) }
+    }
+
+    private val clock = kotlin.time.TimeSource.Monotonic
+    private var pttHeld = false
+    private var pttReleasedAt: kotlin.time.TimeMark? = null
+
+    /**
+     * Applies mute, deafen and the input mode: the track is disabled only for mute and deafen; the input mode is
+     * the factory's gate, which silences the microphone natively, frame by frame.
+     */
+    private fun applyGate() {
+        val track = mic ?: return
+        val f = factory ?: return
+        val allowed = micOnFlow.value && !deafenedFlow.value
+        if (track.enabled != allowed) track.enabled = allowed
+        val input = inputFlowSettings.value
+        when (input.mode) {
+            InputMode.OPEN -> f.setInputGate(InputGate.OPEN)
+            InputMode.VOICE_ACTIVITY -> f.setInputGate(InputGate.VOICE_ACTIVITY, input.threshold.toDouble(), VOICE_HOLD_MILLIS.toInt())
+            // A short tail, so the end of the last word is not cut off.
+            InputMode.PUSH_TO_TALK -> {
+                val open = pttHeld || pttReleasedAt?.let { it.elapsedNow().inWholeMilliseconds < PTT_RELEASE_MILLIS } == true
+                f.setInputGate(if (open) InputGate.OPEN else InputGate.CLOSED)
+            }
+        }
+        transmittingFlow.value = allowed && f.inputGateOpen
+    }
+
+    /** Follows the microphone's level and the gate, for the meter and the "transmitting" indicator. */
+    private suspend fun watchInput() {
+        while (true) {
+            kotlinx.coroutines.delay(LEVEL_POLL_MILLIS)
+            val f = factory ?: continue
+            inputLevelFlow.value = f.inputLevel.toFloat()
+            transmittingFlow.value = micOnFlow.value && !deafenedFlow.value && f.inputGateOpen
+        }
     }
 
     fun toggleCamera() {
@@ -296,7 +441,8 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
 
     private fun announceMediaState() {
         val c = client ?: return
-        scope.launch { runCatching { c.setMediaState(audioMuted = !micOnFlow.value, videoMuted = camera == null || !cameraOnFlow.value) } }
+        val deaf = deafenedFlow.value
+        scope.launch { runCatching { c.setMediaState(audioMuted = !micOnFlow.value || deaf, videoMuted = camera == null || !cameraOnFlow.value, deafened = deaf) } }
     }
 
     // ---------------------------------------------------------------- screen share
@@ -309,7 +455,8 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         val f = factory ?: return
         val c = client ?: return
         scope.launch {
-            val opened = runCatching { platform.openScreen(f, choice, withAudio, screenFpsFlow.value) }.getOrNull()
+            val height = screenHeightFlow.value
+            val opened = runCatching { platform.openScreen(f, choice, withAudio, screenFpsFlow.value, height * 16 / 9, height) }.getOrNull()
             if (opened == null) {
                 noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
                 return@launch
@@ -469,7 +616,7 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         kotlinx.coroutines.coroutineScope {
             for (screen in listOf(false, true)) launch {
                 val key = volumeKey(p.id, screen)
-                combine(if (screen) p.screenAudio else p.audio, volumesFlow.map { it[key] ?: 1f }) { t, v -> t to v }
+                combine(if (screen) p.screenAudio else p.audio, volumesFlow.map { it[key] ?: 1f }, deafenedFlow) { t, v, deaf -> t to (if (deaf) 0f else v) }
                     .collect { (t, v) -> (t as? NativeTrack)?.setVolume(v.toDouble()) }
             }
         }
@@ -488,6 +635,7 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         val old = mic ?: return
         val fresh = f.createAudioTrack("mic").also { it.enabled = old.enabled }
         mic = fresh
+        applyGate()
         scope.launch {
             runCatching { c.setMicrophone(fresh) }
             old.release()
@@ -519,8 +667,11 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         volumesFlow.value = emptyMap()
         noticeFlow.value = null
         reconnectingFlow.value = null
+        transmittingFlow.value = false
+        inputLevelFlow.value = 0f
         connectionFlow.value = null
         pinnedFlow.value = null
+        expandedFlow.value = null
         activeSpeakerFlow.value = null
         sharingFlow.value = emptySet()
         requestedQuality.clear()
@@ -533,6 +684,7 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         camera = null
         mic?.release()
         mic = null
+        runCatching { factory?.setInputGate(InputGate.OPEN) } // the shared factory outlives the call
         factory = null
         callFactory?.close()
         callFactory = null
@@ -544,7 +696,19 @@ class MeetSession(private val scope: CoroutineScope, private val platform: Media
         const val MAX_VOLUME: Float = 3f
         val SCREEN_FPS_CHOICES: List<Int> = listOf(15, 30, 60)
         const val DEFAULT_SCREEN_FPS: Int = 15
+
+        /** Captured as it is, limited to 4K. */
+        const val SOURCE_HEIGHT: Int = 2160
+        val SCREEN_HEIGHT_CHOICES: List<Int> = listOf(720, 1080, SOURCE_HEIGHT)
+        const val DEFAULT_SCREEN_HEIGHT: Int = 1080
         const val STATS_INTERVAL_MILLIS: Long = 2_000
+
+        /** How often the input level and the gate are read for the meter. */
+        const val LEVEL_POLL_MILLIS: Long = 50
+
+        /** The voice gate stays open this long after the level fell below the threshold. */
+        const val VOICE_HOLD_MILLIS: Long = 400
+        const val PTT_RELEASE_MILLIS: Long = 200
 
         /** Tiles up to this many pixels tall get the low simulcast layer (180p), up to the next the middle one (360p). */
         const val LOW_LAYER_MAX_PX: Int = 240

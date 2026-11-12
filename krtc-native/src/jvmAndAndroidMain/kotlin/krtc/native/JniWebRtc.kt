@@ -55,6 +55,12 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setAudioProcessing(echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean): Unit =
         Jni.factorySetAudioProcessing(handle, echoCancellation, noiseSuppression, autoGainControl)
 
+    public actual fun setInputGate(gate: InputGate, threshold: Double, holdMillis: Int): Unit =
+        Jni.factorySetInputGate(handle, gate.ordinal, threshold, holdMillis)
+
+    public actual val inputLevel: Double get() = Jni.factoryInputLevel(handle)
+    public actual val inputGateOpen: Boolean get() = Jni.factoryInputGateOpen(handle)
+
     public actual val videoCodecs: List<String> get() = Jni.factoryVideoCodecs(handle).split(' ').filter { it.isNotEmpty() }
 
     /** Synthetic audio: send a pulsed 440 Hz tone when the app pushes no PCM. */

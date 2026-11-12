@@ -312,6 +312,9 @@ internal class Participant(
     @Volatile internal var selfAudioMuted: Boolean = false
     @Volatile internal var selfVideoMuted: Boolean = false
 
+    /** The client says it does not listen to the room (ClientMessage.MediaState.deafened); only announced. */
+    @Volatile internal var deafened: Boolean = false
+
     /** The state the others see: muted by the client or by the server. */
     internal val announcedAudioMuted: Boolean get() = audioMuted || selfAudioMuted
     internal val announcedVideoMuted: Boolean get() = videoMuted || selfVideoMuted

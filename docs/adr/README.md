@@ -27,7 +27,8 @@
 | [0015](0015-sfu-transport-and-congestion.md) | Транспорт и управление перегрузкой SFU: transport-cc и выбор слоёв, сокет на адрес, IPv6, ICE-TCP, ICE restart | Принято |
 | [0016](0016-data-channels.md) | Data channels: SCTP в `krtc-sfu`, `RTCDataChannel` в клиенте, сообщения комнаты | Принято |
 | [0017](0017-screen-sharing.md) | Демонстрация экрана со звуком: второй видео- и аудиопоток в SFU, `setScreen` в клиенте, захват на каждой платформе | Принято |
-| [0018](0018-krtc-meet.md) | `krtc-meet`: пример приложения на Compose Multiplatform | Принято, M2–M5 впереди |
+| [0018](0018-krtc-meet.md) | `krtc-meet`: пример приложения на Compose Multiplatform | Принято, M1–M5 выполнены |
+| [0019](0019-krtc-meet-voice-server.md) | `krtc-meet`: голосовой сервер с каналами, чатом и аккаунтами (PostgreSQL) | Принято, D1 выполнен |
 
 Обзор, на котором основаны решения: [docs/research/existing-solutions.md](../research/existing-solutions.md).
 

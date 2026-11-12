@@ -133,7 +133,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     }
 
     private fun welcome(p: Participant, others: List<Participant>) = ServerMessage.Welcome(
-        p.id, p.room.name, others.map { PeerInfo(it.id, it.name, it.announcedAudioMuted, it.announcedVideoMuted) },
+        p.id, p.room.name, others.map { PeerInfo(it.id, it.name, it.announcedAudioMuted, it.announcedVideoMuted, it.deafened) },
         resume = if (config.resumeTimeoutMillis > 0) p.resumeToken else null,
     )
 
@@ -189,6 +189,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             is ClientMessage.MediaState -> {
                 p.selfAudioMuted = message.audioMuted
                 p.selfVideoMuted = message.videoMuted
+                p.deafened = message.deafened
                 announceMediaState(p)
             }
             is ClientMessage.Subscribe -> {
@@ -320,7 +321,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val p = s.participant
         return ParticipantInfo(
             p.id, p.name, p.room.name, s.mediaConnected, p.publishesVideo, p.audioMuted, p.videoMuted, p.speaking,
-            p.screen.publishing, p.screen.muted, p.screenAudioPublishing, p.selfAudioMuted, p.selfVideoMuted,
+            p.screen.publishing, p.screen.muted, p.screenAudioPublishing, p.selfAudioMuted, p.selfVideoMuted, p.deafened,
         )
     }
 
@@ -328,7 +329,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private fun announceMediaState(p: Participant) {
         val audio = p.announcedAudioMuted
         val video = p.announcedVideoMuted
-        val msg = ServerMessage.PeerState(p.id, audio, video)
+        val msg = ServerMessage.PeerState(p.id, audio, video, p.deafened)
         p.room.members.forEach { it.sink.send(msg) }
         eventFlow.tryEmit(SfuEvent.MediaStateChanged(p.room.name, p.id, audio, video))
     }

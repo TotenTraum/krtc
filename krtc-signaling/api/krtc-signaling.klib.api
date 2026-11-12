@@ -7,10 +7,12 @@
 
 // Library unique name: <krtc:krtc-signaling>
 final class krtc.signaling/PeerInfo { // krtc.signaling/PeerInfo|null[0]
-    constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean = ..., kotlin/Boolean = ...) // krtc.signaling/PeerInfo.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // krtc.signaling/PeerInfo.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
 
     final val audioMuted // krtc.signaling/PeerInfo.audioMuted|{}audioMuted[0]
         final fun <get-audioMuted>(): kotlin/Boolean // krtc.signaling/PeerInfo.audioMuted.<get-audioMuted>|<get-audioMuted>(){}[0]
+    final val deafened // krtc.signaling/PeerInfo.deafened|{}deafened[0]
+        final fun <get-deafened>(): kotlin/Boolean // krtc.signaling/PeerInfo.deafened.<get-deafened>|<get-deafened>(){}[0]
     final val id // krtc.signaling/PeerInfo.id|{}id[0]
         final fun <get-id>(): kotlin/String // krtc.signaling/PeerInfo.id.<get-id>|<get-id>(){}[0]
     final val name // krtc.signaling/PeerInfo.name|{}name[0]
@@ -22,7 +24,8 @@ final class krtc.signaling/PeerInfo { // krtc.signaling/PeerInfo|null[0]
     final fun component2(): kotlin/String // krtc.signaling/PeerInfo.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // krtc.signaling/PeerInfo.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // krtc.signaling/PeerInfo.component4|component4(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/PeerInfo // krtc.signaling/PeerInfo.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun component5(): kotlin/Boolean // krtc.signaling/PeerInfo.component5|component5(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/PeerInfo // krtc.signaling/PeerInfo.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/PeerInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // krtc.signaling/PeerInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // krtc.signaling/PeerInfo.toString|toString(){}[0]
@@ -101,16 +104,19 @@ sealed class krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage|null
     }
 
     final class MediaState : krtc.signaling/ClientMessage { // krtc.signaling/ClientMessage.MediaState|null[0]
-        constructor <init>(kotlin/Boolean, kotlin/Boolean) // krtc.signaling/ClientMessage.MediaState.<init>|<init>(kotlin.Boolean;kotlin.Boolean){}[0]
+        constructor <init>(kotlin/Boolean, kotlin/Boolean, kotlin/Boolean = ...) // krtc.signaling/ClientMessage.MediaState.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
 
         final val audioMuted // krtc.signaling/ClientMessage.MediaState.audioMuted|{}audioMuted[0]
             final fun <get-audioMuted>(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.audioMuted.<get-audioMuted>|<get-audioMuted>(){}[0]
+        final val deafened // krtc.signaling/ClientMessage.MediaState.deafened|{}deafened[0]
+            final fun <get-deafened>(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.deafened.<get-deafened>|<get-deafened>(){}[0]
         final val videoMuted // krtc.signaling/ClientMessage.MediaState.videoMuted|{}videoMuted[0]
             final fun <get-videoMuted>(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.videoMuted.<get-videoMuted>|<get-videoMuted>(){}[0]
 
         final fun component1(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.component1|component1(){}[0]
         final fun component2(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.component2|component2(){}[0]
-        final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/ClientMessage.MediaState // krtc.signaling/ClientMessage.MediaState.copy|copy(kotlin.Boolean;kotlin.Boolean){}[0]
+        final fun component3(): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.component3|component3(){}[0]
+        final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/ClientMessage.MediaState // krtc.signaling/ClientMessage.MediaState.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ClientMessage.MediaState.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // krtc.signaling/ClientMessage.MediaState.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // krtc.signaling/ClientMessage.MediaState.toString|toString(){}[0]
@@ -316,10 +322,12 @@ sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null
     }
 
     final class PeerState : krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage.PeerState|null[0]
-        constructor <init>(kotlin/String, kotlin/Boolean, kotlin/Boolean) // krtc.signaling/ServerMessage.PeerState.<init>|<init>(kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
+        constructor <init>(kotlin/String, kotlin/Boolean, kotlin/Boolean, kotlin/Boolean = ...) // krtc.signaling/ServerMessage.PeerState.<init>|<init>(kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
 
         final val audioMuted // krtc.signaling/ServerMessage.PeerState.audioMuted|{}audioMuted[0]
             final fun <get-audioMuted>(): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.audioMuted.<get-audioMuted>|<get-audioMuted>(){}[0]
+        final val deafened // krtc.signaling/ServerMessage.PeerState.deafened|{}deafened[0]
+            final fun <get-deafened>(): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.deafened.<get-deafened>|<get-deafened>(){}[0]
         final val id // krtc.signaling/ServerMessage.PeerState.id|{}id[0]
             final fun <get-id>(): kotlin/String // krtc.signaling/ServerMessage.PeerState.id.<get-id>|<get-id>(){}[0]
         final val videoMuted // krtc.signaling/ServerMessage.PeerState.videoMuted|{}videoMuted[0]
@@ -328,7 +336,8 @@ sealed class krtc.signaling/ServerMessage { // krtc.signaling/ServerMessage|null
         final fun component1(): kotlin/String // krtc.signaling/ServerMessage.PeerState.component1|component1(){}[0]
         final fun component2(): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.component2|component2(){}[0]
         final fun component3(): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.component3|component3(){}[0]
-        final fun copy(kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/ServerMessage.PeerState // krtc.signaling/ServerMessage.PeerState.copy|copy(kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
+        final fun component4(): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.component4|component4(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): krtc.signaling/ServerMessage.PeerState // krtc.signaling/ServerMessage.PeerState.copy|copy(kotlin.String;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // krtc.signaling/ServerMessage.PeerState.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // krtc.signaling/ServerMessage.PeerState.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // krtc.signaling/ServerMessage.PeerState.toString|toString(){}[0]

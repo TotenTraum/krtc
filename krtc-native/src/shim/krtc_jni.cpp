@@ -245,6 +245,11 @@ KRTC_JNI(jstring, factoryAudioDeviceName)(JNIEnv *env, jclass, jlong f, jboolean
 KRTC_JNI(jint, factorySetAudioDevice)(JNIEnv *, jclass, jlong f, jboolean output, jint index) {
     return krtc_factory_set_audio_device(H<krtc_factory>(f), output ? 1 : 0, index);
 }
+KRTC_JNI(void, factorySetInputGate)(JNIEnv *, jclass, jlong f, jint mode, jdouble threshold, jint hold_ms) {
+    krtc_factory_set_input_gate(H<krtc_factory>(f), mode, threshold, hold_ms);
+}
+KRTC_JNI(jdouble, factoryInputLevel)(JNIEnv *, jclass, jlong f) { return krtc_factory_input_level(H<krtc_factory>(f)); }
+KRTC_JNI(jboolean, factoryInputGateOpen)(JNIEnv *, jclass, jlong f) { return krtc_factory_input_gate_open(H<krtc_factory>(f)) ? JNI_TRUE : JNI_FALSE; }
 KRTC_JNI(void, factorySetAudioProcessing)(JNIEnv *, jclass, jlong f, jboolean echo, jboolean noise, jboolean agc) {
     krtc_factory_set_audio_processing(H<krtc_factory>(f), echo ? 1 : 0, noise ? 1 : 0, agc ? 1 : 0);
 }

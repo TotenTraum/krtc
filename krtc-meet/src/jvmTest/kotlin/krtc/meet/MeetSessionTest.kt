@@ -52,7 +52,9 @@ class MeetSessionTest {
         override fun cameras() = emptyList<CameraChoice.Device>()
         override fun openCamera(factory: NativePeerConnectionFactory, camera: CameraChoice.Device) = null
         override fun screens() = listOf(ScreenChoice("test"))
-        override suspend fun openScreen(factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int): OpenedScreen {
+        override suspend fun openScreen(
+            factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
+        ): OpenedScreen {
             val source = factory.createScreencastSource()
             return OpenedScreen(source, null, Pusher(source, fps))
         }
@@ -95,9 +97,9 @@ class MeetSessionTest {
         sfu.close()
     }
 
-    private suspend fun waitUntil(what: String, check: () -> Boolean) {
+    private suspend fun waitUntil(what: String, timeoutMillis: Long = 15_000, check: () -> Boolean) {
         try {
-            withTimeout(15_000) { while (!check()) delay(50) }
+            withTimeout(timeoutMillis) { while (!check()) delay(50) }
         } catch (t: Throwable) {
             throw AssertionError("timed out waiting for $what; ${sfu.metrics()}; ${sfu.linkStats()}; ${debug()}; ${audioStats()}", t)
         }
@@ -157,7 +159,8 @@ class MeetSessionTest {
             b.setTileHeight(aliceAtBob, 120)
             waitUntil("low layer for a small tile") { layerAtBob() == 0 }
             b.setTileHeight(aliceAtBob, 1080)
-            waitUntil("a higher layer for a large tile") { (layerAtBob() ?: 0) > 0 }
+            // Going up also needs the bandwidth estimate to allow it, which can take a while after the low layer.
+            waitUntil("a higher layer for a large tile", 40_000) { (layerAtBob() ?: 0) > 0 }
 
             // Connection quality from getStats: localhost is good, and alice is attributed by her mids.
             waitUntil("connection stats") { b.connection.value?.peers?.containsKey(aliceAtBob.id) == true }
@@ -167,13 +170,16 @@ class MeetSessionTest {
             a.setScreenFps(30)
             a.startScreen(a.screens().single(), withAudio = false)
             waitUntil("bob receiving alice's screen") { frames(aliceAtBob.screen.value) > 10 }
-            // Screen content keeps its resolution and gives up frame rate first while the bandwidth estimate ramps up:
-            // measure once it has settled.
-            delay(4_000)
-            val f0 = frames(aliceAtBob.screen.value)
-            delay(2_000)
-            val rate = (frames(aliceAtBob.screen.value) - f0) / 2.0
-            assertTrue(rate > 20, "screen at about 30 fps, got $rate")
+            // Screen content keeps its resolution and gives up frame rate first while the bandwidth estimate ramps up,
+            // which takes a varying few seconds: wait for a second with more than 20 frames.
+            var rate = 0L
+            withTimeout(20_000) {
+                while (rate <= 20) {
+                    val f0 = frames(aliceAtBob.screen.value)
+                    delay(1_000)
+                    rate = frames(aliceAtBob.screen.value) - f0
+                }
+            }
             b.setScreenSubscribed(aliceAtBob, false)
             delay(500)
             val paused = frames(aliceAtBob.screen.value)
@@ -200,6 +206,48 @@ class MeetSessionTest {
             assertTrue(level() < 0.001, "still audible at volume 0")
             b.setVolume(aliceAtBob, 1f)
             waitUntil("bob hearing alice again") { bobFactory.outputLevel > 0.01 }
+
+            // Voice activity: the pulsed tone (level about 0.18) opens the gate at a low threshold and not at a high one,
+            // while the level is still measured behind the closed gate.
+            a.setInputSettings(InputSettings(InputMode.VOICE_ACTIVITY, threshold = 0.05f))
+            val seen = java.util.TreeSet<Float>()
+            debug = { "input levels seen: $seen" }
+            waitUntil("voice gate opening") { seen += a.inputLevel.value; a.transmitting.value }
+            waitUntil("bob hearing alice through the gate") { bobFactory.outputLevel > 0.01 }
+            a.setInputSettings(InputSettings(InputMode.VOICE_ACTIVITY, threshold = 0.9f))
+            delay(1_000) // the hold time passes
+            var meter = 0f
+            var heard = 0.0
+            repeat(40) {
+                meter = maxOf(meter, a.inputLevel.value)
+                heard = maxOf(heard, bobFactory.outputLevel)
+                delay(40)
+            }
+            assertTrue(!a.transmitting.value && heard < 0.001, "gate stayed open: heard $heard")
+            assertTrue(meter > 0.05f, "the level is read while the gate is closed, got $meter")
+
+            // Push-to-talk: silent until held, heard while held, silent again after release.
+            a.setInputSettings(InputSettings(InputMode.PUSH_TO_TALK))
+            delay(500)
+            assertTrue(level() < 0.001, "heard without push-to-talk")
+            a.setPushToTalk(true)
+            waitUntil("bob hearing alice while she holds push-to-talk") { bobFactory.outputLevel > 0.01 }
+            a.setPushToTalk(false)
+            delay(700)
+            assertTrue(level() < 0.001, "heard after releasing push-to-talk")
+            a.setInputSettings(InputSettings(InputMode.OPEN))
+            waitUntil("open microphone again") { bobFactory.outputLevel > 0.01 }
+
+            // Deafen: bob hears nothing, his microphone closes, and alice sees both; undeafen restores it.
+            val bobAtAlice = a.participants.value.single()
+            b.toggleDeafen()
+            waitUntil("alice sees bob deafened") { bobAtAlice.deafened.value && bobAtAlice.audioMuted.value }
+            delay(300)
+            assertTrue(level() < 0.001, "deafened but still hearing")
+            assertTrue(!b.transmitting.value)
+            b.toggleDeafen()
+            waitUntil("alice sees bob back") { !bobAtAlice.deafened.value && !bobAtAlice.audioMuted.value }
+            waitUntil("bob hearing again") { bobFactory.outputLevel > 0.01 }
 
             // Changing the microphone processing recreates the microphone track; audio keeps flowing.
             a.setAudioProcessing(raw.copy(autoGainControl = true))

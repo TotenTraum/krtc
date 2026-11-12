@@ -91,6 +91,7 @@ public class RemoteParticipant internal constructor(public val id: String, publi
     internal val audioMutedState = MutableStateFlow(audioMuted)
     internal val videoMutedState = MutableStateFlow(videoMuted)
     internal val screenSubscribedState = MutableStateFlow(true)
+    internal val deafenedState = MutableStateFlow(false)
 
     public val audio: StateFlow<MediaStreamTrack?> = audioState.asStateFlow()
     public val video: StateFlow<MediaStreamTrack?> = videoState.asStateFlow()
@@ -105,6 +106,9 @@ public class RemoteParticipant internal constructor(public val id: String, publi
     /** It muted its microphone or camera (or the server did): show it as muted rather than silent or frozen. */
     public val audioMuted: StateFlow<Boolean> = audioMutedState.asStateFlow()
     public val videoMuted: StateFlow<Boolean> = videoMutedState.asStateFlow()
+
+    /** It turned the room's sound off for itself: it does not hear what is said. */
+    public val deafened: StateFlow<Boolean> = deafenedState.asStateFlow()
 
     /** Whether this client receives its screen share ([RoomClient.setSubscribed]); true by default. */
     public val screenSubscribed: StateFlow<Boolean> = screenSubscribedState.asStateFlow()
@@ -329,6 +333,7 @@ public class RoomClient(
                     (known[info.id] ?: RemoteParticipant(info.id, info.name)).also {
                         it.audioMutedState.value = info.audioMuted
                         it.videoMutedState.value = info.videoMuted
+                        it.deafenedState.value = info.deafened
                         it.speakingState.value = false
                     }
                 }
@@ -338,7 +343,7 @@ public class RoomClient(
                 val stillThere = message.peers.map { it.id }.toSet()
                 unsubscribedScreens.retainAll(stillThere)
                 scope.launch {
-                    if (mediaState.audioMuted || mediaState.videoMuted) send(mediaState)
+                    if (mediaState.audioMuted || mediaState.videoMuted || mediaState.deafened) send(mediaState)
                     if (newSession && previous != null) for (id in unsubscribedScreens) send(ClientMessage.Subscribe(id, ClientMessage.Subscribe.FEED_SCREEN, false))
                 }
             }
@@ -353,6 +358,7 @@ public class RoomClient(
                 } else participant(message.id)?.let {
                     it.audioMutedState.value = message.audioMuted
                     it.videoMutedState.value = message.videoMuted
+                    it.deafenedState.value = message.deafened
                 }
             is ServerMessage.Speaking ->
                 if (message.id == selfId) selfSpeakingFlow.value = message.speaking
@@ -524,8 +530,8 @@ public class RoomClient(
      * ([RemoteParticipant.audioMuted]). Only the state: stop the media itself too, e.g. by disabling the track.
      * May be called before [join]; the state is sent once joined.
      */
-    public suspend fun setMediaState(audioMuted: Boolean, videoMuted: Boolean) {
-        mediaState = ClientMessage.MediaState(audioMuted, videoMuted)
+    public suspend fun setMediaState(audioMuted: Boolean, videoMuted: Boolean, deafened: Boolean = false) {
+        mediaState = ClientMessage.MediaState(audioMuted, videoMuted, deafened)
         if (stateFlow.value is RoomState.Connected) send(mediaState)
     }
 

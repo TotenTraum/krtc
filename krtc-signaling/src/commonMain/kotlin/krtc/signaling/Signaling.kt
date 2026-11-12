@@ -31,9 +31,18 @@ public object SignalingProtocol {
     public fun decodeClient(text: String): ClientMessage? = runCatching { json.decodeFromString(ClientMessage.serializer(), text) }.getOrNull()
 }
 
-/** Another participant: its id, name and whether its microphone and camera are muted (by itself or by the server). */
+/**
+ * Another participant: its id, name, whether its microphone and camera are muted (by itself or by the server), and
+ * whether it is deafened (it turned everyone's sound off, so it does not hear the room).
+ */
 @Serializable
-public data class PeerInfo(val id: String, val name: String, val audioMuted: Boolean = false, val videoMuted: Boolean = false)
+public data class PeerInfo(
+    val id: String,
+    val name: String,
+    val audioMuted: Boolean = false,
+    val videoMuted: Boolean = false,
+    val deafened: Boolean = false,
+)
 
 /** Server → client. */
 @Serializable
@@ -74,7 +83,7 @@ public sealed class ServerMessage {
      * Sent to everyone in the room, the participant itself included.
      */
     @Serializable @SerialName("peer-state")
-    public data class PeerState(val id: String, val audioMuted: Boolean, val videoMuted: Boolean) : ServerMessage()
+    public data class PeerState(val id: String, val audioMuted: Boolean, val videoMuted: Boolean, val deafened: Boolean = false) : ServerMessage()
 
     @Serializable @SerialName("speaking")
     public data class Speaking(val id: String, val speaking: Boolean) : ServerMessage()
@@ -114,7 +123,7 @@ public sealed class ClientMessage {
 
     /** The client muted or unmuted its microphone or camera; the server tells the others ([ServerMessage.PeerState]). */
     @Serializable @SerialName("media-state")
-    public data class MediaState(val audioMuted: Boolean, val videoMuted: Boolean) : ClientMessage()
+    public data class MediaState(val audioMuted: Boolean, val videoMuted: Boolean, val deafened: Boolean = false) : ClientMessage()
 
     /**
      * Starts or stops receiving one participant's [feed] ([FEED_CAMERA] or [FEED_SCREEN]; the screen with its sound).

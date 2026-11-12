@@ -75,6 +75,15 @@ int krtc_factory_audio_device(krtc_factory *factory, int output);
  * microphone tracks created afterwards. */
 void krtc_factory_set_audio_processing(krtc_factory *factory, int echo_cancellation, int noise_suppression, int auto_gain_control);
 
+/* Input gate on the microphone path, after the processing above (so it sees the cleaned-up signal):
+ * mode 0 lets everything through, 1 only while the level is at or above threshold (0..1, peak) and hold_ms after,
+ * 2 nothing. A closed gate sends silence. The level is measured in every mode, also behind a closed gate. */
+void krtc_factory_set_input_gate(krtc_factory *factory, int mode, double threshold, int hold_ms);
+/* The microphone's recent peak level (0..1), decaying over about 100 ms. */
+double krtc_factory_input_level(krtc_factory *factory);
+/* Whether the gate lets audio through right now. */
+int krtc_factory_input_gate_open(krtc_factory *factory);
+
 /* Video codecs this factory can send, as "video/VP8 video/H264 ..." (free with krtc_free). */
 char *krtc_factory_video_codecs(krtc_factory *factory);
 

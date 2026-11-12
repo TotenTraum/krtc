@@ -11,10 +11,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "api/audio/audio_frame.h"
+#include "api/audio/audio_frame_processor.h"
 #include "api/audio/audio_processing.h"
 #include "api/audio/builtin_audio_processing_builder.h"
 #include "api/audio/create_audio_device_module.h"
@@ -169,7 +172,64 @@ std::unique_ptr<SessionDescriptionInterface> Parse(const char *type, const char 
 
 }  // namespace
 
+namespace {
+/** Shared between the factory handle and the gate, which libwebrtc owns. */
+struct InputGateState {
+    std::atomic<int> mode{0};
+    std::atomic<double> threshold{0.05};
+    std::atomic<int> hold_ms{400};
+    std::atomic<double> level{0};
+    std::atomic<bool> open{true};
+};
+
+/**
+ * Sits on the captured audio after the processing (AudioTransport hands it every 10 ms frame): measures the level
+ * and silences the frame while the gate is closed, with no delay beyond the frame itself.
+ */
+class InputGate : public AudioFrameProcessor {
+public:
+    explicit InputGate(std::shared_ptr<InputGateState> state) : state_(std::move(state)) {}
+
+    void Process(std::unique_ptr<AudioFrame> frame) override {
+        int peak = 0;
+        if (!frame->muted()) {
+            const int16_t *data = frame->data();
+            const size_t n = frame->samples_per_channel() * frame->num_channels();
+            for (size_t i = 0; i < n; ++i) peak = std::max(peak, std::abs(static_cast<int>(data[i])));
+        }
+        const double level = peak / 32768.0;
+        state_->level = std::max(level, state_->level.load() * 0.8); // a meter that falls back over ~100 ms
+        const int64_t now = TimeMillis();
+        bool open = true;
+        switch (state_->mode.load()) {
+        case 1:
+            if (level >= state_->threshold.load()) open_until_ = now + state_->hold_ms.load();
+            open = now < open_until_;
+            break;
+        case 2: open = false; break;
+        default: break;
+        }
+        state_->open = open;
+        if (!open) frame->Mute();
+        std::lock_guard<std::mutex> lock(mu_);
+        if (sink_) sink_(std::move(frame));
+    }
+
+    void SetSink(OnAudioFrameCallback sink) override {
+        std::lock_guard<std::mutex> lock(mu_);
+        sink_ = std::move(sink);
+    }
+
+private:
+    std::shared_ptr<InputGateState> state_;
+    int64_t open_until_ = 0;
+    std::mutex mu_;
+    OnAudioFrameCallback sink_;
+};
+}  // namespace
+
 struct krtc_factory {
+    std::shared_ptr<InputGateState> gate = std::make_shared<InputGateState>();
     std::unique_ptr<Thread> network, worker, signaling;
     scoped_refptr<AudioDeviceModule> adm;
     scoped_refptr<AudioProcessing> apm;
@@ -325,7 +385,7 @@ KRTC_API krtc_factory *krtc_factory_create_with(int audio_mode, int platform_vid
     k->factory = CreatePeerConnectionFactory(
         k->network.get(), k->worker.get(), k->signaling.get(), k->adm,
         CreateBuiltinAudioEncoderFactory(), CreateBuiltinAudioDecoderFactory(),
-        std::move(encoders), std::move(decoders), nullptr, k->apm);
+        std::move(encoders), std::move(decoders), nullptr, k->apm, std::make_unique<InputGate>(k->gate));
     if (!k->factory) {
         delete k;
         return nullptr;
@@ -374,6 +434,16 @@ KRTC_API void krtc_factory_set_audio_processing(krtc_factory *f, int echo_cancel
     f->auto_gain_control = auto_gain_control != 0;
     ApplyProcessing(f);
 }
+
+KRTC_API void krtc_factory_set_input_gate(krtc_factory *f, int mode, double threshold, int hold_ms) {
+    f->gate->threshold = threshold;
+    f->gate->hold_ms = hold_ms;
+    f->gate->mode = mode;
+}
+
+KRTC_API double krtc_factory_input_level(krtc_factory *f) { return f->gate->level.load(); }
+
+KRTC_API int krtc_factory_input_gate_open(krtc_factory *f) { return f->gate->open.load() ? 1 : 0; }
 
 KRTC_API krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *id) {
     scoped_refptr<AudioSourceInterface> source = factory->factory->CreateAudioSource(MicrophoneOptions(factory));

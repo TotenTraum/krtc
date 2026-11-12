@@ -26,6 +26,18 @@ public enum class AudioDevice {
     PLATFORM,
 }
 
+/** What the microphone's input gate lets through ([NativePeerConnectionFactory.setInputGate]). */
+public enum class InputGate {
+    /** Everything. */
+    OPEN,
+
+    /** Only sound at or above the threshold, and a moment after it (voice activation). */
+    VOICE_ACTIVITY,
+
+    /** Nothing: silence is sent (e.g. push-to-talk not held). */
+    CLOSED,
+}
+
 /**
  * The W3C stats report from libwebrtc's JSON. `RTCStatsReport::ToJson()` is an array of stats objects;
  * an object keyed by id is accepted too.
@@ -87,6 +99,19 @@ public expect class NativePeerConnectionFactory(
      * pushed PCM).
      */
     public fun setAudioProcessing(echoCancellation: Boolean = true, noiseSuppression: Boolean = true, autoGainControl: Boolean = true)
+
+    /**
+     * Gates the microphone after its processing: with [InputGate.VOICE_ACTIVITY], audio passes only while its level
+     * (0..1, peak) is at or above [threshold] and for [holdMillis] after, so pauses between words stay open. A closed
+     * gate sends silence at once, without touching the track or renegotiating. Not for pushed [NativeAudioSource]s.
+     */
+    public fun setInputGate(gate: InputGate, threshold: Double = 0.05, holdMillis: Int = 400)
+
+    /** The microphone's recent peak level (0..1), measured in every gate mode, also while the gate is closed. */
+    public val inputLevel: Double
+
+    /** Whether the input gate lets the microphone through right now. */
+    public val inputGateOpen: Boolean
 
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public val videoCodecs: List<String>
