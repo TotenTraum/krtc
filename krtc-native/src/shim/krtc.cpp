@@ -12,7 +12,6 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
-#include <condition_variable>
 #include <optional>
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -45,6 +44,7 @@
 #include "api/video_codecs/video_encoder_factory_template.h"
 #include "api/video_codecs/video_encoder_factory_template_libvpx_vp8_adapter.h"
 #include "media/base/adapted_video_track_source.h"
+#include "rtc_base/event.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
@@ -558,24 +558,27 @@ KRTC_API krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *
 }
 
 namespace {
-/** Keeps the first frame a source delivers. */
+/**
+ * Keeps the first frame a source delivers. Waits on webrtc::Event, not std::condition_variable: the bundled
+ * libc++'s timed wait calls pthread_cond_clockwait (glibc 2.30+), which Kotlin/Native's Linux sysroot lacks.
+ */
 class FirstFrame : public VideoSinkInterface<VideoFrame> {
 public:
     void OnFrame(const VideoFrame &frame) override {
         std::lock_guard<std::mutex> lock(mu_);
         if (frame_) return;
         frame_ = frame;
-        cv_.notify_all();
+        arrived_.Set();
     }
     std::optional<VideoFrame> Wait(std::chrono::milliseconds timeout) {
-        std::unique_lock<std::mutex> lock(mu_);
-        cv_.wait_for(lock, timeout, [this] { return frame_.has_value(); });
+        arrived_.Wait(TimeDelta::Millis(timeout.count()));
+        std::lock_guard<std::mutex> lock(mu_);
         return frame_;
     }
 
 private:
     std::mutex mu_;
-    std::condition_variable cv_;
+    Event arrived_;
     std::optional<VideoFrame> frame_;
 };
 }  // namespace
