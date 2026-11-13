@@ -3,9 +3,11 @@
 # the Microsoft Visual Studio license for those files (xwin --accept-license).
 FROM debian:bookworm
 ARG XWIN_VERSION=0.10.0
+# apt.llvm.org now and then serves a half-synced index (hash mismatch, 404): retry instead of failing the build.
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
  && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-21 main" > /etc/apt/sources.list.d/llvm.list \
+ && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-21 main" > /etc/apt/sources.list.d/llvm.list \
  && apt-get update && apt-get install -y --no-install-recommends clang-21 llvm-21 lld-21 \
  && ln -s /usr/bin/clang-21 /usr/local/bin/clang-cl \
  && for t in lld-link llvm-lib llvm-nm llvm-readobj llvm-dlltool llvm-ar; do ln -s /usr/bin/$t-21 /usr/local/bin/$t; done \
