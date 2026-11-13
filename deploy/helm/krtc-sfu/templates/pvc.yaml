@@ -1,0 +1,15 @@
+{{- if and .Values.clientLogs.enabled .Values.clientLogs.persistence.enabled (not .Values.clientLogs.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "krtc-sfu.fullname" . }}-client-logs
+  labels: {{- include "krtc-sfu.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.clientLogs.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.clientLogs.persistence.size }}
+{{- end }}

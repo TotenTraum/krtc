@@ -61,6 +61,7 @@ internal object Jni {
     @JvmStatic external fun videoSourcePushRgba(source: Long, width: Int, height: Int, rgba: ByteArray, stride: Int, rotation: Int, timestampMicros: Long)
     @JvmStatic external fun videoSourcePushRgbaDirect(source: Long, width: Int, height: Int, rgba: java.nio.ByteBuffer, stride: Int, rotation: Int, timestampMicros: Long)
     @JvmStatic external fun screenSources(): String?
+    @JvmStatic external fun screenThumbnail(id: Long, window: Boolean, maxWidth: Int, maxHeight: Int, out: IntArray, size: IntArray): Int
     @JvmStatic external fun factoryCreateScreenSource(factory: Long, id: Long, window: Boolean, fps: Int, maxWidth: Int, maxHeight: Int): Long
     @JvmStatic external fun factoryCreateScreencastSource(factory: Long): Long
     @JvmStatic external fun videoSourceRelease(source: Long)

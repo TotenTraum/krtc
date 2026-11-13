@@ -12,6 +12,11 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
+#include <optional>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 #include <string>
 #include <thread>
 #include <vector>
@@ -173,6 +178,16 @@ std::unique_ptr<SessionDescriptionInterface> Parse(const char *type, const char 
 }  // namespace
 
 namespace {
+/** Restarts playout (and recording, if [both]) on the worker thread, so the device module takes the devices' current formats. */
+void RestartAudio(AudioDeviceModule *adm, bool both) {
+    const bool playing = adm->Playing();
+    const bool recording = both && adm->Recording();
+    if (playing) adm->StopPlayout();
+    if (recording) adm->StopRecording();
+    if (recording && adm->InitRecording() == 0) adm->StartRecording();
+    if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
+}
+
 /** Shared between the factory handle and the gate, which libwebrtc owns. */
 struct InputGateState {
     std::atomic<int> mode{0};
@@ -235,6 +250,8 @@ struct krtc_factory {
     scoped_refptr<AudioProcessing> apm;
     bool synthetic_audio = false;
     std::atomic<bool> echo_cancellation{true}, noise_suppression{true}, auto_gain_control{true};
+    std::function<void()> stop_format_watch;
+    std::shared_ptr<std::atomic<int>> format_changes = std::make_shared<std::atomic<int>>(0);
     scoped_refptr<PeerConnectionFactoryInterface> factory;
 };
 
@@ -391,11 +408,27 @@ KRTC_API krtc_factory *krtc_factory_create_with(int audio_mode, int platform_vid
         return nullptr;
     }
     ApplyProcessing(k);
+    if (!k->synthetic_audio) {
+        // A device's sample rate changed (Bluetooth profile switch, another app, the user): restart audio once things
+        // settle, so libwebrtc's device module picks up the new formats.
+        Thread *worker = k->worker.get();
+        AudioDeviceModule *adm = k->adm.get();
+        auto changes = k->format_changes;
+        k->stop_format_watch = krtc::WatchAudioFormat([worker, adm, changes] {
+            const int mine = ++*changes;
+            worker->PostDelayedTask([adm, changes, mine] {
+                if (changes->load() == mine) RestartAudio(adm, true); // only the last of a burst
+            }, TimeDelta::Millis(500));
+        });
+    }
     return k;
 }
 
 KRTC_API void krtc_factory_release(krtc_factory *factory) {
     if (!factory) return;
+    if (factory->stop_format_watch) factory->stop_format_watch();
+    ++*factory->format_changes; // a restart still queued does nothing
+    factory->worker->BlockingCall([] {}); // and runs before the device module goes
     factory->factory = nullptr;
     factory->adm = nullptr;
     factory->apm = nullptr;
@@ -497,10 +530,16 @@ KRTC_API int krtc_factory_set_audio_device(krtc_factory *f, int output, int inde
             if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
             return static_cast<int>(r);
         }
+        // Playout restarts too: a Bluetooth headset whose microphone was in use leaves the headset profile, and its
+        // output format changes under the running playout (heard as noise otherwise). WatchAudioFormat catches the
+        // switch when it happens later.
         const bool recording = adm->Recording();
+        const bool playing = adm->Playing();
         if (recording) adm->StopRecording();
+        if (playing) adm->StopPlayout();
         int32_t r = adm->SetRecordingDevice(i);
         if (recording && adm->InitRecording() == 0) adm->StartRecording();
+        if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
         return static_cast<int>(r);
     });
 }
@@ -516,6 +555,53 @@ KRTC_API krtc_video_source *krtc_factory_create_video_source(krtc_factory *) {
 
 KRTC_API krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *) {
     return new krtc_video_source{make_ref_counted<krtc::PushVideoSource>(true), nullptr};
+}
+
+namespace {
+/** Keeps the first frame a source delivers. */
+class FirstFrame : public VideoSinkInterface<VideoFrame> {
+public:
+    void OnFrame(const VideoFrame &frame) override {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (frame_) return;
+        frame_ = frame;
+        cv_.notify_all();
+    }
+    std::optional<VideoFrame> Wait(std::chrono::milliseconds timeout) {
+        std::unique_lock<std::mutex> lock(mu_);
+        cv_.wait_for(lock, timeout, [this] { return frame_.has_value(); });
+        return frame_;
+    }
+
+private:
+    std::mutex mu_;
+    std::condition_variable cv_;
+    std::optional<VideoFrame> frame_;
+};
+}  // namespace
+
+KRTC_API int krtc_screen_thumbnail(int64_t id, int window, int max_width, int max_height, uint32_t *argb, int *width, int *height) {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    return -1; // ReplayKit: starting it would capture (and announce) the app itself
+#else
+    if (max_width <= 0 || max_height <= 0) return -1;
+    auto source = make_ref_counted<krtc::PushVideoSource>(true);
+    FirstFrame first;
+    VideoTrackSourceInterface *video = source.get(); // the sink methods are public on the interface
+    video->AddOrUpdateSink(&first, VideoSinkWants());
+    std::function<void()> stop = krtc::StartScreen(id, window != 0, 10, max_width, max_height, source.get());
+    std::optional<VideoFrame> frame = stop ? first.Wait(std::chrono::milliseconds(2000)) : std::nullopt;
+    if (stop) stop();
+    video->RemoveSink(&first);
+    if (!frame) return -1;
+    scoped_refptr<I420BufferInterface> i420 = frame->video_frame_buffer()->ToI420();
+    if (!i420 || i420->width() > max_width || i420->height() > max_height) return -1;
+    libyuv::I420ToARGB(i420->DataY(), i420->StrideY(), i420->DataU(), i420->StrideU(), i420->DataV(), i420->StrideV(),
+                       reinterpret_cast<uint8_t *>(argb), i420->width() * 4, i420->width(), i420->height());
+    *width = i420->width();
+    *height = i420->height();
+    return 0;
+#endif
 }
 
 KRTC_API char *krtc_screen_sources(void) {

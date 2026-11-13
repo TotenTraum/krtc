@@ -383,4 +383,32 @@ std::function<void()> StartScreen(int64_t, bool, int fps, int, int, PushVideoSou
 }
 #endif
 
+#if TARGET_OS_OSX
+std::function<void()> WatchAudioFormat(std::function<void()> onChange) {
+    // One listener on the system (devices and default output changed) and one per device (nominal sample rate).
+    // Blocks run on a private queue; the shim debounces and restarts playout on its worker thread.
+    dispatch_queue_t queue = dispatch_queue_create("krtc.audio-format", DISPATCH_QUEUE_SERIAL);
+    auto callback = std::make_shared<std::function<void()>>(std::move(onChange));
+    AudioObjectPropertyListenerBlock block = ^(UInt32, const AudioObjectPropertyAddress *) { (*callback)(); };
+    const AudioObjectPropertyAddress rate = {kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    const AudioObjectPropertyAddress defaultOut = {kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    const AudioObjectPropertyAddress devicesAddr = {kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    std::vector<AudioObjectID> devices;
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &devicesAddr, 0, nullptr, &size) == noErr && size > 0) {
+        devices.resize(size / sizeof(AudioObjectID));
+        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &devicesAddr, 0, nullptr, &size, devices.data()) != noErr) devices.clear();
+    }
+    for (AudioObjectID d : devices) AudioObjectAddPropertyListenerBlock(d, &rate, queue, block);
+    AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &defaultOut, queue, block);
+    return [devices, block, queue, rate, defaultOut, callback] {
+        for (AudioObjectID d : devices) AudioObjectRemovePropertyListenerBlock(d, &rate, queue, block);
+        AudioObjectRemovePropertyListenerBlock(kAudioObjectSystemObject, &defaultOut, queue, block);
+        dispatch_sync(queue, ^{}); // no block runs after this returns
+    };
+}
+#else
+std::function<void()> WatchAudioFormat(std::function<void()>) { return nullptr; }
+#endif
+
 }  // namespace krtc

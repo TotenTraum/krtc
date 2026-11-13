@@ -17,6 +17,15 @@ kotlin {
             api(project(":krtc-sfu"))
             api(libs.ktor.server.core)
             api(libs.ktor.server.websockets)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.io.core)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+        jvmTest.dependencies {
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.client.cio)
         }
     }
 }

@@ -20,11 +20,19 @@
 # Studio license for the MSVC CRT and Windows SDK files it downloads (see krtc-native/docker/windows/Dockerfile).
 #
 # How to run each one: krtc-native/README.md, section "Сборки CI".
+#
+# Releases (pushes only, not pull requests), downloadable without logging in, at fixed URLs:
+#   main      the pre-release "nightly" is replaced: https://github.com/<repo>/releases/tag/nightly
+#             and the image ghcr.io/<owner>/krtc-sfu:nightly (also :sha-<commit>)
+#   tag v*    a release with the same files, the image :<version> and :latest, the Helm chart
+#             oci://ghcr.io/<owner>/charts/krtc-sfu <version>
+# The app version is 1.0.<run number> on main and the tag's version on tags (installers need it to grow).
 name: builds
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -35,6 +43,11 @@ concurrency:
 env:
   WEBRTC_RELEASE: webrtc-a545de4
   GRADLE_OPTS: -Dorg.gradle.daemon=false
+  # krtc-meet's version (installers, update check): the tag's on tags, 1.0.<run number> otherwise.
+  KRTC_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('1.0.{0}', github.run_number) }}
+
+permissions:
+  contents: read
 
 jobs:
   apple:
@@ -67,6 +80,25 @@ jobs:
         run: krtc-native/fetch-deps.sh mac-arm64 ios-simulator-arm64 ios-device-arm64
       - name: Tests
         run: ./gradlew :krtc-sfu:macosArm64Test
+      # Optional: a stable signing identity (secrets MACOS_SIGNING_P12, base64 of a .p12, and MACOS_SIGNING_PASSWORD),
+      # so that installing a newer build keeps macOS's Screen Recording, Camera and Microphone permissions.
+      # Without it the app is ad-hoc signed and macOS asks again after every update. See tools/macos.
+      - name: macOS signing identity
+        env:
+          P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        if: env.P12 != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN" >/dev/null
+          SHA=$(security find-identity -p codesigning "$KEYCHAIN" | awk '$1 == "1)" { print $2; exit }')
+          echo "KRTC_MACOS_SIGN_IDENTITY=$SHA" >> "$GITHUB_ENV"
+          echo "KRTC_MACOS_SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
       - name: Build
         run: >
           ./gradlew
@@ -171,6 +203,20 @@ jobs:
           :krtc-native:linkDemoDebugExecutableLinuxArm64
           :krtc-native-android-demo:assembleDebug
           :krtc-meet-android:assembleDebug
+      # Optimized SFU binaries for the image and the release (slower to build: pushes only).
+      - name: Release SFU binaries
+        if: github.event_name == 'push'
+        run: |
+          ./gradlew :krtc-sfu-server:linkReleaseExecutableLinuxX64 :krtc-sfu-server:linkReleaseExecutableLinuxArm64
+          mkdir -p out/sfu-release/linux-amd64 out/sfu-release/linux-arm64
+          cp krtc-sfu-server/build/bin/linuxX64/releaseExecutable/krtc-sfu.kexe out/sfu-release/linux-amd64/krtc-sfu
+          cp krtc-sfu-server/build/bin/linuxArm64/releaseExecutable/krtc-sfu.kexe out/sfu-release/linux-arm64/krtc-sfu
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: krtc-sfu-release
+          path: out/sfu-release
+          retention-days: 3
       # The desktop JVM on Linux: libkrtc_jni.so for x64 and arm64 (Docker), in the JVM demo and the krtc-meet .deb.
       # jpackage needs fakeroot for .deb.
       - name: Desktop JVM for Linux
@@ -303,3 +349,97 @@ jobs:
           name: krtc-meet-windows
           path: krtc-meet/build/compose/binaries/main/msi/*.msi
           retention-days: 14
+
+  # The SFU image for Docker and Kubernetes (deploy/docker, deploy/helm), linux/amd64 and linux/arm64.
+  docker:
+    name: SFU image
+    needs: linux-android
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: krtc-sfu-release
+          path: build/docker-context
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tags
+        id: tags
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/krtc-sfu"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tags=$IMAGE:${GITHUB_REF_NAME#v},$IMAGE:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=$IMAGE:nightly,$IMAGE:sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/build-push-action@v6
+        with:
+          context: build/docker-context
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+      - name: Helm chart
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          helm package deploy/helm/krtc-sfu --version "$VERSION" --app-version "$VERSION" -d build/chart
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "build/chart/krtc-sfu-$VERSION.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+
+  # Everything people install, as a GitHub release: direct downloads from the CDN, no login, fixed URLs.
+  publish:
+    name: Release files
+    needs: [apple, linux-android, windows, meet-windows]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect
+        run: |
+          mkdir dist
+          cp artifacts/krtc-meet-macos/*.dmg dist/krtc-meet-macos-arm64.dmg
+          cp artifacts/krtc-meet-windows/*.msi dist/krtc-meet-windows-x64.msi
+          cp artifacts/krtc-meet-linux/*.deb dist/krtc-meet-linux-amd64.deb
+          cp artifacts/krtc-meet-android/krtc-meet.apk dist/krtc-meet-android-arm64.apk
+          cp artifacts/krtc-meet-ios/krtc-meet-simulator.zip dist/krtc-meet-ios-simulator.zip
+          cp artifacts/krtc-sfu-release/linux-amd64/krtc-sfu dist/krtc-sfu-linux-x64
+          cp artifacts/krtc-sfu-release/linux-arm64/krtc-sfu dist/krtc-sfu-linux-arm64
+          cp artifacts/krtc-macos-arm64/krtc-sfu.kexe dist/krtc-sfu-macos-arm64
+          cp artifacts/krtc-sfu-jvm/krtc-sfu-jvm.zip dist/krtc-sfu-jvm.zip
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          ls -la dist
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          NOTES="krtc-meet $KRTC_VERSION, commit ${GITHUB_SHA::12}.
+
+          SFU in Docker: \`docker run ghcr.io/$OWNER/krtc-sfu:${{ startsWith(github.ref, 'refs/tags/v') && 'latest' || 'nightly' }}\` (deploy/docker), Kubernetes: deploy/helm.
+          macOS: the .dmg is not notarized (right-click → Open the first time). Linux and macOS SFU binaries: chmod +x after downloading."
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            gh release create "$GITHUB_REF_NAME" dist/* --title "krtc $GITHUB_REF_NAME" --notes "$NOTES"
+          else
+            # Replaced on every push to main; the download URLs (releases/download/nightly/<file>) stay the same.
+            gh release delete nightly --yes --cleanup-tag || true
+            gh release create nightly dist/* --target "$GITHUB_SHA" --prerelease --title "nightly $KRTC_VERSION" --notes "$NOTES"
+          fi

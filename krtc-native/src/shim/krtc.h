@@ -117,6 +117,11 @@ void krtc_video_source_push_rgba(krtc_video_source *source, int width, int heigh
  * max_height (0 = no limit). NULL if capture is unavailable or not permitted (macOS asks for Screen Recording
  * permission on first use and returns NULL until it is granted). */
 char *krtc_screen_sources(void);
+/* A still image of a display or window ([window]) for a picker, scaled to fit max_width × max_height: ARGB pixels
+ * (0xAARRGGBB) into argb (room for max_width * max_height), the size into width and height. Starts the capture
+ * briefly and takes its first frame (up to about two seconds). 0 on success; -1 if it cannot be captured
+ * (no permission, a minimized window) or the platform has no built-in capture (Android, iOS). */
+int krtc_screen_thumbnail(int64_t id, int window, int max_width, int max_height, uint32_t *argb, int *width, int *height);
 krtc_video_source *krtc_factory_create_screen_source(krtc_factory *factory, int64_t id, int window, int fps, int max_width, int max_height);
 krtc_video_source *krtc_factory_create_screencast_source(krtc_factory *factory);
 

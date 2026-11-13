@@ -15,6 +15,14 @@ import androidx.compose.ui.window.rememberWindowState
  */
 fun main() = application {
     val env = System.getenv()
+    remember {
+        krtc.meet.log.ClientLog.i("app", "krtc-meet started: ${platformName()}")
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            krtc.meet.log.ClientLog.e("app", "uncaught on ${t.name}: ${e.stackTraceToString()}")
+            previous?.uncaughtException(t, e)
+        }
+    }
     val defaults = JoinSettings(
         server = env["KRTC_MEET_SERVER"] ?: "ws://localhost:8080",
         room = env["KRTC_MEET_ROOM"] ?: "test",
@@ -28,13 +36,17 @@ fun main() = application {
     )
     val state = rememberWindowState(width = 1100.dp, height = 760.dp)
     var current: MeetSession? = null
-    Window(onCloseRequest = { current?.close(); exitApplication() }, title = "krtc meet", state = state) {
+    Window(onCloseRequest = { current?.close(); exitApplication() }, title = APP_WINDOW_TITLE, state = state) {
         val scope = rememberCoroutineScope()
         val session = remember { MeetSession(scope).also { if (env["KRTC_MEET_LAYOUT"] == "speaker") it.setLayout(Layout.SPEAKER) } }.also { current = it }
-        remember { if (env["KRTC_MEET_AUTOJOIN"] == "1") session.join(defaults) }
+        // What the environment sets is used as it is; the rest of the form as it was last time.
+        val given = remember { mapOf("server" to "KRTC_MEET_SERVER", "room" to "KRTC_MEET_ROOM", "name" to "KRTC_MEET_NAME", "camera" to "KRTC_MEET_CAMERA", "testAudio" to "KRTC_MEET_TEST_AUDIO").filterValues { env[it] != null }.keys }
+        val remembered = remember { session.rememberedJoin(defaults, given) }
+        remember { if (env["KRTC_MEET_AUTOJOIN"] == "1") session.join(remembered) }
+        remember { if (env["KRTC_MEET_OPEN_PICKER"] == "1") session.setScreenPicker(true) }
         env["KRTC_MEET_SNAPSHOT"]?.let { file ->
-            Snapshot.schedule(1100, 760, file, (env["KRTC_MEET_SNAPSHOT_AFTER"] ?: "10").toLong()) { App(session, defaults) }
+            Snapshot.schedule(1100, 760, file, (env["KRTC_MEET_SNAPSHOT_AFTER"] ?: "10").toLong()) { App(session, remembered) }
         }
-        App(session, defaults)
+        App(session, remembered)
     }
 }

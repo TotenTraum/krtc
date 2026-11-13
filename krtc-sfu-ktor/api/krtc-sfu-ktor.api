@@ -1,3 +1,35 @@
+public final class krtc/sfu/ktor/ClientLogBatch {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public final fun getApp ()Ljava/lang/String;
+	public final fun getClient ()Ljava/lang/String;
+	public final fun getEntries ()Ljava/util/List;
+	public final fun getPlatform ()Ljava/lang/String;
+}
+
+public final class krtc/sfu/ktor/ClientLogEntry {
+	public fun <init> (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getLevel ()Ljava/lang/String;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getTag ()Ljava/lang/String;
+	public final fun getTimeMillis ()J
+}
+
+public abstract interface class krtc/sfu/ktor/ClientLogStore {
+	public abstract fun store (Lkrtc/sfu/ktor/ClientLogBatch;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class krtc/sfu/ktor/ClientLogsKt {
+	public static final fun krtcClientLogs (Lio/ktor/server/routing/Route;Lkrtc/sfu/ktor/ClientLogStore;Ljava/lang/String;JI)V
+	public static synthetic fun krtcClientLogs$default (Lio/ktor/server/routing/Route;Lkrtc/sfu/ktor/ClientLogStore;Ljava/lang/String;JIILjava/lang/Object;)V
+	public static final fun parseClientLogBatch (Ljava/lang/String;)Lkrtc/sfu/ktor/ClientLogBatch;
+}
+
+public final class krtc/sfu/ktor/FileClientLogStore : krtc/sfu/ktor/ClientLogStore {
+	public fun <init> (Ljava/lang/String;J)V
+	public synthetic fun <init> (Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun store (Lkrtc/sfu/ktor/ClientLogBatch;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class krtc/sfu/ktor/KrtcSfuRouteKt {
 	public static final fun getDefaultJoinRequest ()Lkotlin/jvm/functions/Function1;
 	public static final fun krtcSfu (Lio/ktor/server/routing/Route;Lkrtc/sfu/Sfu;Ljava/lang/String;ILkotlin/jvm/functions/Function1;)V

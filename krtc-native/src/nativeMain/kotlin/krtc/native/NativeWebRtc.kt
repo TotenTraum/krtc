@@ -146,6 +146,16 @@ public actual class NativePeerConnectionFactory actual constructor(
     }
 }
 
+public actual fun nativeScreenThumbnail(source: ScreenSource, maxWidth: Int, maxHeight: Int): VideoFrame? = memScoped {
+    val out = IntArray(maxWidth * maxHeight)
+    val w = alloc<IntVar>()
+    val h = alloc<IntVar>()
+    val ok = out.usePinned { pinned ->
+        krtc_screen_thumbnail(source.id, if (source.isWindow) 1 else 0, maxWidth, maxHeight, pinned.addressOf(0).reinterpret(), w.ptr, h.ptr)
+    }
+    if (ok != 0) null else VideoFrame(w.value, h.value, out.copyOf(w.value * h.value), 0)
+}
+
 public actual fun nativeScreenSources(): List<ScreenSource> =
     parseScreenSources(krtc_screen_sources()?.let { p -> p.toKString().also { krtc_free(p) } }.orEmpty())
 
@@ -435,7 +445,9 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     override val remoteDescription: RTCSessionDescription?
         get() = guard.useOr(null) { krtc_pc_remote_description(it) }?.let { p -> RTCSessionDescription(RTCSdpType.OFFER, p.toKString().also { krtc_free(p) }) }
 
-    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle -> synchronized(lock) {
+    // The native calls run on libwebrtc's signaling thread, which also delivers OnTrack (onEvent takes `lock`): they
+    // must not be made while holding `lock`, or a track event during another thread's call deadlocks both.
+    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle ->
         val count = krtc_pc_transceiver_count(handle)
         (0 until count).mapNotNull { i ->
             val h = krtc_pc_transceiver_at(handle, i) ?: return@mapNotNull null
@@ -444,10 +456,16 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
                 krtc_transceiver_release(h)
                 return@mapNotNull null
             }
-            transceivers[mid]?.also { krtc_transceiver_release(h) }
-                ?: NativeTransceiver(h, NativeTrack(krtc_transceiver_receiver_track(h)!!)).also { transceivers[mid] = it }
+            synchronized(lock) { transceivers[mid] }?.let { known ->
+                krtc_transceiver_release(h)
+                return@mapNotNull known
+            }
+            val created = NativeTransceiver(h, NativeTrack(krtc_transceiver_receiver_track(h)!!))
+            val kept = synchronized(lock) { transceivers[mid] ?: created.also { transceivers[mid] = it } }
+            if (kept !== created) created.release() // an OnTrack for this mid came in between
+            kept
         }
-    } }
+    }
 
     override fun close() {
         synchronized(lock) {

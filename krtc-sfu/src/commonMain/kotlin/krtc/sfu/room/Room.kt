@@ -433,6 +433,19 @@ internal class Room(
                 val best = feed.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.cap }?.index ?: -1
                 val currentActive = down.current >= 0 && feed.layers[down.current].isActive(now)
                 if (!currentActive || (best > down.current && down.target != best)) down.target = -1
+                // A subscriber that has no picture yet, or waits to switch layers, keeps asking for a key frame: the
+                // publisher may have lost the request, or answered it (for another subscriber) just before this one
+                // started waiting, and a static screen share sends no other key frame (nor many packets that would
+                // trigger a new request). requestKeyframe limits how often a layer is asked.
+                if (p.id != feed.publisher.id && feedKey in p.receivingVideo && feedKey !in p.paused) {
+                    val waitingFor = when {
+                        down.target >= 0 && down.target != down.current -> down.target
+                        down.current < 0 -> feed.layers.lastOrNull { l -> l.lastPacketMillis >= 0 && l.index <= down.cap }?.index
+                            ?: feed.layers.firstOrNull { l -> l.lastPacketMillis >= 0 }?.index
+                        else -> null
+                    }
+                    if (waitingFor != null) requestKeyframe(feed.publisher, feed.layers[waitingFor])
+                }
             }
             allocate(p, snapshot, now)
         }

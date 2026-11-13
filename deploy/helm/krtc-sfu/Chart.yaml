@@ -1,0 +1,9 @@
+apiVersion: v2
+name: krtc-sfu
+description: krtc SFU (selective forwarding unit for WebRTC calls) with its signaling and test page
+type: application
+version: 0.1.0
+appVersion: "nightly"
+home: https://github.com/TotenTraum/krtc
+sources:
+  - https://github.com/TotenTraum/krtc

@@ -1,6 +1,19 @@
 package krtc.meet
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.Image
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import krtc.native.NativeTrack
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.RadioButton
@@ -100,6 +113,9 @@ fun App(session: MeetSession, defaults: JoinSettings) {
                 is CallPhase.Ended -> Centered {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(if (phase.reason == "left") "Вы вышли из звонка" else "Звонок завершён: ${phase.reason ?: "соединение потеряно"}")
+                        if (phase.reason != "left") logLocation()?.let {
+                            Text("Журнал: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Button(onClick = session::reset) { Text("Назад") }
                     }
                 }
@@ -123,8 +139,25 @@ fun JoinScreen(session: MeetSession, defaults: JoinSettings, onJoin: (JoinSettin
 
     Centered {
         Column(Modifier.widthIn(max = 420.dp).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("krtc meet", style = MaterialTheme.typography.headlineSmall)
-            OutlinedTextField(server, { server = it }, label = { Text("Сервер") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("krtc meet", style = MaterialTheme.typography.headlineSmall)
+                Text(BuildInfo.VERSION, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            LaunchedEffect(Unit) { session.checkUpdates() }
+            session.update.collectAsState().value?.let { u ->
+                val uri = LocalUriHandler.current
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Доступна версия ${u.version}", Modifier.weight(1f), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    TextButton(onClick = { runCatching { uri.openUri(u.url) } }) { Text("Скачать") }
+                }
+            }
+            OutlinedTextField(
+                server, { server = it }, label = { Text("Сервер") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("адрес:порт, например 192.168.1.10:8080 или wss://meet.example.com") },
+            )
             OutlinedTextField(room, { room = it }, label = { Text("Комната") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(name, { name = it }, label = { Text("Имя") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Box {
@@ -458,43 +491,137 @@ private fun TileFor(session: MeetSession, spec: TileSpec, pinned: Boolean, expan
     }
 }
 
-/** Starts a screen share (choice of display or window, with or without sound) or stops it. */
+/** Starts a screen share in the picker, or while sharing offers to change what is shared or to stop. */
 @Composable
 private fun ScreenShareButton(session: MeetSession, sharing: Boolean) {
-    val fps by session.screenFps.collectAsState()
-    if (sharing) {
-        FilledTonalButton(onClick = session::stopScreen) { Text("Остановить показ · $fps к/с") }
+    val picker by session.screenPicker.collectAsState()
+    if (picker) ScreenPicker(session, live = sharing) { session.setScreenPicker(false) }
+    if (!sharing) {
+        FilledTonalButton(onClick = { session.setScreenPicker(true) }) { Text("Показать экран") }
         return
     }
+    val fps by session.screenFps.collectAsState()
     Box {
         var open by remember { mutableStateOf(false) }
-        var withAudio by remember { mutableStateOf(false) }
-        var choices by remember { mutableStateOf(emptyList<ScreenChoice>()) }
-        FilledTonalButton(onClick = { choices = session.screens(); open = true }) { Text("Показать экран") }
+        Button(onClick = { open = true }, colors = ButtonDefaults.buttonColors(containerColor = Live)) { Text("В эфире · $fps к/с") }
         DropdownMenu(open, onDismissRequest = { open = false }) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { withAudio = !withAudio }.padding(end = 12.dp)) {
-                Checkbox(withAudio, { withAudio = it })
-                Text("Со звуком")
+            DropdownMenuItem(text = { Text("Сменить окно или экран") }, onClick = { open = false; session.setScreenPicker(true) })
+            DropdownMenuItem(text = { Text("Остановить трансляцию") }, onClick = { open = false; session.stopScreen() })
+        }
+    }
+}
+
+private val Live = Color(0xFFE5534B)
+
+/**
+ * The screen share picker: windows ("Приложения") and displays ("Экраны") as tiles with live thumbnails, and the
+ * stream's sound, resolution and frame rate. [live]: a share is running, and the choice replaces it.
+ */
+@Composable
+private fun ScreenPicker(session: MeetSession, live: Boolean, onClose: () -> Unit) {
+    // Listing windows waits for the system (ScreenCaptureKit): off the UI thread.
+    var loaded by remember { mutableStateOf<List<ScreenChoice>?>(null) }
+    LaunchedEffect(Unit) { loaded = withContext(Dispatchers.Default) { runCatching { session.screens() }.getOrDefault(emptyList()) } }
+    val choices = loaded.orEmpty()
+    val windows = choices.filter { it.isWindow }
+    val displays = choices.filter { !it.isWindow }
+    var tab by remember { mutableStateOf(0) }
+    LaunchedEffect(loaded) { if (windows.isEmpty()) tab = 1 }
+    var selected by remember { mutableStateOf<ScreenChoice?>(null) }
+    LaunchedEffect(loaded) { if (selected == null) selected = choices.singleOrNull() }
+    var withAudio by remember { mutableStateOf(false) }
+    val shown = if (windows.isEmpty() || displays.isEmpty()) choices else if (tab == 0) windows else displays
+    // Thumbnails of the tab shown, captured one by one off the UI thread and refreshed while the picker is open.
+    val thumbs = remember { mutableStateMapOf<ScreenChoice, ImageBitmap?>() }
+    // Each thumbnail starts a capture for a moment: windows are taken once, the few displays every 5 s.
+    LaunchedEffect(shown) {
+        var first = true
+        while (true) {
+            for (c in shown) {
+                if (c.source == null || (!first && c.isWindow)) continue
+                val frame = withContext(Dispatchers.Default) { session.screenThumbnail(c) }
+                thumbs[c] = frame?.let { FrameBitmap().apply { write(it) }.image }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                Text("Разрешение", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
-                val height by session.screenHeight.collectAsState()
-                MeetSession.SCREEN_HEIGHT_CHOICES.forEach { choice ->
-                    FilterChip(selected = height == choice, onClick = { session.setScreenHeight(choice) }, label = { Text(if (choice == MeetSession.SOURCE_HEIGHT) "Исходное" else "${choice}p") })
+            first = false
+            if (shown.all { it.isWindow }) break
+            delay(5_000)
+        }
+    }
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).widthIn(max = 980.dp),
+            shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(if (live) "Сменить трансляцию" else "Демонстрация экрана", style = MaterialTheme.typography.titleLarge)
+                if (windows.isNotEmpty() && displays.isNotEmpty()) {
+                    TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Приложения · ${windows.size}") })
+                        Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Экраны · ${displays.size}") })
+                    }
+                }
+                if (loaded == null) Text("Ищу окна и экраны…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                choices.firstNotNullOfOrNull { it.note }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                LazyVerticalGrid(GridCells.Adaptive(minSize = 220.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(shown, key = { it.source?.let { s -> "${s.isWindow}/${s.id}" } ?: it.label }) { c ->
+                        val isSelected = selected === c
+                        val shape = RoundedCornerShape(10.dp)
+                        Column(
+                            Modifier.clip(shape).clickable { selected = c }
+                                .border(BorderStroke(3.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent), shape)
+                                .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF111216)), contentAlignment = Alignment.Center) {
+                                val image = thumbs[c]
+                                when {
+                                    image != null -> Image(image, c.label, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                    c.source == null -> Text(if (c.isWindow) "Окно" else "Экран", color = Color.Gray)
+                                    c in thumbs -> Text("Нет превью", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                                    else -> Text("…", color = Color.Gray)
+                                }
+                            }
+                            Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                StreamSettings(session, withAudio) { withAudio = it }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                    TextButton(onClick = onClose) { Text("Отмена") }
+                    Button(
+                        onClick = { selected?.let { session.startScreen(it, withAudio) }; onClose() },
+                        enabled = selected != null,
+                        colors = ButtonDefaults.buttonColors(containerColor = Live),
+                    ) { Text(if (live) "Сменить" else "Начать трансляцию") }
                 }
             }
-            // Frame rate: 15 is enough for slides and code, 30 and 60 for video and scrolling.
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                Text("Кадров в секунду", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
-                MeetSession.SCREEN_FPS_CHOICES.forEach { choice ->
-                    FilterChip(selected = fps == choice, onClick = { session.setScreenFps(choice) }, label = { Text("$choice") })
-                }
+        }
+    }
+}
+
+/** Sound, resolution and frame rate of the stream. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StreamSettings(session: MeetSession, withAudio: Boolean, onAudio: (Boolean) -> Unit) {
+    val fps by session.screenFps.collectAsState()
+    val height by session.screenHeight.collectAsState()
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Switch(withAudio, onAudio)
+            Text("Звук")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Разрешение", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            MeetSession.SCREEN_HEIGHT_CHOICES.forEach { choice ->
+                FilterChip(selected = height == choice, onClick = { session.setScreenHeight(choice) }, label = { Text(if (choice == MeetSession.SOURCE_HEIGHT) "Исходное" else "${choice}p") })
             }
-            choices.forEach { c ->
-                DropdownMenuItem(text = { Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = {
-                    open = false
-                    session.startScreen(c, withAudio)
-                })
+        }
+        // 15 is enough for slides and code, 30 and 60 for video and scrolling.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Кадров в секунду", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            MeetSession.SCREEN_FPS_CHOICES.forEach { choice ->
+                FilterChip(selected = fps == choice, onClick = { session.setScreenFps(choice) }, label = { Text("$choice") })
             }
         }
     }
@@ -543,6 +670,10 @@ private fun InputModeSettings(session: MeetSession) {
         Slider(input.threshold, { session.setInputSettings(input.copy(threshold = it)) }, valueRange = 0f..METER_FULL_SCALE)
     }
     CheckRow("Звуки входа, выхода и микрофона", cues, session::setCues)
+    val upload by session.logUpload.collectAsState()
+    CheckRow("Отправлять журнал на сервер (для разбора проблем)", upload, session::setLogUpload)
+    val updates by session.updateCheck.collectAsState()
+    CheckRow("Проверять обновления при запуске", updates, session::setUpdateCheck)
 }
 
 /** The level that fills the input meter; speech peaks rarely go above half of full scale. */
@@ -628,6 +759,7 @@ private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned:
                 if (sound != null) VolumeMenu(session, p, screen = true)
                 OverlayButton("Отключиться") { session.setScreenSubscribed(p, false) }
             }
+            StreamBadge(screen, Modifier.align(Alignment.BottomEnd).padding(8.dp))
         } else {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${p.name} показывает экран", color = Color.White)
@@ -655,6 +787,26 @@ private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boole
                 }
             }
         }
+    }
+}
+
+/** "В ЭФИРЕ · 1920×1080 · 30 к/с" on a stream: its size and the frame rate actually arriving. */
+@Composable
+private fun StreamBadge(track: MediaStreamTrack?, modifier: Modifier) {
+    val native = track as? NativeTrack ?: return
+    var text by remember(native) { mutableStateOf("") }
+    LaunchedEffect(native) {
+        var last = native.videoStats().frames
+        while (true) {
+            delay(1_000)
+            val s = native.videoStats()
+            text = if (s.width > 0) "${s.width}×${s.height} · ${s.frames - last} к/с" else ""
+            last = s.frames
+        }
+    }
+    Row(modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("В ЭФИРЕ", color = Color.White, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(Live).padding(horizontal = 4.dp))
+        if (text.isNotEmpty()) Text(text, color = Color.White, style = MaterialTheme.typography.labelSmall)
     }
 }
 

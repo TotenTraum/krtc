@@ -1,0 +1,128 @@
+{{- $mode := .Values.media.mode -}}
+{{- if not (has $mode (list "hostNetwork" "loadBalancer" "nodePort")) }}
+{{- fail "media.mode must be hostNetwork, loadBalancer or nodePort" }}
+{{- end }}
+{{- if and (ne $mode "hostNetwork") (not .Values.media.announce) }}
+{{- fail (printf "media.announce is required in %s mode: the address clients reach the media port at" $mode) }}
+{{- end }}
+{{- if and (eq $mode "nodePort") (or (lt (int .Values.media.port) 30000) (gt (int .Values.media.port) 32767)) }}
+{{- fail "nodePort mode: media.port must be in 30000-32767 (it is both the node port and the SFU's own)" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "krtc-sfu.fullname" . }}
+  labels: {{- include "krtc-sfu.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "krtc-sfu.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "krtc-sfu.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq $mode "hostNetwork" }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: sfu
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --ice-tcp
+            - {{ .Values.media.iceTcp | quote }}
+            {{- if .Values.clientLogs.enabled }}
+            - --client-logs
+            - /var/lib/krtc/client-logs
+            {{- end }}
+            {{- range .Values.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: KRTC_HTTP_PORT
+              value: {{ .Values.http.port | quote }}
+            - name: KRTC_UDP_PORT
+              value: {{ .Values.media.port | quote }}
+            {{- if .Values.media.announce }}
+            - name: KRTC_ANNOUNCE
+              value: {{ .Values.media.announce | quote }}
+            {{- else }}
+            # hostNetwork: the node's IP (its InternalIP; set media.announce if clients reach the node at another).
+            - name: KRTC_ANNOUNCE
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            {{- end }}
+            {{- if .Values.shards }}
+            - name: KRTC_SHARDS
+              value: {{ .Values.shards | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.http.port }}
+              protocol: TCP
+            - name: media-udp
+              containerPort: {{ .Values.media.port }}
+              protocol: UDP
+            {{- if .Values.media.iceTcp }}
+            - name: media-tcp
+              containerPort: {{ .Values.media.port }}
+              protocol: TCP
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /metrics, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /metrics, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.clientLogs.enabled }}
+          volumeMounts:
+            - name: client-logs
+              mountPath: /var/lib/krtc/client-logs
+          {{- end }}
+      {{- if .Values.clientLogs.enabled }}
+      volumes:
+        - name: client-logs
+          {{- if .Values.clientLogs.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.clientLogs.persistence.existingClaim | default (printf "%s-client-logs" (include "krtc-sfu.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

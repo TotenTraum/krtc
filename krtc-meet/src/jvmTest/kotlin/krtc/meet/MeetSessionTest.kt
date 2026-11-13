@@ -6,6 +6,10 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.webSocket
+import io.ktor.server.routing.post
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
 import krtc.client.RemoteParticipant
 import krtc.native.AudioDevice
 import krtc.native.NativePeerConnectionFactory
@@ -13,6 +17,8 @@ import krtc.native.NativeTrack
 import krtc.native.NativeVideoSource
 import krtc.sfu.Sfu
 import krtc.sfu.SfuConfig
+import krtc.sfu.ktor.FileClientLogStore
+import krtc.sfu.ktor.krtcClientLogs
 import krtc.sfu.ktor.krtcSfu
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,9 +49,10 @@ class MeetSessionTest {
     // MeetSession is confined to one thread (the UI thread in the app): so are the tests.
     private val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + main)
+    private val logDir = java.nio.file.Files.createTempDirectory("krtc-client-logs").toFile()
 
-    /** Synthetic audio, and a "screen" of pushed frames: no devices or permissions needed. */
-    private class TestPlatform : MediaPlatform {
+    /** Synthetic audio, and a "screen" of pushed frames: no devices or permissions needed. [static]: always the same picture. */
+    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings()) : MediaPlatform {
         val factories = mutableListOf<NativePeerConnectionFactory>()
         override val sharedSystemAudio = false
         override fun createFactory(testAudio: Boolean) = NativePeerConnectionFactory(AudioDevice.SYNTHETIC).also { factories += it }
@@ -56,18 +63,18 @@ class MeetSessionTest {
             factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
         ): OpenedScreen {
             val source = factory.createScreencastSource()
-            return OpenedScreen(source, null, Pusher(source, fps))
+            return OpenedScreen(source, null, Pusher(source, fps, static))
         }
     }
 
     /** Pushes frames at [fps], like a capture would. */
-    private class Pusher(source: NativeVideoSource, fps: Int) : AutoCloseable {
+    private class Pusher(source: NativeVideoSource, fps: Int, static: Boolean = false) : AutoCloseable {
         @Volatile private var running = true
         private val t = thread {
             val pixels = IntArray(640 * 360)
             var n = 0
             while (running) {
-                pixels.fill(0xFF000000.toInt() or (n++ * 7 and 0xFF))
+                pixels.fill(0xFF000000.toInt() or (if (static) 0x80 else n++ * 7 and 0xFF))
                 source.pushArgb(640, 360, pixels)
                 Thread.sleep(1000L / fps)
             }
@@ -83,7 +90,10 @@ class MeetSessionTest {
         sfu = Sfu(SfuConfig(udpPort = 0, shards = 1, announcedAddress = "127.0.0.1"))
         server = embeddedServer(CIO, port = 0) {
             install(WebSockets)
-            routing { krtcSfu(sfu, "/ws") }
+            routing {
+                krtcSfu(sfu, "/ws")
+                krtcClientLogs(FileClientLogStore(logDir.absolutePath))
+            }
         }
         server.start(wait = false)
         url = "ws://127.0.0.1:" + runBlocking { server.engine.resolvedConnectors().first().port }
@@ -95,6 +105,7 @@ class MeetSessionTest {
         main.close()
         server.stop(100, 500)
         sfu.close()
+        logDir.deleteRecursively()
     }
 
     private suspend fun waitUntil(what: String, timeoutMillis: Long = 15_000, check: () -> Boolean) {
@@ -349,5 +360,152 @@ class MeetSessionTest {
                 b.close()
             }
         }
+    }
+
+    /**
+     * Viewers who join while a static screen share is already running get the picture: the SFU keeps asking the
+     * publisher for a key frame while a viewer waits, also when two join within the key frame request interval.
+     */
+    @Test
+    fun lateViewersGetAStaticScreen(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform(static = true))
+        val b = MeetSession(scope, TestPlatform())
+        val c = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "late", "alice", CameraChoice.None, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            a.startScreen(a.screens().single(), withAudio = false)
+            waitUntil("alice sharing") { a.screen.value != null }
+            delay(3_000) // the share's first key frame is long gone
+            b.join(JoinSettings(url, "late", "bob", CameraChoice.None, testAudio = true))
+            delay(100)
+            c.join(JoinSettings(url, "late", "carol", CameraChoice.None, testAudio = true))
+            for ((who, s) in listOf("bob" to b, "carol" to c)) {
+                val alice = withTimeout(15_000) { s.participants.first { list -> list.any { it.name == "alice" } }.single { it.name == "alice" } }
+                waitUntil("$who sees alice's screen") { frames(alice.screen.value) > 5 }
+            }
+        } finally {
+            a.close()
+            b.close()
+            c.close()
+        }
+    }
+
+    /** A server that accepts the socket but never answers: joining ends with an error, not "Подключение…" forever. */
+    @Test
+    fun joinThatNeverCompletesEndsWithAnError(): Unit = runBlocking(main) {
+        val silent = embeddedServer(CIO, port = 0) {
+            install(WebSockets)
+            routing { webSocket("/ws") { for (frame in incoming) Unit } }
+        }.also { it.start(wait = false) }
+        try {
+            val port = silent.engine.resolvedConnectors().first().port
+            val a = MeetSession(scope, TestPlatform())
+            a.join(JoinSettings("ws://127.0.0.1:$port", "r", "alice", CameraChoice.None, testAudio = true))
+            waitUntil("join reported as failed", MeetSession.JOIN_TIMEOUT_MILLIS + 10_000) { a.phase.value is CallPhase.Ended }
+            val reason = (a.phase.value as CallPhase.Ended).reason.orEmpty()
+            assertTrue(reason.startsWith("сервер не ответил"), reason)
+            assertTrue(java.io.File(logLocation()!!).readText().contains("join still not done"), "thread dump in the log")
+            a.close()
+        } finally {
+            silent.stop(100, 500)
+        }
+    }
+
+    /** The session's log, with @Traced calls (woven by kaop), reaches the server's log receiver; chat text does not. */
+    @Test
+    fun logReachesTheServer(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform())
+        a.join(JoinSettings(url, "logs", "Alice Smith", CameraChoice.None, testAudio = true))
+        waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+        a.toggleMic()
+        waitUntil("chat open") { a.sendChat("my secret words") }
+        a.leave()
+        fun serverLog() = logDir.walk().filter { it.isFile }.joinToString("\n") { it.name + "\n" + it.readText() }
+        waitUntil("the log on the server") { "call ended: left" in serverLog() }
+        val log = serverLog()
+        assertTrue(Regex("AliceSmith-[0-9a-f]{6}\\.log").containsMatchIn(log), log.take(300))
+        assertTrue("# krtc-meet on " in log, "header line")
+        assertTrue(Regex("D \\[MeetSession] toggleMic\\(\\) \\d+ ms").containsMatchIn(log), "traced call: " + log.take(2000))
+        assertTrue(Regex("join\\(settings=JoinSettings\\(server=ws://").containsMatchIn(log), "traced arguments")
+        assertTrue("sendChat()" in log && "my secret words" !in log, "chat text kept out")
+        a.close()
+    }
+
+    /** A server that fails twice: the same entries are sent again, each arrives once and in order. */
+    @Test
+    fun uploaderRetriesFailedBatches(): Unit = runBlocking(main) {
+        val bodies = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val failures = java.util.concurrent.atomic.AtomicInteger(2)
+        val flaky = embeddedServer(CIO, port = 0) {
+            routing {
+                post("/logs") {
+                    if (failures.getAndDecrement() > 0) return@post call.respond(io.ktor.http.HttpStatusCode.ServiceUnavailable)
+                    bodies += call.receiveText()
+                    call.respond(io.ktor.http.HttpStatusCode.NoContent)
+                }
+            }
+        }.also { it.start(wait = false) }
+        try {
+            val port = flaky.engine.resolvedConnectors().first().port
+            krtc.meet.log.ClientLog.take(Int.MAX_VALUE) // what other tests left
+            repeat(5) { krtc.meet.log.ClientLog.i("retry-test", "entry $it") }
+            val up = krtc.meet.log.LogUploader("http://127.0.0.1:$port/logs", "t-1", "test", "jvm", intervalMillis = 100, batchSize = 3)
+            up.start(scope)
+            waitUntil("all entries delivered") { bodies.joinToString().contains("entry 4") }
+            up.stop()
+            val sent = bodies.flatMap { Regex("entry (\\d)").findAll(it).map { m -> m.groupValues[1].toInt() }.toList() }
+            assertEquals(listOf(0, 1, 2, 3, 4), sent, "each once, in order")
+        } finally {
+            flaky.stop(100, 500)
+        }
+    }
+
+    /** Settings survive a restart: a new session on the same store starts with them, and the join form too. */
+    @Test
+    fun settingsAreRemembered(): Unit = runBlocking(main) {
+        val store = MemorySettings()
+        val first = MeetSession(scope, TestPlatform(settings = store))
+        first.setInputSettings(InputSettings(InputMode.PUSH_TO_TALK, threshold = 0.2f))
+        first.setAudioProcessing(AudioProcessing(noiseSuppression = false))
+        first.setScreenFps(60)
+        first.setLayout(Layout.SPEAKER)
+        first.join(JoinSettings(url, "remember", "carol", CameraChoice.TestPattern, testAudio = true))
+        waitUntil("carol in the call") { first.phase.value is CallPhase.InCall }
+        delay(200) // the flows' collectors save
+        first.close()
+
+        val second = MeetSession(scope, TestPlatform(settings = store))
+        assertEquals(InputSettings(InputMode.PUSH_TO_TALK, 0.2f), second.inputSettings.value)
+        assertEquals(false, second.audioProcessing.value.noiseSuppression)
+        assertEquals(60, second.screenFps.value)
+        assertEquals(Layout.SPEAKER, second.layout.value)
+        val fallback = JoinSettings("ws://other", "room", "name", CameraChoice.None, testAudio = false)
+        val remembered = second.rememberedJoin(fallback)
+        assertEquals(JoinSettings(url, "remember", "carol", CameraChoice.TestPattern, testAudio = true), remembered)
+        // What is given explicitly (automation) wins over what was saved.
+        assertEquals("ws://other", second.rememberedJoin(fallback, given = setOf("server")).server)
+        second.close()
+    }
+
+    @Test
+    fun serverAddressesAreNormalized() {
+        assertEquals("ws://155.212.175.60:8080", MeetSession.normalizeServer("155.212.175.60:8080"))
+        assertEquals("ws://host:8080", MeetSession.normalizeServer(" http://host:8080/ "))
+        assertEquals("wss://meet.example.com", MeetSession.normalizeServer("https://meet.example.com/ws"))
+        assertEquals("ws://h:1", MeetSession.normalizeServer("ws://h:1"))
+    }
+
+    @Test
+    fun updatesFollowTheBuildsChannel() {
+        val releases = """[
+            {"tag_name":"nightly","name":"nightly 1.0.57","prerelease":true,"html_url":"https://example/nightly"},
+            {"tag_name":"v1.2.0","name":"krtc v1.2.0","prerelease":false,"html_url":"https://example/v1.2.0"},
+            {"tag_name":"v1.3.0-rc1","name":"krtc v1.3.0","prerelease":true,"html_url":"https://example/rc"}
+        ]"""
+        assertEquals(Update("1.0.57", "https://example/nightly"), newerRelease("1.0.50", releases))
+        assertEquals(null, newerRelease("1.0.57", releases), "the newest nightly already")
+        assertEquals(Update("1.2.0", "https://example/v1.2.0"), newerRelease("1.1.0", releases), "release builds ignore nightly and pre-releases")
+        assertEquals(null, newerRelease("1.2.0", releases))
     }
 }

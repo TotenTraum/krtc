@@ -26,6 +26,8 @@ class AndroidMediaPlatform(
 
     override val sharedSystemAudio: Boolean = false
 
+    override val settings: SettingsStore = PreferencesSettings(context)
+
     override fun createFactory(testAudio: Boolean): NativePeerConnectionFactory = NativePeerConnectionFactory(audioDevice = AudioDevice.SYNTHETIC)
 
     override fun startAudio(factory: NativePeerConnectionFactory, testAudio: Boolean): AutoCloseable? =
@@ -47,7 +49,9 @@ class AndroidMediaPlatform(
             .getOrElse { source.close(); null }
     }
 
-    override fun screens(): List<ScreenChoice> = listOf(ScreenChoice("Экран или приложение (выбор в системном окне)"))
+    override fun screens(): List<ScreenChoice> = listOf(ScreenChoice(
+        "Экран или приложение", note = "Что показывать — весь экран или одно приложение, — Android спросит в своём окне.",
+    ))
 
     override suspend fun openScreen(
         factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,

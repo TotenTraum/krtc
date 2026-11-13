@@ -1,0 +1,51 @@
+# Signaling, the test page, metrics and client logs (HTTP); reached through the ingress or port-forward.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krtc-sfu.fullname" . }}
+  labels: {{- include "krtc-sfu.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "krtc-sfu.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.http.port }}
+      targetPort: http
+      protocol: TCP
+{{- if ne .Values.media.mode "hostNetwork" }}
+---
+# Media: UDP, and TCP for ICE-TCP, on the port the SFU announces.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krtc-sfu.fullname" . }}-media
+  labels: {{- include "krtc-sfu.labels" . | nindent 4 }}
+  {{- with .Values.media.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ if eq .Values.media.mode "loadBalancer" }}LoadBalancer{{ else }}NodePort{{ end }}
+  # Clients' own addresses reach the SFU (consent checks and NAT keep working) and no extra hop is added.
+  externalTrafficPolicy: Local
+  {{- if and (eq .Values.media.mode "loadBalancer") .Values.media.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml .Values.media.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  selector: {{- include "krtc-sfu.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: media-udp
+      port: {{ .Values.media.port }}
+      targetPort: media-udp
+      protocol: UDP
+      {{- if eq .Values.media.mode "nodePort" }}
+      nodePort: {{ .Values.media.port }}
+      {{- end }}
+    {{- if .Values.media.iceTcp }}
+    - name: media-tcp
+      port: {{ .Values.media.port }}
+      targetPort: media-tcp
+      protocol: TCP
+      {{- if eq .Values.media.mode "nodePort" }}
+      nodePort: {{ .Values.media.port }}
+      {{- end }}
+    {{- end }}
+{{- end }}

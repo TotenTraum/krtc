@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
 #include "krtc.h"
 
@@ -220,6 +221,16 @@ KRTC_JNI(void, videoSourcePushRgbaDirect)(JNIEnv *env, jclass, jlong s, jint w, 
     if (p) krtc_video_source_push_rgba(H<krtc_video_source>(s), w, h, p, stride, rotation, ts);
 }
 KRTC_JNI(jstring, screenSources)(JNIEnv *env, jclass) { return Take(env, krtc_screen_sources()); }
+// out: the ARGB pixels (max_width * max_height); size: [width, height]. 0 on success.
+KRTC_JNI(jint, screenThumbnail)(JNIEnv *env, jclass, jlong id, jboolean window, jint max_width, jint max_height, jintArray out, jintArray size) {
+    std::vector<uint32_t> pixels(static_cast<size_t>(max_width) * max_height);
+    int w = 0, h = 0;
+    if (krtc_screen_thumbnail(id, window ? 1 : 0, max_width, max_height, pixels.data(), &w, &h) != 0) return -1;
+    env->SetIntArrayRegion(out, 0, w * h, reinterpret_cast<const jint *>(pixels.data()));
+    const jint wh[2] = {w, h};
+    env->SetIntArrayRegion(size, 0, 2, wh);
+    return 0;
+}
 KRTC_JNI(jlong, factoryCreateScreenSource)(JNIEnv *, jclass, jlong f, jlong id, jboolean window, jint fps, jint maxW, jint maxH) {
     return J(krtc_factory_create_screen_source(H<krtc_factory>(f), id, window ? 1 : 0, fps, maxW, maxH));
 }

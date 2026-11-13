@@ -66,6 +66,13 @@ private:
  */
 std::function<void()> StartSystemAudio(PushAudioSource *source);
 
+/**
+ * Calls [onChange] (on a system thread) when an audio device's sample rate changes, or the default output device
+ * does, e.g. Bluetooth headphones switching between the headset profile (while their microphone is in use) and the
+ * music profile. Returns a function that stops watching; nullptr where not needed (only macOS has it).
+ */
+std::function<void()> WatchAudioFormat(std::function<void()> onChange);
+
 /** Converts float samples (-1..1) to 16-bit and pushes them. */
 void PushFloat(PushAudioSource *source, const float *samples, size_t frames, int channels, int sampleRate);
 

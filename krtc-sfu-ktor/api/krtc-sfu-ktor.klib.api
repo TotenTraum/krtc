@@ -6,8 +6,46 @@
 // - Show declarations: true
 
 // Library unique name: <krtc:krtc-sfu-ktor>
+abstract fun interface krtc.sfu.ktor/ClientLogStore { // krtc.sfu.ktor/ClientLogStore|null[0]
+    abstract suspend fun store(krtc.sfu.ktor/ClientLogBatch) // krtc.sfu.ktor/ClientLogStore.store|store(krtc.sfu.ktor.ClientLogBatch){}[0]
+}
+
+final class krtc.sfu.ktor/ClientLogBatch { // krtc.sfu.ktor/ClientLogBatch|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/String, kotlin.collections/List<krtc.sfu.ktor/ClientLogEntry>) // krtc.sfu.ktor/ClientLogBatch.<init>|<init>(kotlin.String;kotlin.String;kotlin.String;kotlin.collections.List<krtc.sfu.ktor.ClientLogEntry>){}[0]
+
+    final val app // krtc.sfu.ktor/ClientLogBatch.app|{}app[0]
+        final fun <get-app>(): kotlin/String // krtc.sfu.ktor/ClientLogBatch.app.<get-app>|<get-app>(){}[0]
+    final val client // krtc.sfu.ktor/ClientLogBatch.client|{}client[0]
+        final fun <get-client>(): kotlin/String // krtc.sfu.ktor/ClientLogBatch.client.<get-client>|<get-client>(){}[0]
+    final val entries // krtc.sfu.ktor/ClientLogBatch.entries|{}entries[0]
+        final fun <get-entries>(): kotlin.collections/List<krtc.sfu.ktor/ClientLogEntry> // krtc.sfu.ktor/ClientLogBatch.entries.<get-entries>|<get-entries>(){}[0]
+    final val platform // krtc.sfu.ktor/ClientLogBatch.platform|{}platform[0]
+        final fun <get-platform>(): kotlin/String // krtc.sfu.ktor/ClientLogBatch.platform.<get-platform>|<get-platform>(){}[0]
+}
+
+final class krtc.sfu.ktor/ClientLogEntry { // krtc.sfu.ktor/ClientLogEntry|null[0]
+    constructor <init>(kotlin/Long, kotlin/String, kotlin/String, kotlin/String) // krtc.sfu.ktor/ClientLogEntry.<init>|<init>(kotlin.Long;kotlin.String;kotlin.String;kotlin.String){}[0]
+
+    final val level // krtc.sfu.ktor/ClientLogEntry.level|{}level[0]
+        final fun <get-level>(): kotlin/String // krtc.sfu.ktor/ClientLogEntry.level.<get-level>|<get-level>(){}[0]
+    final val message // krtc.sfu.ktor/ClientLogEntry.message|{}message[0]
+        final fun <get-message>(): kotlin/String // krtc.sfu.ktor/ClientLogEntry.message.<get-message>|<get-message>(){}[0]
+    final val tag // krtc.sfu.ktor/ClientLogEntry.tag|{}tag[0]
+        final fun <get-tag>(): kotlin/String // krtc.sfu.ktor/ClientLogEntry.tag.<get-tag>|<get-tag>(){}[0]
+    final val timeMillis // krtc.sfu.ktor/ClientLogEntry.timeMillis|{}timeMillis[0]
+        final fun <get-timeMillis>(): kotlin/Long // krtc.sfu.ktor/ClientLogEntry.timeMillis.<get-timeMillis>|<get-timeMillis>(){}[0]
+}
+
+final class krtc.sfu.ktor/FileClientLogStore : krtc.sfu.ktor/ClientLogStore { // krtc.sfu.ktor/FileClientLogStore|null[0]
+    constructor <init>(kotlin/String, kotlin/Long = ...) // krtc.sfu.ktor/FileClientLogStore.<init>|<init>(kotlin.String;kotlin.Long){}[0]
+
+    final suspend fun store(krtc.sfu.ktor/ClientLogBatch) // krtc.sfu.ktor/FileClientLogStore.store|store(krtc.sfu.ktor.ClientLogBatch){}[0]
+}
+
 final val krtc.sfu.ktor/DefaultJoinRequest // krtc.sfu.ktor/DefaultJoinRequest|{}DefaultJoinRequest[0]
     final fun <get-DefaultJoinRequest>(): kotlin/Function1<io.ktor.server.application/ApplicationCall, krtc.sfu/JoinRequest?> // krtc.sfu.ktor/DefaultJoinRequest.<get-DefaultJoinRequest>|<get-DefaultJoinRequest>(){}[0]
 
+final fun (io.ktor.server.routing/Route).krtc.sfu.ktor/krtcClientLogs(krtc.sfu.ktor/ClientLogStore, kotlin/String = ..., kotlin/Long = ..., kotlin/Int = ...) // krtc.sfu.ktor/krtcClientLogs|krtcClientLogs@io.ktor.server.routing.Route(krtc.sfu.ktor.ClientLogStore;kotlin.String;kotlin.Long;kotlin.Int){}[0]
 final fun (io.ktor.server.routing/Route).krtc.sfu.ktor/krtcSfu(krtc.sfu/Sfu, kotlin/String = ..., kotlin/Int = ..., kotlin/Function1<io.ktor.server.application/ApplicationCall, krtc.sfu/JoinRequest?> = ...) // krtc.sfu.ktor/krtcSfu|krtcSfu@io.ktor.server.routing.Route(krtc.sfu.Sfu;kotlin.String;kotlin.Int;kotlin.Function1<io.ktor.server.application.ApplicationCall,krtc.sfu.JoinRequest?>){}[0]
+final fun krtc.sfu.ktor/parseClientLogBatch(kotlin/String): krtc.sfu.ktor/ClientLogBatch? // krtc.sfu.ktor/parseClientLogBatch|parseClientLogBatch(kotlin.String){}[0]
 final suspend fun (io.ktor.server.websocket/DefaultWebSocketServerSession).krtc.sfu.ktor/serve(krtc.sfu/Sfu, krtc.sfu/JoinRequest?, kotlin/Int = ...) // krtc.sfu.ktor/serve|serve@io.ktor.server.websocket.DefaultWebSocketServerSession(krtc.sfu.Sfu;krtc.sfu.JoinRequest?;kotlin.Int){}[0]

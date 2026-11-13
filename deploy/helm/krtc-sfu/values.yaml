@@ -1,0 +1,73 @@
+image:
+  repository: ghcr.io/totentraum/krtc-sfu
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# One instance: rooms live in its memory, so more replicas would split a room's participants.
+# Updates stop the old pod before starting the new one (it holds the media port).
+
+http:
+  port: 8080
+
+media:
+  # How clients reach the media port (UDP, and the same port over TCP for networks without UDP):
+  #   hostNetwork   the pod uses the node's network: the port is open on the node, announced at the node's IP
+  #                 (or `announce`). Simplest on your own servers and k3s; one SFU per node.
+  #   loadBalancer  a LoadBalancer Service with UDP and TCP on `port` (Kubernetes 1.26+ for mixed protocols);
+  #                 set `announce` to its external IP once it has one.
+  #   nodePort      a NodePort Service; `port` must be in the node port range (30000-32767), the SFU uses the same
+  #                 number inside, and `announce` is a node's external IP.
+  mode: hostNetwork
+  port: 50000
+  # Addresses clients should reach, comma separated (public IPs). Empty in hostNetwork mode: the node's IP.
+  announce: ""
+  iceTcp: true
+  service:
+    annotations: {}
+    # loadBalancer mode: e.g. ["10.0.0.0/8"]; empty allows everyone.
+    loadBalancerSourceRanges: []
+
+# HTTPS and wss:// for signaling, the test page and client logs. Browsers allow the microphone, camera and screen
+# share only on HTTPS pages (or localhost). The media itself does not go through the ingress.
+ingress:
+  enabled: false
+  className: ""
+  annotations:
+    # ingress-nginx: keep the signaling WebSocket open (calls last long).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  host: meet.example.com
+  tls:
+    enabled: true
+    # Secret with the certificate (e.g. from cert-manager); empty: the ingress controller's default.
+    secretName: krtc-sfu-tls
+
+# Accept client logs (krtc-meet) at POST /logs, written to <volume>/<date>/<client>.log. No authentication: only on
+# servers you trust, or behind the ingress's own auth.
+clientLogs:
+  enabled: false
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: ""
+    existingClaim: ""
+
+# Worker threads; empty: one per CPU core the container sees.
+shards: ""
+extraArgs: []
+extraEnv: []
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

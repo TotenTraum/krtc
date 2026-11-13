@@ -199,6 +199,13 @@ public class ScreenSource(public val id: Long, public val isWindow: Boolean, pub
  */
 public expect fun nativeScreenSources(): List<ScreenSource>
 
+/**
+ * A still image of [source] for a picker, scaled to fit [maxWidth] × [maxHeight] (it captures briefly, up to about
+ * two seconds: call it off the UI thread). Null if it cannot be captured (no permission, a minimized window) or the
+ * platform lets the system pick (Android, iOS).
+ */
+public expect fun nativeScreenThumbnail(source: ScreenSource, maxWidth: Int = 320, maxHeight: Int = 180): VideoFrame?
+
 internal fun parseScreenSources(text: String): List<ScreenSource> = text.lineSequence().mapNotNull { line ->
     val parts = line.split(' ', limit = 3)
     val id = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null

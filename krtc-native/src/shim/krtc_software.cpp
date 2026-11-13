@@ -452,6 +452,8 @@ std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource 
 std::function<void()> StartSystemAudio(PushAudioSource *) { return nullptr; }
 #endif
 
+std::function<void()> WatchAudioFormat(std::function<void()>) { return nullptr; }
+
 }  // namespace krtc
 
 #if defined(__linux__) && !defined(__ANDROID__)

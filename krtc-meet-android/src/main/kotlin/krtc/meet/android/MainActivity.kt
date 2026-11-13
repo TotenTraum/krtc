@@ -63,9 +63,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val scope = rememberCoroutineScope()
             val session = remember { MeetSession(scope, platform) }
-            remember { if (autojoin) session.join(defaults) }
+            val given = remember { listOf("server", "room", "name", "camera", "testAudio").filter { extras?.containsKey(it) == true }.toSet() }
+            val remembered = remember { session.rememberedJoin(defaults, given) }
+            remember { if (autojoin) session.join(remembered) }
             DisposableEffect(Unit) { onDispose { if (isFinishing) session.close() } }
-            App(session, defaults)
+            App(session, remembered)
         }
     }
 }

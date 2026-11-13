@@ -15,6 +15,8 @@ import krtc.sfu.Sfu
 import krtc.sfu.SfuConfig
 import krtc.sfu.SfuLinkStats
 import krtc.sfu.SfuMetrics
+import krtc.sfu.ktor.FileClientLogStore
+import krtc.sfu.ktor.krtcClientLogs
 import krtc.sfu.ktor.krtcSfu
 import kotlin.time.Duration.Companion.seconds
 
@@ -25,6 +27,7 @@ import kotlin.time.Duration.Companion.seconds
  *   --ice-tcp true  --ice-udp true
  * `--bind 0.0.0.0` (IPv4) or `::` (IPv4 + IPv6) listens on every interface address and answers from the address
  * each client used; `--announce` lists the addresses clients should reach (public IPs behind NAT).
+ *   --client-logs <dir>  accepts client logs (krtc-meet) at POST /logs into <dir>/<date>/<client>.log; off by default
  *   --simulate-loss 0  --simulate-uplink-loss 0  --simulate-downlink-kbps 0   (testing only)
  */
 /** Whether a TCP listener can bind [port] on all interfaces right now. */
@@ -56,13 +59,18 @@ public fun main(args: Array<String>) {
     } catch (e: IllegalArgumentException) {
         exitWithError("krtc-sfu: ${e.message}")
     }
-    val server = standaloneServer(sfu, httpPort)
+    val clientLogs = opt("client-logs", "KRTC_CLIENT_LOGS")
+    val server = standaloneServer(sfu, httpPort, clientLogs)
     println("krtc-sfu: http://localhost:$httpPort/  (UDP ${sfu.udpPort}, announced ${config.announcedAddresses.ifEmpty { listOf(config.announcedAddress) }.joinToString()})")
+    clientLogs?.let { println("krtc-sfu: client logs at POST /logs into $it") }
     server.start(wait = true)
 }
 
-/** The standalone HTTP server: test page at `/`, signaling at `/ws`, counters at `/metrics`. */
-public fun standaloneServer(sfu: Sfu, port: Int): EmbeddedServer<*, *> = embeddedServer(CIO, port = port) {
+/**
+ * The standalone HTTP server: test page at `/`, signaling at `/ws`, counters at `/metrics`, and client logs at
+ * `/logs` into [clientLogsDir] when given.
+ */
+public fun standaloneServer(sfu: Sfu, port: Int, clientLogsDir: String? = null): EmbeddedServer<*, *> = embeddedServer(CIO, port = port) {
     install(WebSockets) {
         pingPeriod = 15.seconds
         timeout = 30.seconds
@@ -72,6 +80,7 @@ public fun standaloneServer(sfu: Sfu, port: Int): EmbeddedServer<*, *> = embedde
         get("/metrics") { call.respondText(sfu.metrics().toJson(), ContentType.Application.Json) }
         get("/stats") { call.respondText(sfu.linkStats().toJson(), ContentType.Application.Json) }
         krtcSfu(sfu, "/ws")
+        clientLogsDir?.let { krtcClientLogs(FileClientLogStore(it)) }
     }
 }
 

@@ -1,0 +1,12 @@
+krtc-sfu is starting ({{ .Values.media.mode }} mode, media on port {{ .Values.media.port }}/UDP{{ if .Values.media.iceTcp }} and TCP{{ end }}).
+
+{{- if .Values.ingress.enabled }}
+Signaling and test page: https://{{ .Values.ingress.host }}/  (krtc-meet: wss://{{ .Values.ingress.host }})
+{{- else }}
+Signaling and test page (no ingress):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "krtc-sfu.fullname" . }} {{ .Values.http.port }}
+  then http://localhost:{{ .Values.http.port }}/ (krtc-meet: ws://localhost:{{ .Values.http.port }})
+{{- end }}
+
+Media must be reachable by clients at {{ if .Values.media.announce }}{{ .Values.media.announce }}{{ else }}the node's IP{{ end }}:{{ .Values.media.port }}
+(open it in the firewall / security group). Metrics: /metrics, per-participant links: /stats.

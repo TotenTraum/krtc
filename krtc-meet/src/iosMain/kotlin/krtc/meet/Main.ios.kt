@@ -42,8 +42,10 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     )
     val scope = rememberCoroutineScope()
     val session = remember { MeetSession(scope, NativeMediaPlatform) }
-    remember { if (get("KRTC_MEET_AUTOJOIN") == "1") session.join(defaults) }
-    App(session, defaults)
+    val given = remember { mapOf("server" to "KRTC_MEET_SERVER", "room" to "KRTC_MEET_ROOM", "name" to "KRTC_MEET_NAME", "camera" to "KRTC_MEET_CAMERA", "testAudio" to "KRTC_MEET_TEST_AUDIO").filterValues { get(it) != null }.keys }
+    val remembered = remember { session.rememberedJoin(defaults, given) }
+    remember { if (get("KRTC_MEET_AUTOJOIN") == "1") session.join(remembered) }
+    App(session, remembered)
 }
 
 /** Standalone app entry (no Xcode project): UIKit with [MainViewController] as the root. */

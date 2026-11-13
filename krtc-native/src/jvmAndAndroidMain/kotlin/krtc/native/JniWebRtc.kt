@@ -116,6 +116,13 @@ public actual class NativePeerConnectionFactory actual constructor(
 
 public actual fun nativeScreenSources(): List<ScreenSource> = parseScreenSources(Jni.screenSources().orEmpty())
 
+public actual fun nativeScreenThumbnail(source: ScreenSource, maxWidth: Int, maxHeight: Int): VideoFrame? {
+    val out = IntArray(maxWidth * maxHeight)
+    val size = IntArray(2)
+    if (Jni.screenThumbnail(source.id, source.isWindow, maxWidth, maxHeight, out, size) != 0) return null
+    return VideoFrame(size[0], size[1], out.copyOf(size[0] * size[1]), 0)
+}
+
 public actual fun nativeCameras(): List<String> = List(Jni.cameraCount()) { i -> Jni.cameraName(i) ?: "camera $i" }
 
 /** Thread-safe: pushes after [close] are ignored. */
@@ -321,7 +328,9 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     override val localDescription: RTCSessionDescription? get() = guard.useOr(null) { Jni.pcLocalDescription(it) }?.let { RTCSessionDescription(RTCSdpType.ANSWER, it) }
     override val remoteDescription: RTCSessionDescription? get() = guard.useOr(null) { Jni.pcRemoteDescription(it) }?.let { RTCSessionDescription(RTCSdpType.OFFER, it) }
 
-    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle -> synchronized(lock) {
+    // The native calls run on libwebrtc's signaling thread, which also delivers OnTrack (onEvent takes `lock`): they
+    // must not be made while holding `lock`, or a track event during another thread's call deadlocks both.
+    override fun getTransceivers(): List<RTCRtpTransceiver> = guard.useOr(emptyList()) { handle ->
         (0 until Jni.pcTransceiverCount(handle)).mapNotNull { i ->
             val h = Jni.pcTransceiverAt(handle, i).takeIf { it != 0L } ?: return@mapNotNull null
             val mid = Jni.transceiverMid(h)
@@ -329,10 +338,16 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
                 Jni.transceiverRelease(h)
                 return@mapNotNull null
             }
-            transceivers[mid]?.also { Jni.transceiverRelease(h) }
-                ?: NativeTransceiver(h, NativeTrack(Jni.transceiverReceiverTrack(h))).also { transceivers[mid] = it }
+            synchronized(lock) { transceivers[mid] }?.let { known ->
+                Jni.transceiverRelease(h)
+                return@mapNotNull known
+            }
+            val created = NativeTransceiver(h, NativeTrack(Jni.transceiverReceiverTrack(h)))
+            val kept = synchronized(lock) { transceivers[mid] ?: created.also { transceivers[mid] = it } }
+            if (kept !== created) created.release() // an OnTrack for this mid came in between
+            kept
         }
-    } }
+    }
 
     override fun close() {
         synchronized(lock) {
