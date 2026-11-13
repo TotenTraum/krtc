@@ -1,7 +1,7 @@
 [versions]
 compose-multiplatform = "1.12.2"
 kotlin = "2.4.21"
-kaop = "0.1.1"
+kaop = "0.1.0"
 agp = "9.5.1"
 coroutines = "1.11.0"
 ktor = "3.6.1"
@@ -30,6 +30,7 @@ bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = 
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version = "0.9.1" }
+kaop-runtime = { module = "ru.ttraum:kaop-runtime", version.ref = "kaop" }
 ktor-utils = { module = "io.ktor:ktor-utils", version.ref = "ktor" }
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }

@@ -9,7 +9,8 @@ plugins {
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
-    // Aspects (@Traced) woven at compile time; adds kaop-runtime to commonMain.
+    // Aspects (@Traced) woven at compile time on JVM and iOS; kaop-runtime has no Android variant, so Android gets
+    // a plain @Traced (androidMain) and no runtime: the compiler plugin skips weaving there.
     alias(libs.plugins.kaop)
 }
 
@@ -67,9 +68,22 @@ kotlin {
         }
     }
 
+    // woven: JVM and iOS, where kaop weaves @Traced.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("woven") {
+                withJvm()
+                group("ios")
+            }
+        }
+    }
+
     sourceSets {
         commonMain {
             kotlin.srcDir(buildInfo)
+        }
+        named("wovenMain").dependencies {
+            implementation(libs.kaop.runtime)
         }
         commonMain.dependencies {
             implementation(project(":krtc-client"))
@@ -151,6 +165,8 @@ tasks.register<Sync>("desktopClasspath") {
     from(configurations.named("jvmRuntimeClasspath"))
     into(layout.buildDirectory.dir("desktop-classpath"))
 }
+
+kaop { addRuntimeDependency = false }
 
 // Tests log to the build directory, not to the user's ~/.krtc-meet.
 tasks.withType<Test>().configureEach {

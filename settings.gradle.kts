@@ -5,8 +5,6 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
-        // kaop (ru.ttraum) until the version krtc-meet needs is on Maven Central: publishToMavenLocal in the kaop repo.
-        mavenLocal { content { includeGroupByRegex("ru\\.ttraum.*") } }
     }
 }
 
@@ -14,7 +12,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        mavenLocal { content { includeGroupByRegex("ru\\.ttraum.*") } }
     }
 }
 
