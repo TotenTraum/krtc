@@ -76,6 +76,8 @@ Linux собирается в Docker (`docker-build-shim.sh`, clang 21). Для 
   - Android: системный диалог, выбрать «весь экран»; звук других приложений идёт вместе с экраном (нужен RECORD_AUDIO);
   - звук экрана берётся автоматически: macOS — ScreenCaptureKit, Linux — монитор PulseAudio или PipeWire, Windows — WASAPI loopback.
 
+Захват экрана (`createScreenSource`): macOS 13+ — ScreenCaptureKit и для экранов, и для окон (система сама уменьшает картинку на видеокарте и отдаёт NV12 без копирования; неподвижная картинка повторяется дважды в секунду); раньше и при ошибке — DesktopCapturer libwebrtc. Windows — экраны через DXGI, окна через Windows Graphics Capture (Windows 10 1809+; видит игры на DirectX), иначе GDI. Linux — X11. Для динамичного видео и игр ставьте треку `contentHint = "motion"`: кодер держит частоту кадров, а не чёткость.
+
 Принятое видео отрисовывается через frame listener, демо печатает средний цвет кадра.
 
 ```bash

@@ -603,9 +603,12 @@ private fun ScreenShareButton(session: MeetSession, sharing: Boolean, size: Dp) 
         return
     }
     val fps by session.screenFps.collectAsState()
+    val send by session.screenSend.collectAsState()
     Box {
         var open by remember { mutableStateOf(false) }
-        ControlButton(MeetIcons.ScreenShare, "В эфире · $fps к/с", { open = true }, tone = Tone.LIVE, size = size)
+        // What actually goes out (size, frame rate, bitrate, what holds it back), once the first stats are in.
+        val hint = send?.let { "В эфире · ${it.describe()}" } ?: "В эфире · $fps к/с"
+        ControlButton(MeetIcons.ScreenShare, hint, { open = true }, tone = Tone.LIVE, size = size)
         DropdownMenu(open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("Сменить окно или экран") }, leadingIcon = { Icon(MeetIcons.ScreenShare, null, Modifier.size(18.dp)) }, onClick = { open = false; session.setScreenPicker(true) })
             DropdownMenuItem(text = { Text("Остановить трансляцию", color = MeetColors.Red) }, leadingIcon = { Icon(MeetIcons.Close, null, Modifier.size(18.dp), tint = MeetColors.Red) }, onClick = { open = false; session.stopScreen() })

@@ -203,6 +203,14 @@ public actual class NativeTrack internal constructor(internal val handle: Long) 
 
     public actual fun setVolume(volume: Double): Unit = guard.useOr(Unit) { Jni.trackSetVolume(it, volume) }
 
+    public actual var contentHint: String = ""
+        set(value) {
+            val code = CONTENT_HINTS.indexOf(value)
+            if (code < 0) return
+            field = value
+            guard.useOr(Unit) { Jni.trackSetContentHint(it, code) }
+        }
+
     actual override fun stop() {
         enabled = false
     }

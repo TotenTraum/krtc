@@ -122,6 +122,7 @@ internal object Jni {
     @JvmStatic external fun trackIsVideo(track: Long): Boolean
     @JvmStatic external fun trackEnabled(track: Long): Boolean
     @JvmStatic external fun trackSetEnabled(track: Long, enabled: Boolean)
+    @JvmStatic external fun trackSetContentHint(track: Long, hint: Int)
     @JvmStatic external fun trackSetVolume(track: Long, volume: Double)
     @JvmStatic external fun factorySetInputGate(factory: Long, mode: Int, threshold: Double, holdMillis: Int)
     @JvmStatic external fun factorySetNeuralNoiseSuppression(factory: Long, enabled: Boolean)

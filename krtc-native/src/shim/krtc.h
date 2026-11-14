@@ -215,6 +215,10 @@ char *krtc_track_id(krtc_track *track);
 int krtc_track_is_video(krtc_track *track);
 int krtc_track_enabled(krtc_track *track);
 void krtc_track_set_enabled(krtc_track *track, int enabled);
+/* Video tracks: what the picture is (MediaStreamTrack.contentHint): 0 none, 1 motion (video, games: encoded like a
+ * camera, keeping the frame rate), 2 detail and 3 text (screen content: sharp, dropping frames when needed). Screen
+ * share tracks start as detail. Set it before the track is sent. */
+void krtc_track_set_content_hint(krtc_track *track, int hint);
 /* Received audio tracks: playout volume, 0 (silent) to 10; 1 plays it as received. */
 void krtc_track_set_volume(krtc_track *track, double volume);
 /* Video tracks: frames delivered so far and the last frame size (attaches a counting sink on first use). */

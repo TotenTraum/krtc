@@ -1050,6 +1050,14 @@ KRTC_API int krtc_track_enabled(krtc_track *track) { return track->track->enable
 
 KRTC_API void krtc_track_set_enabled(krtc_track *track, int enabled) { track->track->set_enabled(enabled != 0); }
 
+KRTC_API void krtc_track_set_content_hint(krtc_track *track, int hint) {
+    if (track->track->kind() != MediaStreamTrackInterface::kVideoKind) return;
+    using Hint = VideoTrackInterface::ContentHint;
+    // libwebrtc's sender maps these: fluid -> not a screencast (camera-like encoding), detailed/text -> screencast.
+    const Hint h = hint == 1 ? Hint::kFluid : hint == 2 ? Hint::kDetailed : hint == 3 ? Hint::kText : Hint::kNone;
+    static_cast<VideoTrackInterface *>(track->track.get())->set_content_hint(h);
+}
+
 KRTC_API void krtc_track_set_volume(krtc_track *track, double volume) {
     if (track->track->kind() != MediaStreamTrackInterface::kAudioKind) return;
     AudioSourceInterface *source = static_cast<AudioTrackInterface *>(track->track.get())->GetSource();

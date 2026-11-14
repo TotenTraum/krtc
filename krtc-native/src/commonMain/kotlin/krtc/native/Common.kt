@@ -259,6 +259,9 @@ public expect class NativeVideoSource : AutoCloseable {
  */
 public class VideoFrame(public val width: Int, public val height: Int, public val argb: IntArray, public val timestampMicros: Long)
 
+/** [NativeTrack.contentHint] values in the order of the shim's codes. */
+internal val CONTENT_HINTS: List<String> = listOf("", "motion", "detail", "text")
+
 public expect class NativeTrack : MediaStreamTrack {
     override val id: String
     override val kind: String
@@ -267,6 +270,14 @@ public expect class NativeTrack : MediaStreamTrack {
 
     /** For received video: frames delivered so far and the last frame size. */
     public fun videoStats(): NativeVideoStats
+
+    /**
+     * [W3C contentHint](https://w3c.github.io/mst-content-hint/): what a video track shows, which decides how it is
+     * encoded. "motion" (video, games): like a camera, keeping the frame rate; "detail" or "text" (documents,
+     * code): sharp screen content, dropping frames when needed; "" the default (screen shares start as "detail").
+     * Set it before the track is sent; unknown values are ignored.
+     */
+    public var contentHint: String
 
     /**
      * Video tracks: calls [listener] with every frame (on a libwebrtc thread; keep it short), e.g. to render it.

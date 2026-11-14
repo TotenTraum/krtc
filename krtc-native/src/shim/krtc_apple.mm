@@ -9,6 +9,7 @@
 #include <thread>
 
 #import <AVFoundation/AVFoundation.h>
+#import "sdk/objc/components/video_frame_buffer/RTCCVPixelBuffer.h"
 #include <mutex>
 #include <vector>
 #if TARGET_OS_OSX
@@ -19,7 +20,6 @@
 #include "modules/desktop_capture/desktop_frame.h"
 #else
 #import <ReplayKit/ReplayKit.h>
-#import "sdk/objc/components/video_frame_buffer/RTCCVPixelBuffer.h"
 #endif
 #include "rtc_base/time_utils.h"
 
@@ -344,8 +344,159 @@ std::function<void()> StartWindowAudio(PushAudioSource *source, int64_t window) 
     return nullptr;
 }
 
+}  // namespace krtc
+
+/**
+ * Screen and window frames from ScreenCaptureKit: NV12 pixel buffers the system already scaled on the GPU, passed on
+ * without a copy. ScreenCaptureKit sends nothing while the picture stands still, so the last frame goes out again
+ * every half second (an encoder needs input to answer a key frame request from someone who just started watching).
+ */
+API_AVAILABLE(macos(12.3))
+@interface KrtcScreenOutput : NSObject <SCStreamOutput>
+- (instancetype)initWithSource:(webrtc::scoped_refptr<krtc::PushVideoSource>)source;
+- (void)repeatIfIdle;
+@end
+
+@implementation KrtcScreenOutput {
+    webrtc::scoped_refptr<krtc::PushVideoSource> _source;
+    std::mutex _lock;
+    RTCCVPixelBuffer *_last;
+    int64_t _lastPushUs;
+}
+
+- (instancetype)initWithSource:(webrtc::scoped_refptr<krtc::PushVideoSource>)source {
+    if (self = [super init]) _source = source;
+    return self;
+}
+
+- (void)push:(RTCCVPixelBuffer *)buffer {
+    const int64_t now = webrtc::TimeMicros();
+    {
+        std::lock_guard<std::mutex> g(_lock);
+        _last = buffer;
+        _lastPushUs = now;
+    }
+    _source->Push(webrtc::VideoFrame::Builder().set_video_frame_buffer(webrtc::ObjCToNativeVideoFrameBuffer(buffer)).set_timestamp_us(now).build());
+}
+
+- (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
+    if (type != SCStreamOutputTypeScreen || !CMSampleBufferIsValid(sample)) return;
+    CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sample, false);
+    if (attachments && CFArrayGetCount(attachments) > 0) {
+        NSDictionary *info = (__bridge NSDictionary *)CFArrayGetValueAtIndex(attachments, 0);
+        NSNumber *status = info[SCStreamFrameInfoStatus];
+        if (status && status.integerValue != SCFrameStatusComplete) {
+            [self repeatIfIdle];
+            return;
+        }
+    }
+    CVPixelBufferRef pixels = CMSampleBufferGetImageBuffer(sample);
+    if (!pixels) return;
+    [self push:[[RTCCVPixelBuffer alloc] initWithPixelBuffer:pixels]];
+}
+
+- (void)repeatIfIdle {
+    RTCCVPixelBuffer *last;
+    {
+        std::lock_guard<std::mutex> g(_lock);
+        if (!_last || webrtc::TimeMicros() - _lastPushUs < 500000) return;
+        last = _last;
+    }
+    [self push:last];
+}
+@end
+
+namespace krtc {
+namespace {
+/** Even dimensions of [w]×[h] scaled down to fit [maxW]×[maxH] (0: no limit), never up. */
+std::pair<int, int> Fit(double w, double h, int maxW, int maxH) {
+    double scale = 1.0;
+    if (maxW > 0) scale = std::min(scale, maxW / w);
+    if (maxH > 0) scale = std::min(scale, maxH / h);
+    return {std::max(2, static_cast<int>(w * scale)) & ~1, std::max(2, static_cast<int>(h * scale)) & ~1};
+}
+
+/** Pixels per point of [display] (2 on Retina), from its current mode. */
+double BackingScale(CGDirectDisplayID display) {
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(display);
+    if (!mode) return 1.0;
+    const size_t points = CGDisplayModeGetWidth(mode), pixels = CGDisplayModeGetPixelWidth(mode);
+    CGDisplayModeRelease(mode);
+    return points > 0 && pixels > 0 ? static_cast<double>(pixels) / points : 1.0;
+}
+
+/** Captures display or window [id] with ScreenCaptureKit; nullptr if it cannot (then the DesktopCapturer is used). */
+API_AVAILABLE(macos(13.0)) std::function<void()> StartSckScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+    SCShareableContent *content = ShareableContent();
+    if (!content) return nullptr;
+    SCContentFilter *filter = nil;
+    double pixelsW = 0, pixelsH = 0;
+    CGDirectDisplayID display = CGMainDisplayID();
+    if (window) {
+        for (SCWindow *w in content.windows) {
+            if (static_cast<int64_t>(w.windowID) != id) continue;
+            filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:w];
+            pixelsW = w.frame.size.width;
+            pixelsH = w.frame.size.height;
+            break;
+        }
+    } else {
+        for (SCDisplay *d in content.displays) {
+            if (static_cast<int64_t>(d.displayID) != id) continue;
+            filter = [[SCContentFilter alloc] initWithDisplay:d excludingWindows:@[]];
+            display = d.displayID;
+            pixelsW = d.width;
+            pixelsH = d.height;
+            break;
+        }
+    }
+    if (!filter || pixelsW <= 0 || pixelsH <= 0) return nullptr;
+    // Sizes above are in points; Retina screens have twice the pixels. Ask for the backing size, scaled to the limit.
+    const double backing = BackingScale(display);
+    auto [width, height] = Fit(pixelsW * backing, pixelsH * backing, maxWidth, maxHeight);
+    SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+    config.width = width;
+    config.height = height;
+    config.minimumFrameInterval = CMTimeMake(1, std::max(1, fps));
+    config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange; // NV12: what encoders take
+    config.queueDepth = 6;
+    config.showsCursor = YES;
+    SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:nil];
+    webrtc::scoped_refptr<PushVideoSource> target(source);
+    KrtcScreenOutput *output = [[KrtcScreenOutput alloc] initWithSource:target];
+    dispatch_queue_t queue = dispatch_queue_create("krtc.screen", DISPATCH_QUEUE_SERIAL);
+    NSError *error = nil;
+    if (![stream addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:&error]) return nullptr;
+    __block bool started = false;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [stream startCaptureWithCompletionHandler:^(NSError *e) {
+        started = e == nil;
+        dispatch_semaphore_signal(done);
+    }];
+    dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    if (!started) return nullptr;
+    // A still picture still goes out twice a second (see KrtcScreenOutput).
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0), 250 * NSEC_PER_MSEC, 50 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(timer, ^{ [output repeatIfIdle]; });
+    dispatch_resume(timer);
+    return [stream, output, timer]() {
+        (void)output;
+        dispatch_source_cancel(timer);
+        dispatch_semaphore_t stopped = dispatch_semaphore_create(0);
+        [stream stopCaptureWithCompletionHandler:^(NSError *) { dispatch_semaphore_signal(stopped); }];
+        dispatch_semaphore_wait(stopped, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC));
+    };
+}
+}  // namespace
+
 std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
     if (!ScreenAuthorized()) return nullptr;
+    // ScreenCaptureKit: scaled on the GPU, any frame rate the display gives; windows otherwise come through
+    // CGWindowListCreateImage, a few frames a second for a large window.
+    if (@available(macOS 13.0, *)) {
+        if (auto stop = StartSckScreen(id, window, fps, maxWidth, maxHeight, source)) return stop;
+    }
     auto capture = std::make_shared<ScreenCapture>(id, window, fps, maxWidth, maxHeight, source);
     if (!capture->ok()) return nullptr;
     return [capture]() mutable { capture.reset(); };

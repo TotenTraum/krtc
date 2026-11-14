@@ -1,5 +1,6 @@
 package krtc.meet
 
+import kotlin.math.roundToInt
 import krtc.client.RemoteParticipant
 import krtc.client.RoomClient
 import krtc.client.RoomState
@@ -69,6 +70,32 @@ enum class LinkQuality { GOOD, FAIR, POOR }
  * [peers]: the quality of what each participant's media looks like on arrival (their uplink plus ours).
  */
 data class ConnectionInfo(val quality: LinkQuality, val rttMillis: Int?, val lossPercent: Double, val peers: Map<String, LinkQuality>)
+
+/**
+ * How this user's screen share goes out, from `getStats`: the size and frame rate sent, the frame rate captured,
+ * what holds it back ([limitation]: "cpu", "bandwidth", "none", as libwebrtc reports it), the encoder and bitrate.
+ */
+data class StreamSendInfo(
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val captureFps: Int?,
+    val limitation: String?,
+    val encoder: String?,
+    val bitrateKbps: Int,
+) {
+    /** "1920×1080 · 58 к/с · 6.1 Мбит/с", with the capture rate and the limit when they matter. */
+    fun describe(): String = buildList {
+        add("${width}×$height · $fps к/с")
+        // The capture is worth naming when it, rather than the encoder, is what is slow.
+        if (captureFps != null && captureFps < 20) add("захват $captureFps к/с")
+        add("${(bitrateKbps / 100) / 10.0} Мбит/с")
+        when (limitation) {
+            "cpu" -> add("не хватает процессора")
+            "bandwidth" -> add("не хватает канала")
+        }
+    }.joinToString(" · ")
+}
 
 enum class Layout { GRID, SPEAKER }
 
@@ -214,6 +241,10 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
 
     private val reconnectingFlow = MutableStateFlow<Int?>(null)
     private val connectionFlow = MutableStateFlow<ConnectionInfo?>(null)
+    private val screenSendFlow = MutableStateFlow<StreamSendInfo?>(null)
+
+    /** This user's screen share as it goes out (null while not sharing), every few seconds. */
+    val screenSend: StateFlow<StreamSendInfo?> = screenSendFlow.asStateFlow()
     private val layoutFlow = MutableStateFlow(Layout.GRID)
     private val pinnedFlow = MutableStateFlow<String?>(null)
     private val activeSpeakerFlow = MutableStateFlow<String?>(null)
@@ -662,7 +693,10 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             }
             if (client !== c) return@launch teardown { opened.close() } // the call ended meanwhile
             val (video, audio) = offUi({ (v, a) -> v.release(); a?.release(); opened.close() }) {
-                f.createVideoTrack(opened.video, "screen") to opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
+                // 30 and 60 fps are for motion (video, games): encoded like a camera. As screen content (libwebrtc's
+                // default for a screen) the encoder keeps every detail and drops frames, down to a few per second.
+                f.createVideoTrack(opened.video, "screen").also { it.contentHint = if (screenFpsFlow.value >= 30) "motion" else "detail" } to
+                    opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
             }
             if (withAudio && audio == null) noticeFlow.value = "Звук экрана на этой платформе недоступен, показ без звука"
             val parameters = screenSendParameters(screenFpsFlow.value, height)
@@ -791,10 +825,48 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     /** Samples `getStats` every [STATS_INTERVAL_MILLIS] into [connection]. */
     private suspend fun watchConnection(c: RoomClient) {
         var previous: Map<String, Pair<Long, Long>> = emptyMap() // inbound-rtp id -> (received, lost)
+        var sentBytes = -1L
+        val dropped = HashMap<String, Long>()
         while (true) {
             kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS)
             val pc = c.peerConnection ?: continue
             val report = runCatching { pc.getStats() }.getOrNull() ?: continue
+            fun Any?.num(): Double? = (this as? Number)?.toDouble()
+            // The screen share going out (uplink m-line "s") and the capture behind it (its media-source).
+            val out = report.values.firstOrNull { it.type == "outbound-rtp" && it.members["mid"] == "s" && it.members["kind"] == "video" }
+            val bytes = out?.members?.get("bytesSent").num()?.toLong()
+            if (out == null || screenFlow.value == null || bytes == null) {
+                screenSendFlow.value = null
+                sentBytes = -1
+            } else {
+                val source = (out.members["mediaSourceId"] as? String)?.let { report[it] }
+                val info = StreamSendInfo(
+                    width = out.members["frameWidth"].num()?.toInt() ?: 0,
+                    height = out.members["frameHeight"].num()?.toInt() ?: 0,
+                    fps = out.members["framesPerSecond"].num()?.roundToInt() ?: 0,
+                    captureFps = source?.members?.get("framesPerSecond").num()?.roundToInt(),
+                    limitation = out.members["qualityLimitationReason"] as? String,
+                    encoder = out.members["encoderImplementation"] as? String,
+                    bitrateKbps = if (sentBytes < 0) 0 else ((bytes - sentBytes) * 8 / STATS_INTERVAL_MILLIS).toInt(),
+                )
+                sentBytes = bytes
+                screenSendFlow.value = info
+                log("screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} encoder=${info.encoder} ${info.bitrateKbps}kbps")
+            }
+            // Screen shares coming in: what arrives, the decoder, frames dropped before showing.
+            for (s in report.values) {
+                if (s.type != "inbound-rtp" || s.members["kind"] != "video") continue
+                val mid = s.members["mid"] as? String ?: continue
+                if (!mid.startsWith("s")) continue
+                val drops = s.members["framesDropped"].num()?.toLong() ?: 0L
+                val newDrops = drops - (dropped[s.id] ?: 0L)
+                dropped[s.id] = drops
+                log(
+                    "screen in ${c.participantOfMid(mid)}: ${s.members["frameWidth"].num()?.toInt()}x${s.members["frameHeight"].num()?.toInt()} " +
+                        "${s.members["framesPerSecond"].num()?.roundToInt()}fps decoder=${s.members["decoderImplementation"]} dropped=+$newDrops " +
+                        "freezes=${s.members["freezeCount"].num()?.toInt()} lost=${s.members["packetsLost"].num()?.toInt()}",
+                )
+            }
             val rtt = report.values.firstOrNull { it.type == "candidate-pair" && it.members["nominated"] == true && it.members["state"] == "succeeded" }
                 ?.members?.get("currentRoundTripTime")?.let { (it as? Number)?.toDouble() }?.let { (it * 1000).toInt() }
             val now = HashMap<String, Pair<Long, Long>>()
@@ -1031,6 +1103,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         transmittingFlow.value = false
         inputLevelFlow.value = 0f
         connectionFlow.value = null
+        screenSendFlow.value = null
         pinnedFlow.value = null
         expandedFlow.value = null
         activeSpeakerFlow.value = null
@@ -1069,7 +1142,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         const val MAX_VOLUME: Float = 3f
 
         /** Screen share bitrate per pixel and frame, and its bounds (bit/s). */
-        private const val BITS_PER_PIXEL = 0.07
+        private const val BITS_PER_PIXEL = 0.1
         private const val MIN_SCREEN_BITRATE = 1_500_000L
         private const val MAX_SCREEN_BITRATE = 12_000_000L
 

@@ -44,6 +44,7 @@ import kotlin.test.assertTrue
  */
 class MeetSessionTest {
     private lateinit var sfu: Sfu
+    private val MAX_SCREEN_BITRATE_IN_TEST = 12_000_000L
     private lateinit var server: EmbeddedServer<*, *>
     private var url = ""
     // MeetSession is confined to one thread (the UI thread in the app): so are the tests.
@@ -52,7 +53,7 @@ class MeetSessionTest {
     private val logDir = java.nio.file.Files.createTempDirectory("krtc-client-logs").toFile()
 
     /** Synthetic audio, and a "screen" of pushed frames: no devices or permissions needed. [static]: always the same picture. */
-    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings()) : MediaPlatform {
+    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings(), private val noise: Boolean = false) : MediaPlatform {
         val factories = mutableListOf<NativePeerConnectionFactory>()
         override val sharedSystemAudio = false
         override fun createFactory(testAudio: Boolean) = NativePeerConnectionFactory(AudioDevice.SYNTHETIC).also { factories += it }
@@ -63,7 +64,7 @@ class MeetSessionTest {
             factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
         ): OpenedScreen {
             val source = factory.createScreencastSource()
-            return OpenedScreen(source, null, Pusher(source, fps, static))
+            return OpenedScreen(source, null, if (noise) NoisePusher(source, fps) else Pusher(source, fps, static))
         }
     }
 
@@ -76,6 +77,39 @@ class MeetSessionTest {
             while (running) {
                 pixels.fill(0xFF000000.toInt() or (if (static) 0x80 else n++ * 7 and 0xFF))
                 source.pushArgb(640, 360, pixels)
+                Thread.sleep(1000L / fps)
+            }
+        }
+        override fun close() {
+            running = false
+            t.join()
+        }
+    }
+
+    /**
+     * Pushes 1280×720 frames of a moving colour plasma at [fps]: smooth like video, but every pixel changes every
+     * frame — what a game or a film looks like to an encoder.
+     */
+    private class NoisePusher(source: NativeVideoSource, fps: Int) : AutoCloseable {
+        @Volatile private var running = true
+        private val t = thread {
+            val w = 1280
+            val h = 720
+            val sine = IntArray(1024) { (127.5 + 127.5 * kotlin.math.sin(it * 2 * Math.PI / 1024)).toInt() }
+            val frame = IntArray(w * h)
+            var t = 0
+            while (running) {
+                for (y in 0 until h) {
+                    val sy = sine[(y * 3 + t * 5) and 1023]
+                    for (x in 0 until w) {
+                        val r = sine[(x * 2 + sy + t * 7) and 1023]
+                        val g = sine[(y * 2 + x + t * 3) and 1023]
+                        val b = sine[(r + g + t * 4) and 1023]
+                        frame[y * w + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                }
+                source.pushArgb(w, h, frame)
+                t++
                 Thread.sleep(1000L / fps)
             }
         }
@@ -416,7 +450,7 @@ class MeetSessionTest {
             }
             val encoding = parameters!!.encodings.first()
             assertEquals(60.0, encoding.maxFramerate)
-            assertTrue(encoding.maxBitrate!! in 8_000_000L..9_000_000L, "maxBitrate ${encoding.maxBitrate}")
+            assertEquals(MAX_SCREEN_BITRATE_IN_TEST, encoding.maxBitrate, "1080p at 60 fps gets the most there is")
             assertEquals(krtc.core.RTCDegradationPreference.MAINTAIN_FRAMERATE, parameters!!.degradationPreference)
         } finally {
             a.close()
@@ -523,6 +557,40 @@ class MeetSessionTest {
             hissing.set(false)
             hiss.join()
             a.close()
+        }
+    }
+
+    /**
+     * A share full of motion (a moving plasma, 1280×720 at 30 fps) goes out at about the rate it is captured: the
+     * encoder and the SFU keep up. Prints what goes out every 2 s (bandwidth estimate, encoder target, frame rates).
+     */
+    @Test
+    fun motionSharesKeepTheirFrameRate(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform(noise = true))
+        val b = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "motion", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "motion", "bob", CameraChoice.None, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            a.setScreenFps(30)
+            a.setScreenHeight(720)
+            a.startScreen(a.screens().single(), withAudio = false)
+            waitUntil("alice's share goes out", 20_000) { (a.screenSend.value?.fps ?: 0) > 0 }
+            var best: StreamSendInfo? = null
+            repeat(4) { // the encoder settles within a few seconds; take its best 2 s
+                delay(2_100)
+                val report = a.roomClient?.peerConnection?.getStats().orEmpty().values
+                val pair = report.firstOrNull { it.type == "candidate-pair" && it.members["nominated"] == true }
+                val out = report.firstOrNull { it.type == "outbound-rtp" && it.members["mid"] == "s" }
+                println("bwe=${pair?.members?.get("availableOutgoingBitrate")} target=${out?.members?.get("targetBitrate")} ${a.screenSend.value}")
+                a.screenSend.value?.let { if (it.fps > (best?.fps ?: -1)) best = it }
+            }
+            val sent = best!!
+            assertEquals("motion", (a.screen.value as NativeTrack).contentHint)
+            assertTrue(sent.fps >= 15 && sent.fps >= (sent.captureFps ?: 0) * 0.7, "frames go out as captured: $sent")
+        } finally {
+            a.close()
+            b.close()
         }
     }
 

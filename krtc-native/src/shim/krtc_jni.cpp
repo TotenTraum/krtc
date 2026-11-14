@@ -388,6 +388,7 @@ KRTC_JNI(jstring, trackId)(JNIEnv *env, jclass, jlong t) { return Take(env, krtc
 KRTC_JNI(jboolean, trackIsVideo)(JNIEnv *, jclass, jlong t) { return krtc_track_is_video(H<krtc_track>(t)) != 0; }
 KRTC_JNI(jboolean, trackEnabled)(JNIEnv *, jclass, jlong t) { return krtc_track_enabled(H<krtc_track>(t)) != 0; }
 KRTC_JNI(void, trackSetEnabled)(JNIEnv *, jclass, jlong t, jboolean on) { krtc_track_set_enabled(H<krtc_track>(t), on ? 1 : 0); }
+KRTC_JNI(void, trackSetContentHint)(JNIEnv *, jclass, jlong t, jint hint) { krtc_track_set_content_hint(H<krtc_track>(t), hint); }
 KRTC_JNI(void, trackSetVolume)(JNIEnv *, jclass, jlong t, jdouble volume) { krtc_track_set_volume(H<krtc_track>(t), volume); }
 KRTC_JNI(void, trackVideoStats)(JNIEnv *env, jclass, jlong t, jlongArray out) {
     int64_t frames = 0;

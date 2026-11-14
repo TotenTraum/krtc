@@ -286,6 +286,14 @@ public actual class NativeTrack internal constructor(internal val handle: CPoint
 
     public actual fun setVolume(volume: Double): Unit = guard.useOr(Unit) { krtc_track_set_volume(it, volume) }
 
+    public actual var contentHint: String = ""
+        set(value) {
+            val code = CONTENT_HINTS.indexOf(value)
+            if (code < 0) return
+            field = value
+            guard.useOr(Unit) { krtc_track_set_content_hint(it, code) }
+        }
+
     actual override fun stop() {
         enabled = false
     }

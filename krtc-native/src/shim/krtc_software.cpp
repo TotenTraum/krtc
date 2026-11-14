@@ -196,9 +196,20 @@ std::function<void()> Every(int fps, std::function<void()> setup, std::function<
 namespace {
 webrtc::DesktopCaptureOptions ScreenOptions() {
     webrtc::DesktopCaptureOptions options = webrtc::DesktopCaptureOptions::CreateDefault();
+    // Displays: DXGI desktop duplication (GPU, any frame rate). Windows: Windows Graphics Capture (Windows 10 1809+),
+    // which sees DirectX games and keeps up with them; GDI otherwise, slow and often black for games.
     options.set_allow_directx_capturer(true);
+    options.set_allow_wgc_window_capturer(true);
+    options.set_allow_wgc_capturer_fallback(true);
+    options.set_wgc_require_border(false); // the yellow border, where Windows lets it go (Windows 11)
     return options;
 }
+
+/** COM (multithreaded) for the capture threads: WGC is a WinRT API. */
+struct ComScope {
+    const bool ok = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+    ~ComScope() { if (ok) CoUninitialize(); }
+};
 
 std::unique_ptr<webrtc::DesktopCapturer> CreateCapturer(bool window) {
     return window ? webrtc::DesktopCapturer::CreateWindowCapturer(ScreenOptions()) : webrtc::DesktopCapturer::CreateScreenCapturer(ScreenOptions());
@@ -222,6 +233,7 @@ std::vector<ScreenSource> ScreenSources() {
     std::vector<ScreenSource> out;
     for (bool window : {false, true}) {
         std::thread([&] {
+            ComScope com;
             auto capturer = CreateCapturer(window);
             webrtc::DesktopCapturer::SourceList list;
             if (!capturer || !capturer->GetSourceList(&list)) return;
@@ -240,6 +252,7 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
     {
         bool ok = false;
         std::thread([&] {
+            ComScope com;
             auto probe = CreateCapturer(window);
             ok = probe && probe->SelectSource(static_cast<webrtc::DesktopCapturer::SourceId>(id));
         }).join();
@@ -247,15 +260,20 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
     }
     auto sink = std::make_shared<FrameSink>(source, maxWidth, maxHeight);
     auto capturer = std::make_shared<std::unique_ptr<webrtc::DesktopCapturer>>();
+    auto com = std::make_shared<std::unique_ptr<ComScope>>();
     return Every(
         fps,
         [=] {
+            *com = std::make_unique<ComScope>();
             *capturer = CreateCapturer(window);
             if (*capturer && (*capturer)->SelectSource(static_cast<webrtc::DesktopCapturer::SourceId>(id))) (*capturer)->Start(sink.get());
             else capturer->reset();
         },
         [=] { if (*capturer) (*capturer)->CaptureFrame(); },
-        [=] { capturer->reset(); });
+        [=] {
+            capturer->reset();
+            com->reset();
+        });
 }
 
 namespace {
