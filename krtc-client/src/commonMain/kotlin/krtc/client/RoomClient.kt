@@ -19,6 +19,7 @@ import krtc.core.RTCDataChannelMessage
 import krtc.core.RTCDataChannelState
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
+import krtc.core.RTCRtpSendParameters
 import krtc.core.RTCRtpTransceiverDirection
 import krtc.core.RTCSdpType
 import krtc.core.RTCSessionDescription
@@ -175,6 +176,7 @@ public class RoomClient(
     private val screenAudioPlaceholder: MediaStreamTrack?
         get() = placeholder ?: (factory as? SilentAudioTrackFactory)?.createSilentAudioTrack("screen-audio")?.also { placeholder = it }
     private var screenMids: Set<String> = emptySet()
+    private var screenParameters: RTCRtpSendParameters? = null
     private var selfId: String? = null
     private var midToPeer: Map<String, String> = emptyMap()
     private var reliableChannel: RTCDataChannel? = null
@@ -407,7 +409,23 @@ public class RoomClient(
         }
         val answer = peerConnection.createAnswer()
         peerConnection.setLocalDescription(answer)
+        applyScreenParameters(peerConnection)
         send(ClientMessage.Answer(offer.version, peerConnection.localDescription?.sdp ?: answer.sdp))
+    }
+
+    /** The screen uplink's encoding limits and degradation preference ([setScreen]), once it sends. */
+    private suspend fun applyScreenParameters(peerConnection: RTCPeerConnection) {
+        val wanted = screenParameters ?: return
+        val sender = peerConnection.getTransceivers().firstOrNull { it.mid == UPLINK_SCREEN_MID && it.direction == RTCRtpTransceiverDirection.SENDONLY }?.sender ?: return
+        runCatching {
+            val current = sender.getParameters()
+            sender.setParameters(
+                current.copy(
+                    encodings = current.encodings.mapIndexed { i, e -> wanted.encodings.getOrNull(i) ?: e },
+                    degradationPreference = wanted.degradationPreference,
+                ),
+            )
+        }
     }
 
     /**
@@ -503,10 +521,13 @@ public class RoomClient(
      * its sound in [audio] (system or tab audio) if there is any, or stops with null. Starting and stopping either
      * renegotiate with the SFU, which then offers them to everyone else as [RemoteParticipant.screen] and
      * [RemoteParticipant.screenAudio]; replacing tracks with other ones does not.
+     * [parameters]: limits for the screen's encoding (bitrate, frame rate) and what to give up when bandwidth runs
+     * short ([RTCRtpSendParameters.degradationPreference]); null leaves the backend's defaults.
      */
-    public suspend fun setScreen(track: MediaStreamTrack?, audio: MediaStreamTrack? = null) {
+    public suspend fun setScreen(track: MediaStreamTrack?, audio: MediaStreamTrack? = null, parameters: RTCRtpSendParameters? = null) {
         screen = track
         screenAudio = audio?.takeIf { track != null }
+        screenParameters = parameters.takeIf { track != null }
         var renegotiate = false
         for ((mid, t) in listOf(UPLINK_SCREEN_MID to screen, UPLINK_SCREEN_AUDIO_MID to (screenAudio ?: screenAudioPlaceholder))) {
             val transceiver = pc?.getTransceivers()?.firstOrNull { it.mid == mid } ?: continue
@@ -520,7 +541,7 @@ public class RoomClient(
                 }
             }
         }
-        if (renegotiate) send(ClientMessage.Renegotiate)
+        if (renegotiate) send(ClientMessage.Renegotiate) else pc?.let { applyScreenParameters(it) }
     }
 
     private var mediaState = ClientMessage.MediaState(audioMuted = false, videoMuted = false)

@@ -270,46 +270,76 @@ std::vector<ScreenSource> ScreenSources() {
     return out;
 }
 
+namespace {
+/** ScreenCaptureKit's shareable content, waited for (it answers on another queue). */
+API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent() {
+    __block SCShareableContent *content = nil;
+    dispatch_semaphore_t listed = dispatch_semaphore_create(0);
+    [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *c, NSError *) {
+        content = c;
+        dispatch_semaphore_signal(listed);
+    }];
+    dispatch_semaphore_wait(listed, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    return content;
+}
+
+/** Captures the sound [filter] lets through (never our own process: no echo of the call); video kept tiny and slow. */
+API_AVAILABLE(macos(13.0)) std::function<void()> StartFilteredAudio(PushAudioSource *source, SCContentFilter *filter) {
+    SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+    config.capturesAudio = YES;
+    config.excludesCurrentProcessAudio = YES;
+    config.sampleRate = 48000;
+    config.channelCount = 2;
+    config.width = 2;
+    config.height = 2;
+    config.minimumFrameInterval = CMTimeMake(1, 1);
+    SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:nil];
+    KrtcSystemAudioOutput *output = [[KrtcSystemAudioOutput alloc] initWithSource:source];
+    dispatch_queue_t queue = dispatch_queue_create("krtc.system-audio", DISPATCH_QUEUE_SERIAL);
+    NSError *error = nil;
+    if (![stream addStreamOutput:output type:SCStreamOutputTypeAudio sampleHandlerQueue:queue error:&error]) return nullptr;
+    [stream addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:nil];
+    __block bool started = false;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [stream startCaptureWithCompletionHandler:^(NSError *e) {
+        started = e == nil;
+        dispatch_semaphore_signal(done);
+    }];
+    dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    if (!started) return nullptr;
+    return [stream, output]() {
+        (void)output;
+        [stream stopCaptureWithCompletionHandler:nil];
+    };
+}
+}  // namespace
+
 std::function<void()> StartSystemAudio(PushAudioSource *source) {
     if (@available(macOS 13.0, *)) {
         if (!ScreenAuthorized()) return nullptr;
-        __block SCShareableContent *content = nil;
-        dispatch_semaphore_t listed = dispatch_semaphore_create(0);
-        [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *c, NSError *) {
-            content = c;
-            dispatch_semaphore_signal(listed);
-        }];
-        dispatch_semaphore_wait(listed, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
-        SCDisplay *display = content.displays.firstObject;
+        SCDisplay *display = ShareableContent().displays.firstObject;
         if (!display) return nullptr;
-        // The whole system's sound, except our own process (no echo of the call itself); video kept tiny and slow.
-        SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
-        SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
-        config.capturesAudio = YES;
-        config.excludesCurrentProcessAudio = YES;
-        config.sampleRate = 48000;
-        config.channelCount = 2;
-        config.width = 2;
-        config.height = 2;
-        config.minimumFrameInterval = CMTimeMake(1, 1);
-        SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:nil];
-        KrtcSystemAudioOutput *output = [[KrtcSystemAudioOutput alloc] initWithSource:source];
-        dispatch_queue_t queue = dispatch_queue_create("krtc.system-audio", DISPATCH_QUEUE_SERIAL);
-        NSError *error = nil;
-        if (![stream addStreamOutput:output type:SCStreamOutputTypeAudio sampleHandlerQueue:queue error:&error]) return nullptr;
-        [stream addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:nil];
-        __block bool started = false;
-        dispatch_semaphore_t done = dispatch_semaphore_create(0);
-        [stream startCaptureWithCompletionHandler:^(NSError *e) {
-            started = e == nil;
-            dispatch_semaphore_signal(done);
-        }];
-        dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
-        if (!started) return nullptr;
-        return [stream, output]() {
-            (void)output;
-            [stream stopCaptureWithCompletionHandler:nil];
-        };
+        // The whole system's sound.
+        return StartFilteredAudio(source, [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]]);
+    }
+    return nullptr;
+}
+
+std::function<void()> StartWindowAudio(PushAudioSource *source, int64_t window) {
+    if (@available(macOS 13.0, *)) {
+        if (!ScreenAuthorized()) return nullptr;
+        SCShareableContent *content = ShareableContent();
+        SCDisplay *display = content.displays.firstObject;
+        SCRunningApplication *app = nil;
+        for (SCWindow *w in content.windows) {
+            if (static_cast<int64_t>(w.windowID) == window) {
+                app = w.owningApplication;
+                break;
+            }
+        }
+        if (!display || !app) return nullptr;
+        // Audio follows the filter's applications: only the window's application is heard.
+        return StartFilteredAudio(source, [[SCContentFilter alloc] initWithDisplay:display includingApplications:@[app] exceptingWindows:@[]]);
     }
     return nullptr;
 }
@@ -327,6 +357,8 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
 // The app's sound arrives with the ReplayKit screen capture; StartSystemAudio only says where to push it.
 static std::mutex replayAudioLock;
 static webrtc::scoped_refptr<PushAudioSource> replayAudio;
+
+std::function<void()> StartWindowAudio(PushAudioSource *, int64_t) { return nullptr; }
 
 std::function<void()> StartSystemAudio(PushAudioSource *source) {
     if (!RPScreenRecorder.sharedRecorder.available) return nullptr;

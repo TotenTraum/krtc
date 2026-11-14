@@ -4,6 +4,9 @@ import krtc.client.RemoteParticipant
 import krtc.client.RoomClient
 import krtc.client.RoomState
 import krtc.client.VideoQuality
+import krtc.core.RTCDegradationPreference
+import krtc.core.RTCRtpEncodingParameters
+import krtc.core.RTCRtpSendParameters
 import krtc.core.MediaStreamTrack
 import krtc.native.AudioDevice
 import krtc.native.InputGate
@@ -660,7 +663,8 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 f.createVideoTrack(opened.video, "screen") to opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
             }
             if (withAudio && audio == null) noticeFlow.value = "Звук экрана на этой платформе недоступен, показ без звука"
-            runCatching { withContext(native) { c.setScreen(video, audio) } }.onFailure {
+            val parameters = screenSendParameters(screenFpsFlow.value, height)
+            runCatching { withContext(native) { c.setScreen(video, audio, parameters) } }.onFailure {
                 teardown { video.release(); audio?.release(); opened.close() }
                 noticeFlow.value = "Не удалось начать показ экрана: ${it.message}"
                 return@launch
@@ -671,6 +675,22 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             screenAudioTrack = audio
             screenFlow.value = video
         }
+    }
+
+    /**
+     * The share's encoding: a bitrate for its size and frame rate (libwebrtc's default caps 1080p near 2.5 Mbit/s,
+     * which at 60 fps with motion leaves the encoder dropping frames), and at 60 fps keeping the frame rate rather
+     * than the resolution when bandwidth runs short; at 15 fps (text, slides) the other way round.
+     */
+    private fun screenSendParameters(fps: Int, height: Int): RTCRtpSendParameters {
+        val pixels = height.toLong() * (height * 16 / 9)
+        val bitrate = (pixels * fps * BITS_PER_PIXEL).toLong().coerceIn(MIN_SCREEN_BITRATE, MAX_SCREEN_BITRATE)
+        val degradation = when {
+            fps >= 60 -> RTCDegradationPreference.MAINTAIN_FRAMERATE
+            fps <= 15 -> RTCDegradationPreference.MAINTAIN_RESOLUTION
+            else -> RTCDegradationPreference.BALANCED
+        }
+        return RTCRtpSendParameters(listOf(RTCRtpEncodingParameters(maxBitrate = bitrate, maxFramerate = fps.toDouble())), degradation)
     }
 
     @Traced
@@ -1039,6 +1059,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         /** Data channel topic of chat lines: UTF-8 text, sent reliably. */
         const val CHAT_TOPIC: String = "chat"
         const val MAX_VOLUME: Float = 3f
+
+        /** Screen share bitrate per pixel and frame, and its bounds (bit/s). */
+        private const val BITS_PER_PIXEL = 0.07
+        private const val MIN_SCREEN_BITRATE = 1_500_000L
+        private const val MAX_SCREEN_BITRATE = 12_000_000L
 
         /** Well under the data channel's 64 KB per message, even in 4-byte characters. */
         const val MAX_CHAT_CHARS: Int = 4_000

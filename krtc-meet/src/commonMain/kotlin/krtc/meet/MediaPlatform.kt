@@ -115,7 +115,14 @@ object NativeMediaPlatform : MediaPlatform {
         // Starting a capture waits for the system (ScreenCaptureKit, permissions): not on the UI thread.
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val video = factory.createScreenSource(choice.source, fps = fps, maxWidth = maxWidth, maxHeight = maxHeight) ?: return@withContext null
-            OpenedScreen(video, if (withAudio) factory.createSystemAudioSource() else null)
+            // A window: only its application's sound, like Discord (where the system allows it); a screen: all of it.
+            val source = choice.source
+            val audio = when {
+                !withAudio -> null
+                source != null && source.isWindow -> factory.createWindowAudioSource(source.id) ?: factory.createSystemAudioSource()
+                else -> factory.createSystemAudioSource()
+            }
+            OpenedScreen(video, audio)
         }
     }
 }
@@ -125,3 +132,6 @@ const val APP_WINDOW_TITLE: String = "krtc meet"
 
 /** Whether this is iOS (its builds are not released for download). */
 expect val isIos: Boolean
+
+/** Desktop (a mouse): controls on video tiles show while the pointer is over them; on touch screens always. */
+expect val isDesktop: Boolean

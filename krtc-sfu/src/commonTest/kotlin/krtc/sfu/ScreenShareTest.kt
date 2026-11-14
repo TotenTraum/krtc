@@ -101,7 +101,7 @@ class ScreenShareTest {
         val s0 = media(pa).single { it.mid == "s0" }
         assertEquals(Direction.SENDONLY, s0.direction)
         assertEquals(listOf(pb.screen.ssrc, pb.screen.rtxSsrc), s0.ssrcs)
-        assertEquals(listOf("screen-${pb.id} screen-${pb.id}"), s0.attributes("msid"))
+        assertEquals(listOf("screen-${pb.id} screen-${pb.id}-${pb.screen.generation}"), s0.attributes("msid"))
         assertEquals(listOf("s0"), lastOffer(pa).screens)
         assertEquals(pb.id, lastOffer(pa).mids["s0"])
         assertTrue(pb.screen.key in pa.receivingVideo)
@@ -127,7 +127,7 @@ class ScreenShareTest {
         val sa0 = media(pa).single { it.mid == "sa0" }
         assertEquals(Direction.SENDONLY, sa0.direction)
         assertEquals(listOf(pb.screenAudioOut.ssrc), sa0.ssrcs)
-        assertEquals(listOf("screen-${pb.id} screen-audio-${pb.id}"), sa0.attributes("msid"))
+        assertEquals(listOf("screen-${pb.id} screen-audio-${pb.id}-${pb.screenAudioGeneration}"), sa0.attributes("msid"))
         assertEquals(listOf("s0", "sa0"), lastOffer(pa).screens)
         assertEquals(setOf(pb.id), pa.receivingScreenAudio)
         assertTrue(sfu.participant(pb.id)!!.sharesScreenAudio)
@@ -140,5 +140,21 @@ class ScreenShareTest {
         assertFalse(pb.screen.publishing)
         assertEquals(Direction.INACTIVE, media(pa).single { it.mid == "s0" }.direction)
         assertEquals(emptyList(), lastOffer(pa).screens)
+
+        // b shares again: a new stream under new SSRCs and track ids (receivers do not take the old SSRC again).
+        val oldVideo = s0.ssrcs
+        val oldAudio = sa0.ssrcs
+        sb.sharing = true
+        sb.sound = true
+        sfu.onMessage(pb, ClientMessage.Renegotiate)
+        settle()
+        val again = media(pa).single { it.mid == "s0" }
+        assertEquals(Direction.SENDONLY, again.direction)
+        assertEquals(listOf(pb.screen.ssrc, pb.screen.rtxSsrc), again.ssrcs)
+        assertTrue(again.ssrcs.none { it in oldVideo }, "new video SSRCs: ${again.ssrcs} vs $oldVideo")
+        assertEquals(listOf("screen-${pb.id} screen-${pb.id}-2"), again.attributes("msid"))
+        val audioAgain = media(pa).single { it.mid == "sa0" }
+        assertTrue(audioAgain.ssrcs.none { it in oldAudio }, "new audio SSRC: ${audioAgain.ssrcs} vs $oldAudio")
+        assertEquals(listOf("screen-${pb.id} screen-audio-${pb.id}-2"), audioAgain.attributes("msid"))
     }
 }

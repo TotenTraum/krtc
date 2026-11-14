@@ -419,7 +419,10 @@ internal class Room(
             for (f in p.feeds) for (layer in f.layers) if (layer.hasMissing()) sendNack(p, layer)
             val activeSsrcs = p.feeds.flatMap { f -> f.layers.filter { it.isActive(now) }.map { it.ssrc } }
             if (remb && activeSsrcs.isNotEmpty()) {
-                sendRtcp(p, Rtcp.concat(Rtcp.receiverReport(MediaPlan.SFU_SSRC), Rtcp.remb(MediaPlan.SFU_SSRC, MediaPlan.VIDEO_BITRATE, activeSsrcs)))
+                // REMB caps everything the publisher sends: a screen share gets a budget of its own on top of the camera.
+                val sharing = p.screen.layers.any { it.isActive(now) }
+                val bitrate = MediaPlan.VIDEO_BITRATE + if (sharing) MediaPlan.SCREEN_BITRATE else 0
+                sendRtcp(p, Rtcp.concat(Rtcp.receiverReport(MediaPlan.SFU_SSRC), Rtcp.remb(MediaPlan.SFU_SSRC, bitrate, activeSsrcs)))
             }
             // Downlinks: drop state for publishers who left; re-choose layers that went quiet or can improve.
             val it = p.downlinks.entries.iterator()
@@ -432,6 +435,10 @@ internal class Room(
                 }
                 val best = feed.layers.filter { l -> l.isActive(now) }.lastOrNull { l -> l.index <= down.cap }?.index ?: -1
                 val currentActive = down.current >= 0 && feed.layers[down.current].isActive(now)
+                // The layer being forwarded went quiet (the share stopped, or the publisher dropped the layer): forget
+                // it, so forwarding resumes only at a key frame. Otherwise a new share on the same layer would be
+                // forwarded from the middle, its first key frame long gone, and the subscriber would see nothing.
+                if (down.current >= 0 && !currentActive) down.restart()
                 if (!currentActive || (best > down.current && down.target != best)) down.target = -1
                 // A subscriber that has no picture yet, or waits to switch layers, keeps asking for a key frame: the
                 // publisher may have lost the request, or answered it (for another subscriber) just before this one

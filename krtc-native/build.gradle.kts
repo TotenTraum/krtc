@@ -86,6 +86,12 @@ val linuxJni = listOf("X64" to "x64", "Arm64" to "arm64").associate { (task, arc
     }
 }
 
+// A platform's shim and JNI builds share its build directory (.deps/build/<platform>) and remove each other's
+// intermediate files: never run them at the same time.
+for ((jni, shim) in listOf(jniLibraries.getValue("MacosArm64") to "macosArm64", linuxJni.getValue("X64") to "linuxX64", linuxJni.getValue("Arm64") to "linuxArm64")) {
+    jni.configure { mustRunAfter(shimTasks.getValue(shim)) }
+}
+
 // The desktop JVM loads libkrtc_jni from the jar (krtc/native/<os>-<arch>/, see Jni.kt).
 // Which native libraries the jar carries (an app installer needs only its own OS's):
 //   -Pkrtc.jvm.macos=false    leaves libkrtc_jni.dylib out (built only on macOS);

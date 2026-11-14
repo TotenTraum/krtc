@@ -134,6 +134,9 @@ krtc_track *krtc_factory_create_video_track(krtc_factory *factory, const char *i
  * stops its capture; tracks keep their own reference. */
 krtc_audio_source *krtc_factory_create_audio_source(krtc_factory *factory);
 krtc_audio_source *krtc_factory_create_system_audio_source(krtc_factory *factory);
+/* The sound of only the application that owns `window` (a window id from krtc_screen_sources): macOS 13+ and
+ * Windows 10 2004+; NULL elsewhere or if it cannot be captured. */
+krtc_audio_source *krtc_factory_create_window_audio_source(krtc_factory *factory, int64_t window);
 void krtc_audio_source_push(krtc_audio_source *source, const int16_t *samples, int frames, int channels, int sample_rate);
 krtc_track *krtc_factory_create_audio_track_from(krtc_factory *factory, const char *id, krtc_audio_source *source);
 void krtc_audio_source_release(krtc_audio_source *source);
@@ -195,6 +198,13 @@ int krtc_transceiver_prefer_codec(krtc_factory *factory, krtc_transceiver *t, co
 /* Sends every encoding with the negotiated codec whose MIME type equals `mime` (RTCRtpEncodingParameters.codec);
  * call after negotiation. 0 on success, -1 if that codec was not negotiated or the sender refused it. */
 int krtc_transceiver_set_send_codec(krtc_transceiver *t, const char *mime);
+/* Sender parameters (RTCRtpSender.getParameters/setParameters, subset). Each encoding is 4 doubles: active (0/1),
+ * maxBitrate in bps, maxFramerate, scaleResolutionDownBy; -1 = unset. Degradation: -1 unset, 0 maintain-framerate,
+ * 1 maintain-resolution, 2 balanced. get: writes up to `capacity` encodings to `out`, returns their number (-1 on
+ * failure) and the degradation in `*degradation`. set: changes the first `count` encodings (rids and the rest are
+ * kept); 0 on success. */
+int krtc_transceiver_get_parameters(krtc_transceiver *t, double *out, int capacity, int *degradation);
+int krtc_transceiver_set_parameters(krtc_transceiver *t, const double *encodings, int count, int degradation);
 void krtc_transceiver_release(krtc_transceiver *t);
 
 /* Tracks. */

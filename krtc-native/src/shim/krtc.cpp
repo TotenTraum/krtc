@@ -751,6 +751,13 @@ KRTC_API krtc_audio_source *krtc_factory_create_system_audio_source(krtc_factory
     return new krtc_audio_source{source, std::move(stop)};
 }
 
+KRTC_API krtc_audio_source *krtc_factory_create_window_audio_source(krtc_factory *, int64_t window) {
+    auto source = make_ref_counted<krtc::PushAudioSource>();
+    std::function<void()> stop = krtc::StartWindowAudio(source.get(), window);
+    if (!stop) return nullptr;
+    return new krtc_audio_source{source, std::move(stop)};
+}
+
 KRTC_API void krtc_audio_source_push(krtc_audio_source *s, const int16_t *samples, int frames, int channels, int sample_rate) {
     if (frames > 0) s->source->Push(samples, static_cast<size_t>(frames), channels, sample_rate);
 }
@@ -937,6 +944,49 @@ KRTC_API int krtc_transceiver_set_send_codec(krtc_transceiver *t, const char *mi
     auto it = std::find_if(params.codecs.begin(), params.codecs.end(), [&](const RtpCodecParameters &c) { return c.mime_type() == mime; });
     if (it == params.codecs.end()) return -1;
     for (auto &encoding : params.encodings) encoding.codec = *it;
+    return sender->SetParameters(params).ok() ? 0 : -1;
+}
+
+KRTC_API int krtc_transceiver_get_parameters(krtc_transceiver *t, double *out, int capacity, int *degradation) {
+    RtpParameters params = t->transceiver->sender()->GetParameters();
+    *degradation = -1;
+    if (params.degradation_preference) {
+        switch (*params.degradation_preference) {
+            case DegradationPreference::MAINTAIN_FRAMERATE: *degradation = 0; break;
+            case DegradationPreference::MAINTAIN_RESOLUTION: *degradation = 1; break;
+            case DegradationPreference::BALANCED: *degradation = 2; break;
+            default: break;
+        }
+    }
+    int n = std::min<int>(capacity, static_cast<int>(params.encodings.size()));
+    for (int i = 0; i < n; i++) {
+        const RtpEncodingParameters &e = params.encodings[i];
+        out[i * 4] = e.active ? 1 : 0;
+        out[i * 4 + 1] = e.max_bitrate_bps ? *e.max_bitrate_bps : -1;
+        out[i * 4 + 2] = e.max_framerate ? *e.max_framerate : -1;
+        out[i * 4 + 3] = e.scale_resolution_down_by ? *e.scale_resolution_down_by : -1;
+    }
+    return n;
+}
+
+KRTC_API int krtc_transceiver_set_parameters(krtc_transceiver *t, const double *encodings, int count, int degradation) {
+    auto sender = t->transceiver->sender();
+    RtpParameters params = sender->GetParameters();
+    int n = std::min<int>(count, static_cast<int>(params.encodings.size()));
+    for (int i = 0; i < n; i++) {
+        RtpEncodingParameters &e = params.encodings[i];
+        const double *in = encodings + i * 4;
+        e.active = in[0] != 0;
+        e.max_bitrate_bps = in[1] >= 0 ? std::optional<int>(static_cast<int>(in[1])) : std::nullopt;
+        e.max_framerate = in[2] >= 0 ? std::optional<double>(in[2]) : std::nullopt;
+        e.scale_resolution_down_by = in[3] >= 0 ? std::optional<double>(in[3]) : std::nullopt;
+    }
+    switch (degradation) {
+        case 0: params.degradation_preference = DegradationPreference::MAINTAIN_FRAMERATE; break;
+        case 1: params.degradation_preference = DegradationPreference::MAINTAIN_RESOLUTION; break;
+        case 2: params.degradation_preference = DegradationPreference::BALANCED; break;
+        default: params.degradation_preference = std::nullopt; break;
+    }
     return sender->SetParameters(params).ok() ? 0 : -1;
 }
 

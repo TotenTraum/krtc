@@ -237,6 +237,9 @@ KRTC_JNI(jlong, factoryCreateScreenSource)(JNIEnv *, jclass, jlong f, jlong id, 
 KRTC_JNI(jlong, factoryCreateScreencastSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_screencast_source(H<krtc_factory>(f))); }
 KRTC_JNI(jlong, factoryCreateAudioSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_audio_source(H<krtc_factory>(f))); }
 KRTC_JNI(jlong, factoryCreateSystemAudioSource)(JNIEnv *, jclass, jlong f) { return J(krtc_factory_create_system_audio_source(H<krtc_factory>(f))); }
+KRTC_JNI(jlong, factoryCreateWindowAudioSource)(JNIEnv *, jclass, jlong f, jlong window) {
+    return J(krtc_factory_create_window_audio_source(H<krtc_factory>(f), window));
+}
 KRTC_JNI(jlong, factoryCreateAudioTrackFrom)(JNIEnv *env, jclass, jlong f, jstring id, jlong s) {
     return J(krtc_factory_create_audio_track_from(H<krtc_factory>(f), Utf(env, id).get(), H<krtc_audio_source>(s)));
 }
@@ -356,6 +359,24 @@ KRTC_JNI(jint, transceiverPreferCodec)(JNIEnv *env, jclass, jlong f, jlong t, js
 }
 KRTC_JNI(jint, transceiverSetSendCodec)(JNIEnv *env, jclass, jlong t, jstring mime) {
     return krtc_transceiver_set_send_codec(H<krtc_transceiver>(t), Utf(env, mime).get());
+}
+/* [degradation, active, maxBitrate, maxFramerate, scale, ...] for each encoding; null on failure. */
+KRTC_JNI(jdoubleArray, transceiverGetParameters)(JNIEnv *env, jclass, jlong t) {
+    double buf[4 * 8];
+    int degradation = -1;
+    int n = krtc_transceiver_get_parameters(H<krtc_transceiver>(t), buf, 8, &degradation);
+    if (n < 0) return nullptr;
+    jdoubleArray out = env->NewDoubleArray(1 + n * 4);
+    double d = degradation;
+    env->SetDoubleArrayRegion(out, 0, 1, &d);
+    env->SetDoubleArrayRegion(out, 1, n * 4, buf);
+    return out;
+}
+KRTC_JNI(jint, transceiverSetParameters)(JNIEnv *env, jclass, jlong t, jdoubleArray encodings, jint degradation) {
+    jsize len = env->GetArrayLength(encodings);
+    std::vector<double> buf(len);
+    env->GetDoubleArrayRegion(encodings, 0, len, buf.data());
+    return krtc_transceiver_set_parameters(H<krtc_transceiver>(t), buf.data(), len / 4, degradation);
 }
 KRTC_JNI(void, transceiverRelease)(JNIEnv *, jclass, jlong t) { krtc_transceiver_release(H<krtc_transceiver>(t)); }
 

@@ -158,8 +158,22 @@ internal enum class VideoKind { CAMERA, SCREEN }
 internal class VideoFeed(val publisher: Participant, val kind: VideoKind) {
     /** Identifies the feed in subscribers' maps: the publisher id for the camera, `id/screen` for the screen. */
     val key: String = if (kind == VideoKind.CAMERA) publisher.id else publisher.id + SCREEN_SUFFIX
-    val ssrc: Long = Participant.randomSsrc()
-    val rtxSsrc: Long = Participant.randomSsrc()
+    @Volatile var ssrc: Long = Participant.randomSsrc(); private set
+    @Volatile var rtxSsrc: Long = Participant.randomSsrc(); private set
+
+    /** Counts the feed's streams: each start of publishing is a new one ([newStream]), with a track id of its own. */
+    @Volatile var generation: Int = 0; private set
+
+    /**
+     * A new stream for subscribers: new SSRCs and track id, set before their next offer. The m-line went inactive
+     * when publishing stopped, and libwebrtc does not take the same SSRC again on the receiving side: a share started
+     * again under the old one stayed black.
+     */
+    fun newStream() {
+        ssrc = Participant.randomSsrc()
+        rtxSsrc = Participant.randomSsrc()
+        generation++
+    }
     val layers = Array(MediaPlan.LAYER_RIDS.size) { VideoLayer(it) }
     var rtxSeq = secureRandomInt(0x8000)
 
@@ -353,7 +367,16 @@ internal class Participant(
     internal val audioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
 
     /** Its screen share's audio (system or tab sound), forwarded like the microphone but without speaking detection. */
-    internal val screenAudioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000)
+    @Volatile internal var screenAudioOut: OutboundStream = OutboundStream(randomSsrc(), 48_000); private set
+
+    /** Counts the screen audio's streams, like [VideoFeed.generation]. */
+    @Volatile internal var screenAudioGeneration: Int = 0; private set
+
+    /** A new screen audio stream for subscribers (new SSRC and track id), for the same reason as [VideoFeed.newStream]. */
+    internal fun newScreenAudioStream() {
+        screenAudioOut = OutboundStream(randomSsrc(), 48_000)
+        screenAudioGeneration++
+    }
     @Volatile internal var screenAudioPublishing: Boolean = false
     @Volatile internal var screenAudioMuted: Boolean = false
 

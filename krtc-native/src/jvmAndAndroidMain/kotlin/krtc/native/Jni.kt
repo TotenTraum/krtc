@@ -67,6 +67,7 @@ internal object Jni {
     @JvmStatic external fun videoSourceRelease(source: Long)
     @JvmStatic external fun factoryCreateAudioSource(factory: Long): Long
     @JvmStatic external fun factoryCreateSystemAudioSource(factory: Long): Long
+    @JvmStatic external fun factoryCreateWindowAudioSource(factory: Long, window: Long): Long
     @JvmStatic external fun factoryCreateAudioTrackFrom(factory: Long, id: String, source: Long): Long
     @JvmStatic external fun audioSourcePush(source: Long, samples: ShortArray, frames: Int, channels: Int, sampleRate: Int)
     @JvmStatic external fun audioSourceRelease(source: Long)
@@ -113,6 +114,8 @@ internal object Jni {
     @JvmStatic external fun transceiverReceiverTrack(t: Long): Long
     @JvmStatic external fun transceiverPreferCodec(factory: Long, t: Long, mime: String): Int
     @JvmStatic external fun transceiverSetSendCodec(t: Long, mime: String): Int
+    @JvmStatic external fun transceiverGetParameters(t: Long): DoubleArray?
+    @JvmStatic external fun transceiverSetParameters(t: Long, encodings: DoubleArray, degradation: Int): Int
     @JvmStatic external fun transceiverRelease(t: Long)
 
     @JvmStatic external fun trackId(track: Long): String

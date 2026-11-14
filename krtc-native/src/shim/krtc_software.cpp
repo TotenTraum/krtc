@@ -28,6 +28,7 @@
 #if defined(_WIN32)
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#include <audioclientactivationparams.h>
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
 #include "modules/desktop_capture/desktop_frame.h"
@@ -257,24 +258,26 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
         [=] { capturer->reset(); });
 }
 
-// System sound: WASAPI loopback of the default output device (shared-mode mix format: 32-bit float or 16-bit).
-std::function<void()> StartSystemAudio(PushAudioSource *source) {
+namespace {
+/**
+ * Opens and initializes a capture client into [client] with its format in [format] (allocated with CoTaskMemAlloc),
+ * signalling [event] when data is ready.
+ */
+using OpenLoopback = std::function<bool(IAudioClient **client, WAVEFORMATEX **format, HANDLE event)>;
+
+/** Runs a WASAPI loopback capture (32-bit float or 16-bit PCM) into [source] on a thread of its own. */
+std::function<void()> StartLoopback(PushAudioSource *source, OpenLoopback open) {
     webrtc::scoped_refptr<PushAudioSource> target(source);
     auto running = std::make_shared<std::atomic<bool>>(true);
     auto started = std::make_shared<std::promise<bool>>();
     auto ok = started->get_future();
     auto thread = std::make_shared<std::thread>([=] {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        IMMDeviceEnumerator *enumerator = nullptr;
-        IMMDevice *device = nullptr;
+        HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         IAudioClient *client = nullptr;
         IAudioCaptureClient *capture = nullptr;
         WAVEFORMATEX *format = nullptr;
-        bool ready = SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator))) &&
-                     SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) &&
-                     SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client))) &&
-                     SUCCEEDED(client->GetMixFormat(&format)) && (format->wBitsPerSample == 32 || format->wBitsPerSample == 16) &&
-                     SUCCEEDED(client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 200000, 0, format, nullptr)) &&
+        bool ready = event && open(&client, &format, event) && (format->wBitsPerSample == 32 || format->wBitsPerSample == 16) &&
                      SUCCEEDED(client->GetService(__uuidof(IAudioCaptureClient), reinterpret_cast<void **>(&capture))) &&
                      SUCCEEDED(client->Start());
         started->set_value(ready);
@@ -284,7 +287,8 @@ std::function<void()> StartSystemAudio(PushAudioSource *source) {
             const bool isFloat = format->wBitsPerSample == 32;
             std::vector<int16_t> silence;
             while (running->load()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                // Loopback of an endpoint may not signal while nothing plays: wake up every 20 ms regardless.
+                WaitForSingleObject(event, 20);
                 UINT32 packet = 0;
                 while (SUCCEEDED(capture->GetNextPacketSize(&packet)) && packet > 0) {
                     BYTE *data = nullptr;
@@ -307,8 +311,7 @@ std::function<void()> StartSystemAudio(PushAudioSource *source) {
         if (format) CoTaskMemFree(format);
         if (capture) capture->Release();
         if (client) client->Release();
-        if (device) device->Release();
-        if (enumerator) enumerator->Release();
+        if (event) CloseHandle(event);
         CoUninitialize();
     });
     if (!ok.get()) {
@@ -319,6 +322,105 @@ std::function<void()> StartSystemAudio(PushAudioSource *source) {
         running->store(false);
         thread->join();
     };
+}
+
+/** Waits for ActivateAudioInterfaceAsync. */
+class ActivationWaiter final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
+public:
+    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **out) override {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IActivateAudioInterfaceCompletionHandler)) {
+            *out = static_cast<IActivateAudioInterfaceCompletionHandler *>(this);
+        } else if (riid == __uuidof(IAgileObject)) {
+            *out = static_cast<IAgileObject *>(this);
+        } else {
+            *out = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++refs_; }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG r = --refs_;
+        if (r == 0) delete this;
+        return r;
+    }
+    STDMETHODIMP ActivateCompleted(IActivateAudioInterfaceAsyncOperation *) override {
+        SetEvent(done);
+        return S_OK;
+    }
+
+private:
+    ~ActivationWaiter() { CloseHandle(done); }
+    std::atomic<ULONG> refs_{1};
+};
+}  // namespace
+
+// System sound: WASAPI loopback of the default output device (shared-mode mix format).
+std::function<void()> StartSystemAudio(PushAudioSource *source) {
+    return StartLoopback(source, [](IAudioClient **client, WAVEFORMATEX **format, HANDLE event) {
+        IMMDeviceEnumerator *enumerator = nullptr;
+        IMMDevice *device = nullptr;
+        bool ok = SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator))) &&
+                  SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) &&
+                  SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(client))) &&
+                  SUCCEEDED((*client)->GetMixFormat(format)) &&
+                  SUCCEEDED((*client)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200000, 0, *format, nullptr)) &&
+                  SUCCEEDED((*client)->SetEventHandle(event));
+        if (device) device->Release();
+        if (enumerator) enumerator->Release();
+        return ok;
+    });
+}
+
+// One application's sound: process loopback of the window's process tree (Windows 10 2004+). The virtual device
+// has no mix format: it converts to the one asked for.
+std::function<void()> StartWindowAudio(PushAudioSource *source, int64_t window) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(reinterpret_cast<HWND>(static_cast<intptr_t>(window)), &pid);
+    if (pid == 0 || pid == GetCurrentProcessId()) return nullptr;
+    return StartLoopback(source, [pid](IAudioClient **client, WAVEFORMATEX **format, HANDLE event) {
+        AUDIOCLIENT_ACTIVATION_PARAMS params = {};
+        params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
+        params.ProcessLoopbackParams.TargetProcessId = pid;
+        params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+        PROPVARIANT activation = {};
+        activation.vt = VT_BLOB;
+        activation.blob.cbSize = sizeof(params);
+        activation.blob.pBlobData = reinterpret_cast<BYTE *>(&params);
+        // Looked up by name at run time: the import library binds it by ordinal, and krtc.dll must load everywhere.
+        using Activate = HRESULT(WINAPI *)(LPCWSTR, REFIID, PROPVARIANT *, IActivateAudioInterfaceCompletionHandler *, IActivateAudioInterfaceAsyncOperation **);
+        HMODULE mmdevapi = LoadLibraryW(L"Mmdevapi.dll");
+        auto activate = mmdevapi ? reinterpret_cast<Activate>(GetProcAddress(mmdevapi, "ActivateAudioInterfaceAsync")) : nullptr;
+        if (!activate) return false;
+        auto *waiter = new ActivationWaiter();
+        IActivateAudioInterfaceAsyncOperation *operation = nullptr;
+        bool ok = SUCCEEDED(activate(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, __uuidof(IAudioClient), &activation, waiter, &operation)) &&
+                  WaitForSingleObject(waiter->done, 5000) == WAIT_OBJECT_0;
+        if (ok) {
+            HRESULT result = E_FAIL;
+            IUnknown *activated = nullptr;
+            ok = SUCCEEDED(operation->GetActivateResult(&result, &activated)) && SUCCEEDED(result) && activated &&
+                 SUCCEEDED(activated->QueryInterface(__uuidof(IAudioClient), reinterpret_cast<void **>(client)));
+            if (activated) activated->Release();
+        }
+        if (operation) operation->Release();
+        waiter->Release();
+        if (!ok) return false;
+        auto *f = static_cast<WAVEFORMATEX *>(CoTaskMemAlloc(sizeof(WAVEFORMATEX)));
+        *f = {};
+        f->wFormatTag = WAVE_FORMAT_PCM;
+        f->nChannels = 2;
+        f->nSamplesPerSec = 48000;
+        f->wBitsPerSample = 16;
+        f->nBlockAlign = f->nChannels * f->wBitsPerSample / 8;
+        f->nAvgBytesPerSec = f->nSamplesPerSec * f->nBlockAlign;
+        *format = f;
+        return SUCCEEDED((*client)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, 200000, 0, f, nullptr)) &&
+               SUCCEEDED((*client)->SetEventHandle(event));
+    });
 }
 
 #elif defined(__linux__) && !defined(__ANDROID__)
@@ -444,12 +546,16 @@ std::function<void()> StartSystemAudio(PushAudioSource *source) {
     };
 }
 
+// Linux: per-application capture would need PipeWire or PulseAudio sink inputs; the caller uses the system's sound.
+std::function<void()> StartWindowAudio(PushAudioSource *, int64_t) { return nullptr; }
+
 #else
 // Android: the application captures with MediaProjection (AndroidScreenCapture) into a screencast source, and the
 // sound with AudioPlaybackCapture into a pushed audio source.
 std::vector<ScreenSource> ScreenSources() { return {}; }
 std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource *) { return nullptr; }
 std::function<void()> StartSystemAudio(PushAudioSource *) { return nullptr; }
+std::function<void()> StartWindowAudio(PushAudioSource *, int64_t) { return nullptr; }
 #endif
 
 std::function<void()> WatchAudioFormat(std::function<void()>) { return nullptr; }

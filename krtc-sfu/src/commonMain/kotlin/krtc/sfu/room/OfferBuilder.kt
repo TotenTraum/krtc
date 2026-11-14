@@ -139,7 +139,7 @@ internal class OfferBuilder(
         a += SdpAttribute("rtcp-fb", "${MediaPlan.OPUS_PT} transport-cc")
         if (publisher != null) {
             // Screen audio shares the screen's MediaStream, so receivers keep picture and sound in sync.
-            val (stream, track) = if (screen) "screen-${publisher.id}" to "screen-audio-${publisher.id}" else msid(publisher, "audio")
+            val (stream, track) = if (screen) "screen-${publisher.id}" to "screen-audio-${publisher.id}-${publisher.screenAudioGeneration}" else msid(publisher, "audio")
             val ssrc = if (screen) publisher.screenAudioOut.ssrc else publisher.audioOut.ssrc
             a += SdpAttribute("msid", "$stream $track")
             a += SdpAttribute("ssrc", "$ssrc cname:${publisher.cname}")
@@ -187,7 +187,7 @@ internal class OfferBuilder(
         if (feed != null) {
             val publisher = feed.publisher
             // The camera shares a MediaStream with the microphone (lip sync); the screen is a stream of its own.
-            val (stream, track) = if (feed.kind == VideoKind.CAMERA) msid(publisher, "video") else "screen-${publisher.id}" to "screen-${publisher.id}"
+            val (stream, track) = if (feed.kind == VideoKind.CAMERA) msid(publisher, "video").let { (st, t) -> st to "$t-${feed.generation}" } else "screen-${publisher.id}" to "screen-${publisher.id}-${feed.generation}"
             a += SdpAttribute("msid", "$stream $track")
             a += SdpAttribute("ssrc-group", "FID ${feed.ssrc} ${feed.rtxSsrc}")
             for (ssrc in listOf(feed.ssrc, feed.rtxSsrc)) {

@@ -516,6 +516,9 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 if (sound) answer.media.firstOrNull { it.mid == MediaPlan.UPLINK_SCREEN_AUDIO_MID }?.let { participant.screenAudioSsrcs = it.ssrcs.toSet() }
                 val cameraChanged = publishes != participant.publishesVideo
                 val screenChanged = sharing != participant.screen.publishing || sound != participant.screenAudioPublishing
+                if (publishes && !participant.publishesVideo) participant.camera.newStream()
+                if (sharing && !participant.screen.publishing) participant.screen.newStream()
+                if (sound && !participant.screenAudioPublishing) participant.newScreenAudioStream()
                 participant.publishesVideo = publishes
                 participant.screen.publishing = sharing
                 participant.screenAudioPublishing = sound

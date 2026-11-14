@@ -1,3 +1,5 @@
 package krtc.meet
 
 actual val isIos: Boolean = true
+
+actual val isDesktop: Boolean = false

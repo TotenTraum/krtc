@@ -63,6 +63,9 @@ internal object MediaPlan {
 
     /** Total bitrate the SFU allows each video publisher across its layers (sent as REMB). */
     internal const val VIDEO_BITRATE: Long = 2_500_000
+
+    /** Added to [VIDEO_BITRATE] while the publisher shares its screen (1080p at 60 fps with motion needs ~8 Mbit/s). */
+    internal const val SCREEN_BITRATE: Long = 12_000_000
     internal const val KEYFRAME_MIN_INTERVAL_MILLIS: Long = 300
     internal const val REMB_INTERVAL_MILLIS: Long = 1_000
 

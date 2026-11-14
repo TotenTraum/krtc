@@ -175,6 +175,13 @@ public expect class NativePeerConnectionFactory(
      */
     public fun createSystemAudioSource(): NativeAudioSource?
 
+    /**
+     * Only the sound of the application that owns [windowId] (a window's [ScreenSource.id]), for sharing that
+     * window: macOS 13+ (ScreenCaptureKit), Windows 10 2004+ (process loopback, with the processes it started).
+     * Null elsewhere (Linux, iOS, Android) or if it cannot be captured: fall back to [createSystemAudioSource].
+     */
+    public fun createWindowAudioSource(windowId: Long): NativeAudioSource?
+
     /** An audio track on [source]. */
     public fun createAudioTrack(source: NativeAudioSource, id: String = "audio"): NativeTrack
 

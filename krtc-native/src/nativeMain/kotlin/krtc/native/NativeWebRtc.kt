@@ -8,7 +8,10 @@ import kotlinx.cinterop.UIntVar
 
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
 import kotlinx.cinterop.LongVar
 import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.alloc
@@ -34,6 +37,9 @@ import krtc.core.RTCDataChannelInit
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
 import krtc.core.RTCRtpReceiver
+import krtc.core.RTCDegradationPreference
+import krtc.core.RTCRtpEncodingParameters
+import krtc.core.RTCRtpSendParameters
 import krtc.core.RTCRtpSender
 import krtc.core.RTCRtpTransceiver
 import krtc.core.RTCRtpTransceiverDirection
@@ -131,6 +137,9 @@ public actual class NativePeerConnectionFactory actual constructor(
     actual override fun createSilentAudioTrack(id: String): NativeTrack = createAudioSource().use { createAudioTrack(it, id) }
 
     public actual fun createSystemAudioSource(): NativeAudioSource? = krtc_factory_create_system_audio_source(handle)?.let(::NativeAudioSource)
+
+    public actual fun createWindowAudioSource(windowId: Long): NativeAudioSource? =
+        krtc_factory_create_window_audio_source(handle, windowId)?.let(::NativeAudioSource)
 
     public actual fun createAudioTrack(source: NativeAudioSource, id: String): NativeTrack =
         NativeTrack(krtc_factory_create_audio_track_from(handle, id, source.handle) ?: error("audio track creation failed"))
@@ -313,6 +322,42 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
         val native = withTrack as NativeTrack?
         check(transceiver.guard.use { krtc_transceiver_set_sender_track(it, native?.handle) } == 0) { "replaceTrack failed" }
         track = withTrack
+    }
+
+    override suspend fun getParameters(): RTCRtpSendParameters = memScoped {
+        val out = allocArray<DoubleVar>(MAX_ENCODINGS * 4)
+        val degradation = alloc<IntVar>()
+        val n = transceiver.guard.use { krtc_transceiver_get_parameters(it, out, MAX_ENCODINGS, degradation.ptr) }
+        check(n >= 0) { "getParameters failed" }
+        val encodings = (0 until n).map { i ->
+            fun v(k: Int) = out[i * 4 + k]
+            RTCRtpEncodingParameters(
+                active = v(0) != 0.0,
+                maxBitrate = v(1).takeIf { it >= 0 }?.toLong(),
+                maxFramerate = v(2).takeIf { it >= 0 },
+                scaleResolutionDownBy = v(3).takeIf { it >= 0 },
+            )
+        }
+        RTCRtpSendParameters(encodings, RTCDegradationPreference.entries.getOrNull(degradation.value))
+    }
+
+    override suspend fun setParameters(parameters: RTCRtpSendParameters) {
+        val encodings = DoubleArray(parameters.encodings.size * 4)
+        parameters.encodings.forEachIndexed { i, e ->
+            encodings[i * 4] = if (e.active) 1.0 else 0.0
+            encodings[i * 4 + 1] = e.maxBitrate?.toDouble() ?: -1.0
+            encodings[i * 4 + 2] = e.maxFramerate ?: -1.0
+            encodings[i * 4 + 3] = e.scaleResolutionDownBy ?: -1.0
+        }
+        val degradation = parameters.degradationPreference?.ordinal ?: -1
+        val result = encodings.usePinned { pinned ->
+            transceiver.guard.use { krtc_transceiver_set_parameters(it, if (encodings.isEmpty()) null else pinned.addressOf(0), parameters.encodings.size, degradation) }
+        }
+        check(result == 0) { "setParameters failed" }
+    }
+
+    private companion object {
+        const val MAX_ENCODINGS = 8
     }
 }
 

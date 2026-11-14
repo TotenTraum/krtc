@@ -43,6 +43,40 @@ public interface MediaStreamTrack {
 public interface RTCRtpSender {
     public val track: MediaStreamTrack?
     public suspend fun replaceTrack(withTrack: MediaStreamTrack?)
+
+    /** [getParameters](https://w3c.github.io/webrtc-pc/#dom-rtcrtpsender-getparameters): the encodings it sends. */
+    public suspend fun getParameters(): RTCRtpSendParameters = RTCRtpSendParameters()
+
+    /**
+     * [setParameters](https://w3c.github.io/webrtc-pc/#dom-rtcrtpsender-setparameters): changes the encodings (in the
+     * order of [getParameters]; rids stay) and the degradation preference. Throws if the sender refuses them.
+     */
+    public suspend fun setParameters(parameters: RTCRtpSendParameters) {}
+}
+
+/** [W3C RTCRtpSendParameters](https://w3c.github.io/webrtc-pc/#dom-rtcrtpsendparameters) (subset) */
+public data class RTCRtpSendParameters(
+    val encodings: List<RTCRtpEncodingParameters> = emptyList(),
+    /** [degradationPreference](https://w3c.github.io/webrtc-extensions/#dom-rtcrtpsendparameters-degradationpreference); null: the default for the track's content. */
+    val degradationPreference: RTCDegradationPreference? = null,
+)
+
+/** [W3C RTCRtpEncodingParameters](https://w3c.github.io/webrtc-pc/#dom-rtcrtpencodingparameters) (subset); null: unset. */
+public data class RTCRtpEncodingParameters(
+    val active: Boolean = true,
+    /** Bits per second. */
+    val maxBitrate: Long? = null,
+    val maxFramerate: Double? = null,
+    val scaleResolutionDownBy: Double? = null,
+)
+
+/** [W3C RTCDegradationPreference](https://w3c.github.io/webrtc-extensions/#dom-rtcdegradationpreference): what to give up when bandwidth or CPU runs short. */
+public enum class RTCDegradationPreference(public val value: String) {
+    /** Lower the resolution, keep the frame rate (motion: games, video). */
+    MAINTAIN_FRAMERATE("maintain-framerate"),
+    /** Drop frames, keep the resolution (text, slides). */
+    MAINTAIN_RESOLUTION("maintain-resolution"),
+    BALANCED("balanced"),
 }
 
 /** [W3C RTCRtpReceiver](https://w3c.github.io/webrtc-pc/#dom-rtcrtpreceiver) (subset) */

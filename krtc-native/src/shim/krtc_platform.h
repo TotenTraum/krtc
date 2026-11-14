@@ -67,6 +67,14 @@ private:
 std::function<void()> StartSystemAudio(PushAudioSource *source);
 
 /**
+ * Captures only the sound of the application that owns [window] (a window id from ScreenSources) into [source].
+ * macOS: ScreenCaptureKit filtered to that application (macOS 13+); Windows: process loopback of the window's
+ * process and its children (Windows 10 2004+). Returns a stop function, or nullptr where unavailable (Linux, iOS,
+ * Android, older systems): the caller then falls back to StartSystemAudio.
+ */
+std::function<void()> StartWindowAudio(PushAudioSource *source, int64_t window);
+
+/**
  * Calls [onChange] (on a system thread) when an audio device's sample rate changes, or the default output device
  * does, e.g. Bluetooth headphones switching between the headset profile (while their microphone is in use) and the
  * music profile. Returns a function that stops watching; nullptr where not needed (only macOS has it).

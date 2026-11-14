@@ -366,6 +366,119 @@ class MeetSessionTest {
      * Viewers who join while a static screen share is already running get the picture: the SFU keeps asking the
      * publisher for a key frame while a viewer waits, also when two join within the key frame request interval.
      */
+    /** Stopping a share and starting another one: the others see the new one, not a black tile. */
+    @Test
+    fun restartedScreenIsSeen(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform())
+        val b = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "restart", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "restart", "bob", CameraChoice.None, testAudio = true))
+            val alice = withTimeout(15_000) { b.participants.first { list -> list.any { it.name == "alice" } }.single { it.name == "alice" } }
+            debug = { "bob: alice's screen ${alice.screen.value}, ${frames(alice.screen.value)} frames" }
+            for (round in 1..3) {
+                a.startScreen(a.screens().single(), withAudio = false)
+                waitUntil("bob sees alice's screen, round $round") { frames(alice.screen.value) > 10 }
+                a.stopScreen()
+                waitUntil("alice's screen gone at bob, round $round") { alice.screen.value == null }
+            }
+            // Again right after stopping, without waiting for the others to see it gone.
+            a.startScreen(a.screens().single(), withAudio = false)
+            waitUntil("bob sees the screen") { frames(alice.screen.value) > 10 }
+            a.stopScreen()
+            a.startScreen(a.screens().single(), withAudio = false)
+            delay(1_000)
+            val before = frames(alice.screen.value)
+            waitUntil("bob sees the quickly restarted screen") { alice.screen.value != null && frames(alice.screen.value) > before + 10 }
+        } finally {
+            a.close()
+            b.close()
+        }
+    }
+
+    /** The share's sender gets a bitrate for its size and frame rate, and at 60 fps keeps the frame rate. */
+    @Test
+    fun screenEncodingFollowsTheChosenQuality(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform())
+        val b = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "quality", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "quality", "bob", CameraChoice.None, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            a.setScreenFps(60)
+            a.setScreenHeight(1080)
+            a.startScreen(a.screens().single(), withAudio = false)
+            var parameters: krtc.core.RTCRtpSendParameters? = null
+            waitUntil("the screen sender's parameters") {
+                val sender = a.roomClient?.peerConnection?.getTransceivers()?.firstOrNull { it.mid == "s" && it.sender.track != null }?.sender
+                parameters = sender?.let { runBlocking { it.getParameters() } }
+                parameters?.encodings?.firstOrNull()?.maxBitrate != null
+            }
+            val encoding = parameters!!.encodings.first()
+            assertEquals(60.0, encoding.maxFramerate)
+            assertTrue(encoding.maxBitrate!! in 8_000_000L..9_000_000L, "maxBitrate ${encoding.maxBitrate}")
+            assertEquals(krtc.core.RTCDegradationPreference.MAINTAIN_FRAMERATE, parameters!!.degradationPreference)
+        } finally {
+            a.close()
+            b.close()
+        }
+    }
+
+    /**
+     * Renders bob's call screen (alice shares her screen, carol has a camera) to PNGs in build/ui-snapshots, for
+     * looking at the layout: the grid, the same with the pointer over the stream, the speaker layout and a phone.
+     */
+    @Test
+    fun callScreenSnapshots(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform())
+        val b = MeetSession(scope, TestPlatform())
+        val c = MeetSession(scope, TestPlatform())
+        val dir = java.io.File("build/ui-snapshots").also { it.mkdirs() }
+        try {
+            a.join(JoinSettings(url, "ui", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "ui", "bob", CameraChoice.TestPattern, testAudio = true))
+            c.join(JoinSettings(url, "ui", "carol", CameraChoice.TestPattern, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            a.startScreen(a.screens().single(), withAudio = false)
+            val alice = withTimeout(15_000) { b.participants.first { list -> list.size == 2 && list.any { it.name == "alice" } }.single { it.name == "alice" } }
+            waitUntil("bob sees alice's screen") { frames(alice.screen.value) > 10 }
+            val defaults = JoinSettings(url, "ui", "bob", CameraChoice.TestPattern, testAudio = true)
+            suspend fun shot(name: String, width: Int, height: Int, pointer: androidx.compose.ui.geometry.Offset? = null, click: Boolean = false, who: MeetSession = b, setup: () -> Unit = {}) {
+                setup()
+                val scene = androidx.compose.ui.ImageComposeScene(width, height, androidx.compose.ui.unit.Density(1f), coroutineContext = coroutineContext) { App(who, defaults) }
+                try {
+                    var image = scene.render(0)
+                    for (i in 1..20) {
+                        if (i == 5 && pointer != null) scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Move, pointer)
+                        if (i == 6 && pointer != null && click) {
+                            scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press, pointer)
+                            scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Release, pointer)
+                        }
+                        delay(50)
+                        image = scene.render(i * 50_000_000L)
+                    }
+                    java.io.File(dir, "$name.png").writeBytes(image.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes)
+                } finally {
+                    scene.close()
+                }
+            }
+            shot("grid", 1280, 800)
+            shot("grid-hover", 1280, 800, pointer = androidx.compose.ui.geometry.Offset(900f, 200f))
+            shot("speaker", 1280, 800) { b.setLayout(Layout.SPEAKER) }
+            shot("chat", 1280, 800) { b.setLayout(Layout.GRID); b.setChatOpen(true) }
+            shot("phone", 420, 860) { b.setChatOpen(false) }
+            shot("muted-hint", 1280, 800, pointer = androidx.compose.ui.geometry.Offset(445f, 763f)) { b.toggleMic(); b.toggleDeafen() }
+            shot("member-hover", 1280, 800, pointer = androidx.compose.ui.geometry.Offset(120f, 155f)) { b.toggleDeafen(); b.toggleMic() }
+            shot("not-watching", 1280, 800) { b.setScreenSubscribed(alice, false) }
+            shot("settings", 1280, 800, pointer = androidx.compose.ui.geometry.Offset(735f, 763f), click = true) { b.setScreenSubscribed(alice, true) }
+            shot("join", 1280, 800, who = MeetSession(scope, TestPlatform()).also { it.setUpdateCheck(false) }) // no request to GitHub
+        } finally {
+            a.close()
+            b.close()
+            c.close()
+        }
+    }
+
     @Test
     fun lateViewersGetAStaticScreen(): Unit = runBlocking(main) {
         val a = MeetSession(scope, TestPlatform(static = true))

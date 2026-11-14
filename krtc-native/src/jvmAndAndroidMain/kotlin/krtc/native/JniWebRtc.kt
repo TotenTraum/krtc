@@ -7,7 +7,10 @@ import krtc.core.RTCDataChannel
 import krtc.core.RTCDataChannelInit
 import krtc.core.RTCPeerConnection
 import krtc.core.RTCPeerConnectionState
+import krtc.core.RTCDegradationPreference
+import krtc.core.RTCRtpEncodingParameters
 import krtc.core.RTCRtpReceiver
+import krtc.core.RTCRtpSendParameters
 import krtc.core.RTCRtpSender
 import krtc.core.RTCRtpTransceiver
 import krtc.core.RTCRtpTransceiverDirection
@@ -101,6 +104,9 @@ public actual class NativePeerConnectionFactory actual constructor(
 
     public actual fun createSystemAudioSource(): NativeAudioSource? =
         Jni.factoryCreateSystemAudioSource(handle).takeIf { it != 0L }?.let(::NativeAudioSource)
+
+    public actual fun createWindowAudioSource(windowId: Long): NativeAudioSource? =
+        Jni.factoryCreateWindowAudioSource(handle, windowId).takeIf { it != 0L }?.let(::NativeAudioSource)
 
     public actual fun createAudioTrack(source: NativeAudioSource, id: String): NativeTrack =
         NativeTrack(Jni.factoryCreateAudioTrackFrom(handle, id, source.handle).also { check(it != 0L) { "audio track creation failed" } })
@@ -230,6 +236,33 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
     override suspend fun replaceTrack(withTrack: MediaStreamTrack?) {
         check(transceiver.guard.use { Jni.transceiverSetSenderTrack(it, (withTrack as NativeTrack?)?.handle ?: 0L) } == 0) { "replaceTrack failed" }
         track = withTrack
+    }
+
+    override suspend fun getParameters(): RTCRtpSendParameters {
+        val raw = transceiver.guard.use { Jni.transceiverGetParameters(it) } ?: error("getParameters failed")
+        val degradation = raw[0].toInt()
+        val encodings = (0 until (raw.size - 1) / 4).map { i ->
+            fun v(k: Int) = raw[1 + i * 4 + k]
+            RTCRtpEncodingParameters(
+                active = v(0) != 0.0,
+                maxBitrate = v(1).takeIf { it >= 0 }?.toLong(),
+                maxFramerate = v(2).takeIf { it >= 0 },
+                scaleResolutionDownBy = v(3).takeIf { it >= 0 },
+            )
+        }
+        return RTCRtpSendParameters(encodings, RTCDegradationPreference.entries.getOrNull(degradation))
+    }
+
+    override suspend fun setParameters(parameters: RTCRtpSendParameters) {
+        val encodings = DoubleArray(parameters.encodings.size * 4)
+        parameters.encodings.forEachIndexed { i, e ->
+            encodings[i * 4] = if (e.active) 1.0 else 0.0
+            encodings[i * 4 + 1] = e.maxBitrate?.toDouble() ?: -1.0
+            encodings[i * 4 + 2] = e.maxFramerate ?: -1.0
+            encodings[i * 4 + 3] = e.scaleResolutionDownBy ?: -1.0
+        }
+        val degradation = parameters.degradationPreference?.ordinal ?: -1
+        check(transceiver.guard.use { Jni.transceiverSetParameters(it, encodings, degradation) } == 0) { "setParameters failed" }
     }
 }
 
