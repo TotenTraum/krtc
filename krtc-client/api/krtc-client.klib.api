@@ -77,7 +77,7 @@ final class krtc.client/RoomClient { // krtc.client/RoomClient|null[0]
     final suspend fun setCamera(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setCamera|setCamera(krtc.core.MediaStreamTrack?){}[0]
     final suspend fun setMediaState(kotlin/Boolean, kotlin/Boolean, kotlin/Boolean = ...) // krtc.client/RoomClient.setMediaState|setMediaState(kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
     final suspend fun setMicrophone(krtc.core/MediaStreamTrack?) // krtc.client/RoomClient.setMicrophone|setMicrophone(krtc.core.MediaStreamTrack?){}[0]
-    final suspend fun setScreen(krtc.core/MediaStreamTrack?, krtc.core/MediaStreamTrack? = ...) // krtc.client/RoomClient.setScreen|setScreen(krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?){}[0]
+    final suspend fun setScreen(krtc.core/MediaStreamTrack?, krtc.core/MediaStreamTrack? = ..., krtc.core/RTCRtpSendParameters? = ...) // krtc.client/RoomClient.setScreen|setScreen(krtc.core.MediaStreamTrack?;krtc.core.MediaStreamTrack?;krtc.core.RTCRtpSendParameters?){}[0]
     final suspend fun setSubscribed(kotlin/String, kotlin/Boolean, kotlin/Boolean = ...) // krtc.client/RoomClient.setSubscribed|setSubscribed(kotlin.String;kotlin.Boolean;kotlin.Boolean){}[0]
     final suspend fun setVideoQuality(kotlin/String, krtc.client/VideoQuality) // krtc.client/RoomClient.setVideoQuality|setVideoQuality(kotlin.String;krtc.client.VideoQuality){}[0]
 }

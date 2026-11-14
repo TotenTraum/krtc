@@ -124,6 +124,7 @@ internal object Jni {
     @JvmStatic external fun trackSetEnabled(track: Long, enabled: Boolean)
     @JvmStatic external fun trackSetVolume(track: Long, volume: Double)
     @JvmStatic external fun factorySetInputGate(factory: Long, mode: Int, threshold: Double, holdMillis: Int)
+    @JvmStatic external fun factorySetNeuralNoiseSuppression(factory: Long, enabled: Boolean)
     @JvmStatic external fun factoryInputLevel(factory: Long): Double
     @JvmStatic external fun factoryInputGateOpen(factory: Long): Boolean
     @JvmStatic external fun factorySetAudioProcessing(factory: Long, echoCancellation: Boolean, noiseSuppression: Boolean, autoGainControl: Boolean)

@@ -61,6 +61,8 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setInputGate(gate: InputGate, threshold: Double, holdMillis: Int): Unit =
         Jni.factorySetInputGate(handle, gate.ordinal, threshold, holdMillis)
 
+    public actual fun setNeuralNoiseSuppression(enabled: Boolean): Unit = Jni.factorySetNeuralNoiseSuppression(handle, enabled)
+
     public actual val inputLevel: Double get() = Jni.factoryInputLevel(handle)
     public actual val inputGateOpen: Boolean get() = Jni.factoryInputGateOpen(handle)
 

@@ -107,6 +107,14 @@ public expect class NativePeerConnectionFactory(
      */
     public fun setInputGate(gate: InputGate, threshold: Double = 0.05, holdMillis: Int = 400)
 
+    /**
+     * Neural noise suppression of the microphone (RNNoise): on top of [setAudioProcessing]'s, and before the input
+     * gate, so voice activity reacts to the voice rather than to noise. Removes keyboard, fans, street and other
+     * changing noise the classic suppression lets through, at a few percent of one core. Off by default; applies at
+     * once to the microphone (with [AudioDevice.SYNTHETIC], to the pushed PCM), not to pushed [NativeAudioSource]s.
+     */
+    public fun setNeuralNoiseSuppression(enabled: Boolean)
+
     /** The microphone's recent peak level (0..1), measured in every gate mode, also while the gate is closed. */
     public val inputLevel: Double
 

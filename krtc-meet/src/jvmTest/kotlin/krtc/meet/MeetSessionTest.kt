@@ -479,6 +479,53 @@ class MeetSessionTest {
         }
     }
 
+    /** The neural noise suppression (RNNoise) takes out what is not speech: a hiss as the microphone all but goes. */
+    @Test
+    fun neuralNoiseSuppressionRemovesNoise(): Unit = runBlocking(main) {
+        val platform = TestPlatform()
+        val a = MeetSession(scope, platform)
+        val hissing = java.util.concurrent.atomic.AtomicBoolean(true)
+        val hiss = thread {
+            val random = java.util.Random(1)
+            while (hissing.get()) {
+                val f = platform.factories.lastOrNull()
+                if (f != null) {
+                    f.setTestTone(false)
+                    f.pushAudio(ShortArray(480) { (random.nextGaussian() * 3000).toInt().coerceIn(-32768, 32767).toShort() })
+                }
+                Thread.sleep(10)
+            }
+        }
+        try {
+            a.join(JoinSettings(url, "rnnoise", "alice", CameraChoice.None, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            delay(1_000)
+            // The meter's mean over 2 s.
+            suspend fun level(): Float {
+                var sum = 0f
+                repeat(40) {
+                    delay(50)
+                    sum += a.inputLevel.value
+                }
+                return sum / 40
+            }
+            val plain = level()
+            assertTrue(plain > 0.01f, "the hiss reaches the meter: $plain")
+            a.setAudioProcessing(a.audioProcessing.value.copy(neuralNoiseSuppression = true))
+            delay(500)
+            val denoised = level()
+            println("input level: plain $plain, with RNNoise $denoised")
+            assertTrue(denoised < plain / 5, "RNNoise takes the hiss out: $plain -> $denoised")
+            a.setAudioProcessing(a.audioProcessing.value.copy(neuralNoiseSuppression = false))
+            delay(500)
+            assertTrue(level() > plain / 2, "and lets it through again when turned off")
+        } finally {
+            hissing.set(false)
+            hiss.join()
+            a.close()
+        }
+    }
+
     @Test
     fun lateViewersGetAStaticScreen(): Unit = runBlocking(main) {
         val a = MeetSession(scope, TestPlatform(static = true))

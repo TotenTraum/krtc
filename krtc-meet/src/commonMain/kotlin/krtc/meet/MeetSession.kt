@@ -57,6 +57,8 @@ data class AudioProcessing(
     val noiseSuppression: Boolean = true,
     /** Adaptive input: keeps quiet and loud voices at one level. */
     val autoGainControl: Boolean = true,
+    /** Strong (neural, RNNoise) noise suppression on top: keyboard, fans, street. Off by default. */
+    val neuralNoiseSuppression: Boolean = false,
 )
 
 /** How the call's connection is doing, from `getStats` every few seconds. */
@@ -915,6 +917,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             echoCancellation = bool("processing.echo") ?: true,
             noiseSuppression = bool("processing.noise") ?: true,
             autoGainControl = bool("processing.agc") ?: true,
+            neuralNoiseSuppression = bool("processing.neural") ?: false,
         )
         inputFlowSettings.value = InputSettings(
             mode = store["input.mode"]?.let { m -> InputMode.entries.firstOrNull { it.name == m } } ?: InputMode.OPEN,
@@ -927,7 +930,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         int("screen.height")?.takeIf { it in SCREEN_HEIGHT_CHOICES }?.let { screenHeightFlow.value = it }
         store["layout"]?.let { l -> Layout.entries.firstOrNull { it.name == l } }?.let { layoutFlow.value = it }
         scope.launch {
-            launch { processingFlow.collect { store["processing.echo"] = "${it.echoCancellation}"; store["processing.noise"] = "${it.noiseSuppression}"; store["processing.agc"] = "${it.autoGainControl}" } }
+            launch { processingFlow.collect { store["processing.echo"] = "${it.echoCancellation}"; store["processing.noise"] = "${it.noiseSuppression}"; store["processing.agc"] = "${it.autoGainControl}"; store["processing.neural"] = "${it.neuralNoiseSuppression}" } }
             launch { inputFlowSettings.collect { store["input.mode"] = it.mode.name; store["input.threshold"] = it.threshold.toString() } }
             launch { cuesFlow.collect { store["cues"] = it.toString() } }
             launch { logUploadFlow.collect { store["log.upload"] = it.toString() } }
@@ -964,6 +967,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
      */
     @Traced
     fun setAudioProcessing(processing: AudioProcessing) {
+        val before = processingFlow.value
         processingFlow.value = processing
         val shared = platformFactory
         val f = factory
@@ -973,6 +977,8 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 shared?.let { applyProcessing(it, processing) }
                 f?.let { applyProcessing(it, processing) }
             }
+            // The neural suppression applies to the running microphone as it is; the rest needs a new track.
+            if (before.copy(neuralNoiseSuppression = processing.neuralNoiseSuppression) == processing) return@launch
             if (f == null || c == null || client !== c) return@launch
             val old = mic ?: return@launch
             val fresh = offUi({ it.release() }) { f.createAudioTrack("mic").also { it.enabled = old.enabled } }
@@ -984,8 +990,10 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         }
     }
 
-    private fun applyProcessing(f: NativePeerConnectionFactory, p: AudioProcessing) =
+    private fun applyProcessing(f: NativePeerConnectionFactory, p: AudioProcessing) {
         f.setAudioProcessing(p.echoCancellation, p.noiseSuppression, p.autoGainControl)
+        f.setNeuralNoiseSuppression(p.neuralNoiseSuppression)
+    }
 
     @Traced
     fun leave() = end("left")

@@ -99,6 +99,16 @@ public final class krtc/core/RTCDataChannelState : java/lang/Enum {
 	public static fun values ()[Lkrtc/core/RTCDataChannelState;
 }
 
+public final class krtc/core/RTCDegradationPreference : java/lang/Enum {
+	public static final field BALANCED Lkrtc/core/RTCDegradationPreference;
+	public static final field MAINTAIN_FRAMERATE Lkrtc/core/RTCDegradationPreference;
+	public static final field MAINTAIN_RESOLUTION Lkrtc/core/RTCDegradationPreference;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lkrtc/core/RTCDegradationPreference;
+	public static fun values ()[Lkrtc/core/RTCDegradationPreference;
+}
+
 public final class krtc/core/RTCIceServer {
 	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
 	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -148,13 +158,54 @@ public final class krtc/core/RTCPeerConnectionState : java/lang/Enum {
 	public static fun values ()[Lkrtc/core/RTCPeerConnectionState;
 }
 
+public final class krtc/core/RTCRtpEncodingParameters {
+	public fun <init> ()V
+	public fun <init> (ZLjava/lang/Long;Ljava/lang/Double;Ljava/lang/Double;)V
+	public synthetic fun <init> (ZLjava/lang/Long;Ljava/lang/Double;Ljava/lang/Double;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun component3 ()Ljava/lang/Double;
+	public final fun component4 ()Ljava/lang/Double;
+	public final fun copy (ZLjava/lang/Long;Ljava/lang/Double;Ljava/lang/Double;)Lkrtc/core/RTCRtpEncodingParameters;
+	public static synthetic fun copy$default (Lkrtc/core/RTCRtpEncodingParameters;ZLjava/lang/Long;Ljava/lang/Double;Ljava/lang/Double;ILjava/lang/Object;)Lkrtc/core/RTCRtpEncodingParameters;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActive ()Z
+	public final fun getMaxBitrate ()Ljava/lang/Long;
+	public final fun getMaxFramerate ()Ljava/lang/Double;
+	public final fun getScaleResolutionDownBy ()Ljava/lang/Double;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class krtc/core/RTCRtpReceiver {
 	public abstract fun getTrack ()Lkrtc/core/MediaStreamTrack;
 }
 
+public final class krtc/core/RTCRtpSendParameters {
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Lkrtc/core/RTCDegradationPreference;)V
+	public synthetic fun <init> (Ljava/util/List;Lkrtc/core/RTCDegradationPreference;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Lkrtc/core/RTCDegradationPreference;
+	public final fun copy (Ljava/util/List;Lkrtc/core/RTCDegradationPreference;)Lkrtc/core/RTCRtpSendParameters;
+	public static synthetic fun copy$default (Lkrtc/core/RTCRtpSendParameters;Ljava/util/List;Lkrtc/core/RTCDegradationPreference;ILjava/lang/Object;)Lkrtc/core/RTCRtpSendParameters;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDegradationPreference ()Lkrtc/core/RTCDegradationPreference;
+	public final fun getEncodings ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class krtc/core/RTCRtpSender {
+	public fun getParameters (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getTrack ()Lkrtc/core/MediaStreamTrack;
 	public abstract fun replaceTrack (Lkrtc/core/MediaStreamTrack;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setParameters (Lkrtc/core/RTCRtpSendParameters;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class krtc/core/RTCRtpSender$DefaultImpls {
+	public static fun getParameters (Lkrtc/core/RTCRtpSender;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun setParameters (Lkrtc/core/RTCRtpSender;Lkrtc/core/RTCRtpSendParameters;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public abstract interface class krtc/core/RTCRtpTransceiver {

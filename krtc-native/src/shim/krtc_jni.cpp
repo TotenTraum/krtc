@@ -263,6 +263,9 @@ KRTC_JNI(void, factorySetInputGate)(JNIEnv *, jclass, jlong f, jint mode, jdoubl
     krtc_factory_set_input_gate(H<krtc_factory>(f), mode, threshold, hold_ms);
 }
 KRTC_JNI(jdouble, factoryInputLevel)(JNIEnv *, jclass, jlong f) { return krtc_factory_input_level(H<krtc_factory>(f)); }
+KRTC_JNI(void, factorySetNeuralNoiseSuppression)(JNIEnv *, jclass, jlong f, jboolean enabled) {
+    krtc_factory_set_neural_noise_suppression(H<krtc_factory>(f), enabled ? 1 : 0);
+}
 KRTC_JNI(jboolean, factoryInputGateOpen)(JNIEnv *, jclass, jlong f) { return krtc_factory_input_gate_open(H<krtc_factory>(f)) ? JNI_TRUE : JNI_FALSE; }
 KRTC_JNI(void, factorySetAudioProcessing)(JNIEnv *, jclass, jlong f, jboolean echo, jboolean noise, jboolean agc) {
     krtc_factory_set_audio_processing(H<krtc_factory>(f), echo ? 1 : 0, noise ? 1 : 0, agc ? 1 : 0);

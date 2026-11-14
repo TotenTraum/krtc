@@ -21,6 +21,20 @@ final enum class krtc.core/RTCDataChannelState : kotlin/Enum<krtc.core/RTCDataCh
     final fun values(): kotlin/Array<krtc.core/RTCDataChannelState> // krtc.core/RTCDataChannelState.values|values#static(){}[0]
 }
 
+final enum class krtc.core/RTCDegradationPreference : kotlin/Enum<krtc.core/RTCDegradationPreference> { // krtc.core/RTCDegradationPreference|null[0]
+    enum entry BALANCED // krtc.core/RTCDegradationPreference.BALANCED|null[0]
+    enum entry MAINTAIN_FRAMERATE // krtc.core/RTCDegradationPreference.MAINTAIN_FRAMERATE|null[0]
+    enum entry MAINTAIN_RESOLUTION // krtc.core/RTCDegradationPreference.MAINTAIN_RESOLUTION|null[0]
+
+    final val entries // krtc.core/RTCDegradationPreference.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<krtc.core/RTCDegradationPreference> // krtc.core/RTCDegradationPreference.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val value // krtc.core/RTCDegradationPreference.value|{}value[0]
+        final fun <get-value>(): kotlin/String // krtc.core/RTCDegradationPreference.value.<get-value>|<get-value>(){}[0]
+
+    final fun valueOf(kotlin/String): krtc.core/RTCDegradationPreference // krtc.core/RTCDegradationPreference.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<krtc.core/RTCDegradationPreference> // krtc.core/RTCDegradationPreference.values|values#static(){}[0]
+}
+
 final enum class krtc.core/RTCPeerConnectionState : kotlin/Enum<krtc.core/RTCPeerConnectionState> { // krtc.core/RTCPeerConnectionState|null[0]
     enum entry CLOSED // krtc.core/RTCPeerConnectionState.CLOSED|null[0]
     enum entry CONNECTED // krtc.core/RTCPeerConnectionState.CONNECTED|null[0]
@@ -144,6 +158,8 @@ abstract interface krtc.core/RTCRtpSender { // krtc.core/RTCRtpSender|null[0]
         abstract fun <get-track>(): krtc.core/MediaStreamTrack? // krtc.core/RTCRtpSender.track.<get-track>|<get-track>(){}[0]
 
     abstract suspend fun replaceTrack(krtc.core/MediaStreamTrack?) // krtc.core/RTCRtpSender.replaceTrack|replaceTrack(krtc.core.MediaStreamTrack?){}[0]
+    open suspend fun getParameters(): krtc.core/RTCRtpSendParameters // krtc.core/RTCRtpSender.getParameters|getParameters(){}[0]
+    open suspend fun setParameters(krtc.core/RTCRtpSendParameters) // krtc.core/RTCRtpSender.setParameters|setParameters(krtc.core.RTCRtpSendParameters){}[0]
 }
 
 abstract interface krtc.core/RTCRtpTransceiver { // krtc.core/RTCRtpTransceiver|null[0]
@@ -221,6 +237,44 @@ final class krtc.core/RTCIceServer { // krtc.core/RTCIceServer|null[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCIceServer.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // krtc.core/RTCIceServer.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // krtc.core/RTCIceServer.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCRtpEncodingParameters { // krtc.core/RTCRtpEncodingParameters|null[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin/Long? = ..., kotlin/Double? = ..., kotlin/Double? = ...) // krtc.core/RTCRtpEncodingParameters.<init>|<init>(kotlin.Boolean;kotlin.Long?;kotlin.Double?;kotlin.Double?){}[0]
+
+    final val active // krtc.core/RTCRtpEncodingParameters.active|{}active[0]
+        final fun <get-active>(): kotlin/Boolean // krtc.core/RTCRtpEncodingParameters.active.<get-active>|<get-active>(){}[0]
+    final val maxBitrate // krtc.core/RTCRtpEncodingParameters.maxBitrate|{}maxBitrate[0]
+        final fun <get-maxBitrate>(): kotlin/Long? // krtc.core/RTCRtpEncodingParameters.maxBitrate.<get-maxBitrate>|<get-maxBitrate>(){}[0]
+    final val maxFramerate // krtc.core/RTCRtpEncodingParameters.maxFramerate|{}maxFramerate[0]
+        final fun <get-maxFramerate>(): kotlin/Double? // krtc.core/RTCRtpEncodingParameters.maxFramerate.<get-maxFramerate>|<get-maxFramerate>(){}[0]
+    final val scaleResolutionDownBy // krtc.core/RTCRtpEncodingParameters.scaleResolutionDownBy|{}scaleResolutionDownBy[0]
+        final fun <get-scaleResolutionDownBy>(): kotlin/Double? // krtc.core/RTCRtpEncodingParameters.scaleResolutionDownBy.<get-scaleResolutionDownBy>|<get-scaleResolutionDownBy>(){}[0]
+
+    final fun component1(): kotlin/Boolean // krtc.core/RTCRtpEncodingParameters.component1|component1(){}[0]
+    final fun component2(): kotlin/Long? // krtc.core/RTCRtpEncodingParameters.component2|component2(){}[0]
+    final fun component3(): kotlin/Double? // krtc.core/RTCRtpEncodingParameters.component3|component3(){}[0]
+    final fun component4(): kotlin/Double? // krtc.core/RTCRtpEncodingParameters.component4|component4(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Long? = ..., kotlin/Double? = ..., kotlin/Double? = ...): krtc.core/RTCRtpEncodingParameters // krtc.core/RTCRtpEncodingParameters.copy|copy(kotlin.Boolean;kotlin.Long?;kotlin.Double?;kotlin.Double?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCRtpEncodingParameters.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCRtpEncodingParameters.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCRtpEncodingParameters.toString|toString(){}[0]
+}
+
+final class krtc.core/RTCRtpSendParameters { // krtc.core/RTCRtpSendParameters|null[0]
+    constructor <init>(kotlin.collections/List<krtc.core/RTCRtpEncodingParameters> = ..., krtc.core/RTCDegradationPreference? = ...) // krtc.core/RTCRtpSendParameters.<init>|<init>(kotlin.collections.List<krtc.core.RTCRtpEncodingParameters>;krtc.core.RTCDegradationPreference?){}[0]
+
+    final val degradationPreference // krtc.core/RTCRtpSendParameters.degradationPreference|{}degradationPreference[0]
+        final fun <get-degradationPreference>(): krtc.core/RTCDegradationPreference? // krtc.core/RTCRtpSendParameters.degradationPreference.<get-degradationPreference>|<get-degradationPreference>(){}[0]
+    final val encodings // krtc.core/RTCRtpSendParameters.encodings|{}encodings[0]
+        final fun <get-encodings>(): kotlin.collections/List<krtc.core/RTCRtpEncodingParameters> // krtc.core/RTCRtpSendParameters.encodings.<get-encodings>|<get-encodings>(){}[0]
+
+    final fun component1(): kotlin.collections/List<krtc.core/RTCRtpEncodingParameters> // krtc.core/RTCRtpSendParameters.component1|component1(){}[0]
+    final fun component2(): krtc.core/RTCDegradationPreference? // krtc.core/RTCRtpSendParameters.component2|component2(){}[0]
+    final fun copy(kotlin.collections/List<krtc.core/RTCRtpEncodingParameters> = ..., krtc.core/RTCDegradationPreference? = ...): krtc.core/RTCRtpSendParameters // krtc.core/RTCRtpSendParameters.copy|copy(kotlin.collections.List<krtc.core.RTCRtpEncodingParameters>;krtc.core.RTCDegradationPreference?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // krtc.core/RTCRtpSendParameters.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // krtc.core/RTCRtpSendParameters.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // krtc.core/RTCRtpSendParameters.toString|toString(){}[0]
 }
 
 final class krtc.core/RTCSessionDescription { // krtc.core/RTCSessionDescription|null[0]

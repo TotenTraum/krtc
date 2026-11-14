@@ -41,11 +41,13 @@ client.participants.value.first().video.value?.let { track ->
 }
 ```
 
+Шумоподавление: кроме обработки libwebrtc (`setAudioProcessing`) есть нейросетевое — `setNeuralNoiseSuppression(true)`, RNNoise на 48 кГц после обработки и до шлюза ввода. Оно убирает изменчивый шум (клавиатура, вентилятор, улица), который классическое пропускает; белый шум в тесте почти исчезает. Выключено по умолчанию.
+
 Звук: `AudioDevice.PLATFORM` — системный микрофон и динамик (Apple, Linux, Windows). Устройства перечисляются в `factory.audioInputs` и `factory.audioOutputs`, выбираются через `setAudioInput(i)` и `setAudioOutput(i)`, в том числе во время звонка. Флаг демо `devices` печатает их список. `AudioDevice.SYNTHETIC` — PCM через `pushAudio`/`pullAudio`; на Android к нему подключается `AndroidAudio(factory).start()`. Подробности по платформам — в [ADR-0014](../docs/adr/0014-spike-krtc-native.md#медиа-камера-свои-кадры-вывод).
 
 ## Подготовка
 
-Готовые libwebrtc от LiveKit (релиз `webrtc-a545de4`) распаковываются в `.deps/<платформа>` (каталог не коммитится). Платформы: `mac-arm64`, `linux-arm64`, `linux-x64`, `ios-simulator-arm64`, `ios-device-arm64`, `android-arm64`, `win-x64`:
+Готовые libwebrtc от LiveKit (релиз `webrtc-a545de4`) распаковываются в `.deps/<платформа>` (каталог не коммитится). Туда же скачиваются исходники [RNNoise](https://github.com/xiph/rnnoise) 0.2 (Xiph, BSD-3-Clause; архив сверяется по sha256): они компилируются в прослойку на всех платформах и дают `setNeuralNoiseSuppression`. Платформы: `mac-arm64`, `linux-arm64`, `linux-x64`, `ios-simulator-arm64`, `ios-device-arm64`, `android-arm64`, `win-x64`:
 
 ```bash
 krtc-native/fetch-deps.sh                    # все платформы; или только нужные: fetch-deps.sh mac-arm64 android-arm64

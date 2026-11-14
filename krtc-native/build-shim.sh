@@ -24,6 +24,12 @@ SRC="$DIR/src/shim"
 . "$DIR/toolchain.sh"
 COMMON="-O2 -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wno-deprecated-declarations -Wno-nullability-completeness $TARGET_FLAGS"
 INCLUDES="-I$INC -I$INC/third_party/abseil-cpp -I$INC/third_party/libyuv/include -I$SRC"
+# RNNoise (neural noise suppression of the microphone, krtc_factory_set_neural_noise_suppression): its C sources from
+# fetch-deps.sh, compiled into the shim; the model is built in. Plain C, with NEON on arm64.
+RNN="$DIR/.deps/rnnoise-0.2"
+[ -f "$RNN/src/denoise.c" ] || { echo "no RNNoise sources in $RNN: run ./fetch-deps.sh" >&2; exit 1; }
+RNN_SRC="denoise.c rnn.c pitch.c kiss_fft.c celt_lpc.c nnet.c nnet_default.c parse_lpcnet_weights.c rnnoise_data.c rnnoise_tables.c"
+INCLUDES="$INCLUDES -I$RNN/include -DRNNOISE_EXPORT="
 case "$TARGET" in
 macos | ios | ios-simulator)
     INCLUDES="$INCLUDES -I$INC/sdk/objc -I$INC/sdk/objc/base"
@@ -43,6 +49,10 @@ if [ "$TARGET" = win ]; then
             -Wno-nullability-completeness -Wno-unknown-pragmas "$@" $INCLUDES "$SRC/$f" /Fo"$OUT/${f%.*}.obj"
         OBJS="$OBJS $OUT/${f%.*}.obj"
     done
+    for f in $RNN_SRC; do
+        $CXX $TARGET_FLAGS /c /O2 /MT /Gw /Gy -w -DRNNOISE_EXPORT= -I"$RNN/include" -I"$RNN/src" -I"$SRC/rnnoise-compat" "$RNN/src/$f" /Fo"$OUT/rnn_${f%.*}.obj"
+        OBJS="$OBJS $OUT/rnn_${f%.*}.obj"
+    done
     rm -f "$OUT/krtc_shim.lib"
     $AR /nologo /out:"$OUT/krtc_shim.lib" $OBJS
     echo "built $OUT/krtc_shim.lib"
@@ -55,6 +65,10 @@ for f in krtc.cpp krtc_audio.cpp $PLATFORM_SRC; do
     *) $CXX -c -std=c++20 $COMMON "$@" $INCLUDES "$SRC/$f" -o "$OUT/${f%.*}.o" ;;
     esac
     OBJS="$OBJS $OUT/${f%.*}.o"
+done
+for f in $RNN_SRC; do
+    $CXX -x c -std=c99 -c -O2 -fPIC -fvisibility=hidden -w $TARGET_FLAGS -DRNNOISE_EXPORT= -I"$RNN/include" -I"$RNN/src" -I"$SRC/rnnoise-compat" "$RNN/src/$f" -o "$OUT/rnn_${f%.*}.o"
+    OBJS="$OBJS $OUT/rnn_${f%.*}.o"
 done
 rm -f "$OUT/libkrtc_shim.a"
 $AR rcs "$OUT/libkrtc_shim.a" $OBJS

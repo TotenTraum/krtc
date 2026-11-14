@@ -759,6 +759,9 @@ private fun SettingsDialog(session: MeetSession, onClose: () -> Unit) {
                     val processing by session.audioProcessing.collectAsState()
                     SettingsSection("Обработка микрофона")
                     SwitchRow("Шумоподавление", processing.noiseSuppression) { session.setAudioProcessing(processing.copy(noiseSuppression = it)) }
+                    SwitchRow(
+                        "Сильное шумоподавление", processing.neuralNoiseSuppression, "Нейросеть RNNoise: убирает клавиатуру, вентилятор, улицу",
+                    ) { session.setAudioProcessing(processing.copy(neuralNoiseSuppression = it)) }
                     SwitchRow("Эхоподавление", processing.echoCancellation) { session.setAudioProcessing(processing.copy(echoCancellation = it)) }
                     SwitchRow("Адаптивная громкость", processing.autoGainControl, "Выравнивает громкость голоса автоматически") { session.setAudioProcessing(processing.copy(autoGainControl = it)) }
                     SettingsSection("Прочее")

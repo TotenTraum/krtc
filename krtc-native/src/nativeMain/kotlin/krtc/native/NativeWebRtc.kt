@@ -90,6 +90,8 @@ public actual class NativePeerConnectionFactory actual constructor(
     public actual fun setInputGate(gate: InputGate, threshold: Double, holdMillis: Int): Unit =
         krtc_factory_set_input_gate(handle, gate.ordinal, threshold, holdMillis)
 
+    public actual fun setNeuralNoiseSuppression(enabled: Boolean): Unit = krtc_factory_set_neural_noise_suppression(handle, if (enabled) 1 else 0)
+
     public actual val inputLevel: Double get() = krtc_factory_input_level(handle)
     public actual val inputGateOpen: Boolean get() = krtc_factory_input_gate_open(handle) != 0
 

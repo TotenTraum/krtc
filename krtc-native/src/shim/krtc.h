@@ -79,6 +79,9 @@ void krtc_factory_set_audio_processing(krtc_factory *factory, int echo_cancellat
  * mode 0 lets everything through, 1 only while the level is at or above threshold (0..1, peak) and hold_ms after,
  * 2 nothing. A closed gate sends silence. The level is measured in every mode, also behind a closed gate. */
 void krtc_factory_set_input_gate(krtc_factory *factory, int mode, double threshold, int hold_ms);
+/* Neural noise suppression of the microphone (RNNoise, 48 kHz), on top of the processing above and before the gate:
+ * removes keyboard, fan and street noise that the classic suppression lets through. Off by default. */
+void krtc_factory_set_neural_noise_suppression(krtc_factory *factory, int enabled);
 /* The microphone's recent peak level (0..1), decaying over about 100 ms. */
 double krtc_factory_input_level(krtc_factory *factory);
 /* Whether the gate lets audio through right now. */

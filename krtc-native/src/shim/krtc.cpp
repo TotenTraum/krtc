@@ -6,6 +6,7 @@
 #include "krtc_platform.h"
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -45,6 +46,7 @@
 #include "api/video_codecs/video_encoder_factory_template_libvpx_vp8_adapter.h"
 #include "media/base/adapted_video_track_source.h"
 #include "rtc_base/event.h"
+#include "rnnoise.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
@@ -195,6 +197,43 @@ struct InputGateState {
     std::atomic<int> hold_ms{400};
     std::atomic<double> level{0};
     std::atomic<bool> open{true};
+    std::atomic<bool> neural{false};
+};
+
+/**
+ * RNNoise over a 10 ms frame at 48 kHz (its own frame size), each channel with a state of its own. Frames at other
+ * rates pass unchanged (the send path runs at 48 kHz with Opus).
+ */
+class NeuralDenoiser {
+public:
+    ~NeuralDenoiser() { Reset(); }
+
+    void Process(AudioFrame &frame) {
+        const size_t samples = frame.samples_per_channel();
+        const size_t channels = frame.num_channels();
+        if (frame.sample_rate_hz() != 48000 || samples != static_cast<size_t>(rnnoise_get_frame_size()) || channels == 0 || channels > kMaxChannels) return;
+        int16_t *data = frame.mutable_data();
+        for (size_t c = 0; c < channels; ++c) {
+            if (!states_[c]) states_[c] = rnnoise_create(nullptr);
+            for (size_t i = 0; i < samples; ++i) in_[i] = data[i * channels + c]; // RNNoise works on 16-bit scale floats
+            rnnoise_process_frame(states_[c], out_, in_);
+            for (size_t i = 0; i < samples; ++i) data[i * channels + c] = static_cast<int16_t>(std::lrint(std::clamp(out_[i], -32768.0f, 32767.0f)));
+        }
+    }
+
+    /** Forgets the state (and frees it), so turning it on again starts clean. */
+    void Reset() {
+        for (DenoiseState *&st : states_) {
+            if (st) rnnoise_destroy(st);
+            st = nullptr;
+        }
+    }
+
+private:
+    static constexpr size_t kMaxChannels = 2;
+    DenoiseState *states_[kMaxChannels] = {};
+    float in_[480];
+    float out_[480];
 };
 
 /**
@@ -206,6 +245,12 @@ public:
     explicit InputGate(std::shared_ptr<InputGateState> state) : state_(std::move(state)) {}
 
     void Process(std::unique_ptr<AudioFrame> frame) override {
+        // Neural noise suppression first, so the meter and the voice activity gate see the cleaned signal.
+        if (state_->neural.load()) {
+            if (!frame->muted()) denoiser_.Process(*frame);
+        } else {
+            denoiser_.Reset();
+        }
         int peak = 0;
         if (!frame->muted()) {
             const int16_t *data = frame->data();
@@ -237,6 +282,7 @@ public:
 
 private:
     std::shared_ptr<InputGateState> state_;
+    NeuralDenoiser denoiser_; // the audio thread's only
     int64_t open_until_ = 0;
     std::mutex mu_;
     OnAudioFrameCallback sink_;
@@ -473,6 +519,8 @@ KRTC_API void krtc_factory_set_input_gate(krtc_factory *f, int mode, double thre
     f->gate->hold_ms = hold_ms;
     f->gate->mode = mode;
 }
+
+KRTC_API void krtc_factory_set_neural_noise_suppression(krtc_factory *f, int enabled) { f->gate->neural = enabled != 0; }
 
 KRTC_API double krtc_factory_input_level(krtc_factory *f) { return f->gate->level.load(); }
 
