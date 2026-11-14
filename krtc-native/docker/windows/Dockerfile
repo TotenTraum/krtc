@@ -5,8 +5,11 @@ FROM debian:bookworm
 ARG XWIN_VERSION=0.10.0
 # apt.llvm.org now and then serves a half-synced index (hash mismatch, 404): retry instead of failing the build.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+# The apt.llvm.org signing key (fingerprint 6084 F3CF 814B 57C1 CF12 EFD5 15CF 4D18 AF4F 7421), kept here: fetching it
+# during the build failed now and then, and an empty key made gpg fail the whole step.
+COPY llvm-snapshot.gpg.key /tmp/llvm-snapshot.gpg.key
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
- && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
+ && gpg --dearmor -o /usr/share/keyrings/llvm.gpg /tmp/llvm-snapshot.gpg.key && rm /tmp/llvm-snapshot.gpg.key \
  && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-21 main" > /etc/apt/sources.list.d/llvm.list \
  && apt-get update && apt-get install -y --no-install-recommends clang-21 llvm-21 lld-21 \
  && ln -s /usr/bin/clang-21 /usr/local/bin/clang-cl \

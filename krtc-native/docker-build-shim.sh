@@ -9,7 +9,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "$ARCH" = win ]; then
     # The cross toolchain runs natively on the host's architecture; JNI headers come from the host JDK.
     JDK="${JAVA_HOME:-$(/usr/libexec/java_home 2>/dev/null || dirname "$(dirname "$(readlink -f "$(command -v javac)")")")}"
-    docker build -q -t krtc-win-toolchain "$DIR/docker/windows" >/dev/null
+    docker build -q -t krtc-win-toolchain -f "$DIR/docker/windows/Dockerfile" "$DIR/docker" >/dev/null # context: docker/ (the LLVM key)
     docker run --rm -v "$DIR:/krtc-native" -v "$JDK/include:/jdk/include:ro" -w /krtc-native krtc-win-toolchain \
         sh -c "./build-shim.sh .deps/win-x64/win-x64-release .deps/build/win-x64 win && ./build-jni.sh .deps/win-x64/win-x64-release .deps/build/win-x64 win"
     exit 0
