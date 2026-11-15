@@ -12,9 +12,11 @@
 #import "sdk/objc/components/video_frame_buffer/RTCCVPixelBuffer.h"
 #include <mutex>
 #include <vector>
+#include <unistd.h>
 #if TARGET_OS_OSX
 #import <CoreGraphics/CoreGraphics.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
+#include "krtc_sck_sources.h"
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
 #include "modules/desktop_capture/desktop_frame.h"
@@ -22,6 +24,7 @@
 #import <ReplayKit/ReplayKit.h>
 #endif
 #include "rtc_base/time_utils.h"
+#include "rtc_base/event.h"
 
 #import "sdk/objc/base/RTCVideoCapturer.h"
 #import "sdk/objc/base/RTCVideoFrame.h"
@@ -188,6 +191,8 @@ std::function<void()> StartCamera(int index, int width, int height, int fps, Pus
 
 namespace {
 
+API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent();
+
 webrtc::DesktopCaptureOptions ScreenOptions() {
     webrtc::DesktopCaptureOptions options = webrtc::DesktopCaptureOptions::CreateDefault();
     options.set_allow_sck_capturer(true); // ScreenCaptureKit (macOS 14+); CGDisplayStream is gone in newer macOS
@@ -227,7 +232,7 @@ public:
                 if (std::chrono::steady_clock::now() > next + period) next = std::chrono::steady_clock::now(); // fell behind
             }
         });
-        ok_ = ok.get();
+        ok_ = ok.get() && first_frame_.Wait(webrtc::TimeDelta::Seconds(3)) && received_frame_.load();
     }
     ~ScreenCapture() override {
         running_ = false;
@@ -236,8 +241,13 @@ public:
     bool ok() const { return ok_; }
 
     void OnCaptureResult(webrtc::DesktopCapturer::Result result, std::unique_ptr<webrtc::DesktopFrame> frame) override {
-        if (result != webrtc::DesktopCapturer::Result::SUCCESS || !frame) return;
+        if (result != webrtc::DesktopCapturer::Result::SUCCESS || !frame) {
+            if (result == webrtc::DesktopCapturer::Result::ERROR_PERMANENT) first_frame_.Set();
+            return;
+        }
         krtc::PushBgra(source_.get(), frame->data(), frame->stride(), frame->size().width(), frame->size().height(), maxWidth_, maxHeight_, 0);
+        received_frame_ = true;
+        first_frame_.Set();
     }
 
 private:
@@ -245,6 +255,8 @@ private:
     int maxWidth_;
     int maxHeight_;
     std::atomic<bool> running_{true};
+    std::atomic<bool> received_frame_{false};
+    webrtc::Event first_frame_;
     bool ok_ = false;
     std::thread thread_;
 };
@@ -254,6 +266,14 @@ private:
 std::vector<ScreenSource> ScreenSources() {
     std::vector<ScreenSource> out;
     if (!CGPreflightScreenCaptureAccess()) return out; // listing windows needs the permission too
+    if (@available(macOS 13.0, *)) {
+        // Use the same API and IDs as StartSckScreen. DesktopCapturer's SCK backend only supplies a source for
+        // the system picker and can otherwise return an empty display list. Its legacy window list also omits
+        // untitled/custom windows (including some browsers and game-streaming clients).
+        SCShareableContent *content = ShareableContent();
+        if (!content) return out;
+        return SckSources(content, getpid());
+    }
     for (bool window : {false, true}) {
         // Listing also runs on a thread of its own (ScreenCaptureKit answers asynchronously on other queues).
         std::thread([&] {
@@ -275,11 +295,16 @@ namespace {
 API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent() {
     __block SCShareableContent *content = nil;
     dispatch_semaphore_t listed = dispatch_semaphore_create(0);
-    [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *c, NSError *) {
+    // Include windows on other Spaces and full-screen apps. Do not require a title: it is optional in SCK.
+    [SCShareableContent getShareableContentExcludingDesktopWindows:YES onScreenWindowsOnly:NO completionHandler:^(SCShareableContent *c, NSError *error) {
+        if (error) NSLog(@"krtc: listing screen sources failed: %@", error);
         content = c;
         dispatch_semaphore_signal(listed);
     }];
-    dispatch_semaphore_wait(listed, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    if (dispatch_semaphore_wait(listed, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) != 0) {
+        NSLog(@"krtc: listing screen sources timed out");
+        return nil;
+    }
     return content;
 }
 
@@ -352,9 +377,10 @@ std::function<void()> StartWindowAudio(PushAudioSource *source, int64_t window) 
  * every half second (an encoder needs input to answer a key frame request from someone who just started watching).
  */
 API_AVAILABLE(macos(12.3))
-@interface KrtcScreenOutput : NSObject <SCStreamOutput>
+@interface KrtcScreenOutput : NSObject <SCStreamOutput, SCStreamDelegate>
 - (instancetype)initWithSource:(webrtc::scoped_refptr<krtc::PushVideoSource>)source;
 - (void)repeatIfIdle;
+- (BOOL)waitForFirstFrame;
 @end
 
 @implementation KrtcScreenOutput {
@@ -362,10 +388,14 @@ API_AVAILABLE(macos(12.3))
     std::mutex _lock;
     RTCCVPixelBuffer *_last;
     int64_t _lastPushUs;
+    dispatch_semaphore_t _firstFrame;
 }
 
 - (instancetype)initWithSource:(webrtc::scoped_refptr<krtc::PushVideoSource>)source {
-    if (self = [super init]) _source = source;
+    if (self = [super init]) {
+        _source = source;
+        _firstFrame = dispatch_semaphore_create(0);
+    }
     return self;
 }
 
@@ -373,10 +403,22 @@ API_AVAILABLE(macos(12.3))
     const int64_t now = webrtc::TimeMicros();
     {
         std::lock_guard<std::mutex> g(_lock);
+        if (!_last) dispatch_semaphore_signal(_firstFrame);
         _last = buffer;
         _lastPushUs = now;
     }
     _source->Push(webrtc::VideoFrame::Builder().set_video_frame_buffer(webrtc::ObjCToNativeVideoFrameBuffer(buffer)).set_timestamp_us(now).build());
+}
+
+- (BOOL)waitForFirstFrame {
+    if (dispatch_semaphore_wait(_firstFrame, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) != 0) return NO;
+    std::lock_guard<std::mutex> g(_lock);
+    return _last != nil;
+}
+
+- (void)stream:(SCStream *)stream didStopWithError:(NSError *)error {
+    NSLog(@"krtc: screen capture stopped: %@", error);
+    dispatch_semaphore_signal(_firstFrame);
 }
 
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sample ofType:(SCStreamOutputType)type {
@@ -442,11 +484,12 @@ API_AVAILABLE(macos(13.0)) std::function<void()> StartSckScreen(int64_t id, bool
         }
     } else {
         for (SCDisplay *d in content.displays) {
-            if (static_cast<int64_t>(d.displayID) != id) continue;
+            // A null ScreenSource is -1 at the C ABI: capture the main display, not a nonexistent display -1.
+            if (static_cast<int64_t>(d.displayID) != (id < 0 ? static_cast<int64_t>(CGMainDisplayID()) : id)) continue;
             filter = [[SCContentFilter alloc] initWithDisplay:d excludingWindows:@[]];
             display = d.displayID;
-            pixelsW = d.width;
-            pixelsH = d.height;
+            pixelsW = CGDisplayBounds(d.displayID).size.width;
+            pixelsH = CGDisplayBounds(d.displayID).size.height;
             break;
         }
     }
@@ -461,20 +504,28 @@ API_AVAILABLE(macos(13.0)) std::function<void()> StartSckScreen(int64_t id, bool
     config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange; // NV12: what encoders take
     config.queueDepth = 6;
     config.showsCursor = YES;
-    SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:nil];
     webrtc::scoped_refptr<PushVideoSource> target(source);
     KrtcScreenOutput *output = [[KrtcScreenOutput alloc] initWithSource:target];
+    SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:output];
     dispatch_queue_t queue = dispatch_queue_create("krtc.screen", DISPATCH_QUEUE_SERIAL);
     NSError *error = nil;
-    if (![stream addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:&error]) return nullptr;
+    if (![stream addStreamOutput:output type:SCStreamOutputTypeScreen sampleHandlerQueue:queue error:&error]) {
+        NSLog(@"krtc: adding screen output failed: %@", error);
+        return nullptr;
+    }
     __block bool started = false;
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     [stream startCaptureWithCompletionHandler:^(NSError *e) {
+        if (e) NSLog(@"krtc: starting screen capture failed: %@", e);
         started = e == nil;
         dispatch_semaphore_signal(done);
     }];
-    dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
-    if (!started) return nullptr;
+    const bool completed = dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) == 0;
+    if (!completed || !started || ![output waitForFirstFrame]) {
+        NSLog(@"krtc: screen capture did not deliver its first frame (id=%lld, window=%d)", static_cast<long long>(id), window);
+        [stream stopCaptureWithCompletionHandler:nil];
+        return nullptr;
+    }
     // A still picture still goes out twice a second (see KrtcScreenOutput).
     dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
     dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0), 250 * NSEC_PER_MSEC, 50 * NSEC_PER_MSEC);

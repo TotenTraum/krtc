@@ -93,8 +93,8 @@ object NativeMediaPlatform : MediaPlatform {
         factory.createCameraSource(camera.index, 1280, 720, 30)?.let(::OpenedCamera)
 
     override fun screens(): List<ScreenChoice> {
-        // Like Discord: windows with a title (not the menu bar's and panels' helper windows), and not this app's own.
-        val sources = nativeScreenSources().filter { !it.isWindow || (it.title.isNotBlank() && !it.title.startsWith("Window ") && it.title != APP_WINDOW_TITLE) }
+        // Native enumeration supplies an application name for untitled windows. Do not drop generic window titles.
+        val sources = nativeScreenSources().filter { !it.isWindow || (it.title.isNotBlank() && it.title != APP_WINDOW_TITLE) }
         // macOS before Screen Recording is permitted: no list; starting asks for the permission.
         if (sources.isEmpty()) return listOf(ScreenChoice(
             "Весь экран", note = "Список окон и экранов появится, когда разрешите запись экрана: Системные настройки → " +

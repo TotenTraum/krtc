@@ -4,6 +4,8 @@ import krtc.native.AudioDevice
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.nativeScreenSources
 import kotlin.test.Test
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /** Measures how fast the real screen and windows are captured (skipped without Screen Recording permission). */
 class CaptureProbe {
@@ -67,23 +69,36 @@ class CaptureProbe {
 
     @Test
     fun captureRate() {
-        if (System.getenv("KRTC_CAPTURE_PROBE") != "1") return
+        org.junit.Assume.assumeTrue("set KRTC_CAPTURE_PROBE=1 for live capture checks", System.getenv("KRTC_CAPTURE_PROBE") == "1")
         val sources = nativeScreenSources()
-        println("probe: ${sources.size} sources: ${sources.take(8)}")
+        org.junit.Assume.assumeTrue("Screen Recording permission is required for the process running Gradle", sources.isNotEmpty())
+        val displays = sources.filter { !it.isWindow }
+        assertTrue(displays.isNotEmpty(), "source enumeration must include displays, not only windows")
+        val requestedApps = System.getenv("KRTC_CAPTURE_APPS").orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val requestedWindows = requestedApps.map { app ->
+            assertNotNull(sources.firstOrNull { it.isWindow && it.title.contains(app, ignoreCase = true) }, "$app must be listed; open its window before running this probe")
+        }
+        println("probe: ${displays.size} displays, ${sources.count { it.isWindow }} windows")
         NativePeerConnectionFactory(AudioDevice.SYNTHETIC).use { f ->
-            for (s in sources.filter { !it.isWindow }.take(1) + sources.filter { it.isWindow && it.title.isNotBlank() }.take(2)) {
-                val source = f.createScreenSource(s, fps = 60, maxWidth = 1920, maxHeight = 1080) ?: continue
+            // Null tests the main-display sentinel as well as every real display ID returned by enumeration.
+            for (s in listOf(null) + displays + (requestedWindows.ifEmpty { sources.filter { it.isWindow }.take(2) })) {
+                val source = assertNotNull(f.createScreenSource(s, fps = 60, maxWidth = 1920, maxHeight = 1080), "capture starts for ${s ?: "main display"}")
                 val track = f.createVideoTrack(source, "probe")
-                var frames = 0
-                var size = ""
-                track.setFrameListener { frame -> frames++; size = "${frame.width}x${frame.height}" }
-                Thread.sleep(1_000)
-                frames = 0
-                Thread.sleep(3_000)
-                println("probe: $s -> ${frames / 3} fps at $size")
-                track.setFrameListener(null)
-                track.release()
-                source.close()
+                val frames = java.util.concurrent.atomic.AtomicInteger()
+                val first = java.util.concurrent.CountDownLatch(1)
+                try {
+                    track.setFrameListener { frames.incrementAndGet(); first.countDown() }
+                    assertTrue(first.await(5, java.util.concurrent.TimeUnit.SECONDS), "frames arrive from ${s ?: "main display"}")
+                    frames.set(0)
+                    Thread.sleep(3_000)
+                    assertTrue(frames.get() > 0, "capture keeps delivering frames from ${s ?: "main display"}")
+                    val size = track.videoStats()
+                    println("probe: ${s?.title ?: "main display"} -> ${frames.get() / 3} fps at ${size.width}x${size.height}")
+                } finally {
+                    track.setFrameListener(null)
+                    track.release()
+                    source.close()
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 // Platform pieces of the krtc shim (internal header).
 #pragma once
+
+#include "krtc_screen_source.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -99,15 +101,8 @@ std::string CameraName(int index);
  */
 std::function<void()> StartCamera(int index, int width, int height, int fps, PushVideoSource *source);
 
-/** Something that can be captured as a screen share: a display (window = false) or a window. */
-struct ScreenSource {
-    int64_t id;
-    bool window;
-    std::string title;
-};
-
 /**
- * Screen capture built into the shim. macOS: displays and windows (libwebrtc DesktopCapturer on ScreenCaptureKit;
+ * Screen capture built into the shim. macOS: displays and windows (direct ScreenCaptureKit, legacy DesktopCapturer fallback;
  * asks for the Screen Recording permission). Linux: the X11 display (XGetImage; no Wayland). iOS: this app's own
  * screen (ReplayKit in-app capture, one source). Android: none (the app uses MediaProjection and pushes frames).
  */
