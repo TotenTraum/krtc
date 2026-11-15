@@ -76,6 +76,8 @@ public actual class NativePeerConnectionFactory actual constructor(
 
     public actual val audioInputs: List<String> get() = devices(0)
     public actual val audioOutputs: List<String> get() = devices(1)
+    public actual val audioInputIndex: Int? get() = krtc_factory_audio_device(handle, 0).takeIf { it >= 0 }
+    public actual val audioOutputIndex: Int? get() = krtc_factory_audio_device(handle, 1).takeIf { it >= 0 }
 
     private fun devices(output: Int): List<String> = List(krtc_factory_audio_device_count(handle, output).coerceAtLeast(0)) { i ->
         krtc_factory_audio_device_name(handle, output, i)?.let { p -> p.toKString().also { krtc_free(p) } } ?: "device $i"

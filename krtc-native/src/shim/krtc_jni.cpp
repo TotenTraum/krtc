@@ -253,6 +253,7 @@ KRTC_JNI(void, videoSourceRelease)(JNIEnv *, jclass, jlong s) { krtc_video_sourc
 
 // Platform audio devices.
 KRTC_JNI(jint, factoryAudioDeviceCount)(JNIEnv *, jclass, jlong f, jboolean output) { return krtc_factory_audio_device_count(H<krtc_factory>(f), output ? 1 : 0); }
+KRTC_JNI(jint, factoryAudioDevice)(JNIEnv *, jclass, jlong f, jboolean output) { return krtc_factory_audio_device(H<krtc_factory>(f), output ? 1 : 0); }
 KRTC_JNI(jstring, factoryAudioDeviceName)(JNIEnv *env, jclass, jlong f, jboolean output, jint index) {
     return Take(env, krtc_factory_audio_device_name(H<krtc_factory>(f), output ? 1 : 0, index));
 }

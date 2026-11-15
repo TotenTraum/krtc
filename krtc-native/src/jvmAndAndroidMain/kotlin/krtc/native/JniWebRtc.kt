@@ -48,6 +48,8 @@ public actual class NativePeerConnectionFactory actual constructor(
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public actual val audioInputs: List<String> get() = devices(false)
     public actual val audioOutputs: List<String> get() = devices(true)
+    public actual val audioInputIndex: Int? get() = Jni.factoryAudioDevice(handle, false).takeIf { it >= 0 }
+    public actual val audioOutputIndex: Int? get() = Jni.factoryAudioDevice(handle, true).takeIf { it >= 0 }
 
     private fun devices(output: Boolean): List<String> =
         List(Jni.factoryAudioDeviceCount(handle, output).coerceAtLeast(0)) { i -> Jni.factoryAudioDeviceName(handle, output, i) ?: "device $i" }

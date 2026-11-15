@@ -173,7 +173,7 @@ class MeetSessionTest {
         try {
             // Both sides send the same test tone: echo cancellation would take Alice's tone for Bob's echo, and noise
             // suppression removes a steady tone. Off, so the levels below measure only what the test changes.
-            val raw = AudioProcessing(echoCancellation = false, noiseSuppression = false, autoGainControl = false)
+            val raw = AudioProcessing(echoCancellation = false, noiseSuppression = NoiseSuppressionMode.OFF, autoGainControl = false)
             a.setAudioProcessing(raw)
             b.setAudioProcessing(raw)
             a.join(JoinSettings(url, "r", "alice", CameraChoice.TestPattern, testAudio = true))
@@ -515,7 +515,12 @@ class MeetSessionTest {
 
     /** The neural noise suppression (RNNoise) takes out what is not speech: a hiss as the microphone all but goes. */
     @Test
-    fun neuralNoiseSuppressionRemovesNoise(): Unit = runBlocking(main) {
+    fun neuralNoiseSuppressionRemovesNoise(): Unit = checkNoiseSuppression(neural = true)
+
+    @Test
+    fun noiseSuppressionRemovesNoise(): Unit = checkNoiseSuppression(neural = false)
+
+    private fun checkNoiseSuppression(neural: Boolean): Unit = runBlocking(main) {
         val platform = TestPlatform()
         val a = MeetSession(scope, platform)
         val hissing = java.util.concurrent.atomic.AtomicBoolean(true)
@@ -531,6 +536,7 @@ class MeetSessionTest {
             }
         }
         try {
+            a.setAudioProcessing(AudioProcessing(echoCancellation = false, noiseSuppression = NoiseSuppressionMode.OFF, autoGainControl = false))
             a.join(JoinSettings(url, "rnnoise", "alice", CameraChoice.None, testAudio = true))
             waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
             delay(1_000)
@@ -545,12 +551,15 @@ class MeetSessionTest {
             }
             val plain = level()
             assertTrue(plain > 0.01f, "the hiss reaches the meter: $plain")
-            a.setAudioProcessing(a.audioProcessing.value.copy(neuralNoiseSuppression = true))
+            fun suppress(enabled: Boolean) = a.setAudioProcessing(a.audioProcessing.value.let {
+                it.copy(noiseSuppression = if (!enabled) NoiseSuppressionMode.OFF else if (neural) NoiseSuppressionMode.STRONG else NoiseSuppressionMode.STANDARD)
+            })
+            suppress(true)
             delay(500)
             val denoised = level()
-            println("input level: plain $plain, with RNNoise $denoised")
-            assertTrue(denoised < plain / 5, "RNNoise takes the hiss out: $plain -> $denoised")
-            a.setAudioProcessing(a.audioProcessing.value.copy(neuralNoiseSuppression = false))
+            println("input level (neural=$neural): plain $plain, denoised $denoised")
+            assertTrue(denoised < plain / 5, "suppression takes the hiss out (neural=$neural): $plain -> $denoised")
+            suppress(false)
             delay(500)
             assertTrue(level() > plain / 2, "and lets it through again when turned off")
         } finally {
@@ -689,13 +698,44 @@ class MeetSessionTest {
         }
     }
 
+    /** Existing toggle combinations migrate to one mode; a later explicit choice wins over legacy values. */
+    @Test
+    fun legacyNoiseSettingsAreMigrated(): Unit = runBlocking(main) {
+        for ((standard, neural, expected) in listOf(
+            Triple(false, false, NoiseSuppressionMode.OFF),
+            Triple(true, false, NoiseSuppressionMode.STANDARD),
+            Triple(false, true, NoiseSuppressionMode.STRONG),
+            Triple(true, true, NoiseSuppressionMode.STRONG),
+        )) {
+            val store = MemorySettings().apply {
+                this["processing.noise"] = standard.toString()
+                this["processing.neural"] = neural.toString()
+            }
+            val session = MeetSession(scope, TestPlatform(settings = store))
+            try {
+                assertEquals(expected, session.audioProcessing.value.noiseSuppression)
+                // Once a mode is explicitly chosen, old toggle values must not override it on the next start.
+                session.setAudioProcessing(session.audioProcessing.value.copy(noiseSuppression = NoiseSuppressionMode.OFF))
+                waitUntil("noise mode saved") { store["processing.noiseMode"] == "OFF" }
+            } finally {
+                session.close()
+            }
+            val restored = MeetSession(scope, TestPlatform(settings = store))
+            try {
+                assertEquals(NoiseSuppressionMode.OFF, restored.audioProcessing.value.noiseSuppression)
+            } finally {
+                restored.close()
+            }
+        }
+    }
+
     /** Settings survive a restart: a new session on the same store starts with them, and the join form too. */
     @Test
     fun settingsAreRemembered(): Unit = runBlocking(main) {
         val store = MemorySettings()
         val first = MeetSession(scope, TestPlatform(settings = store))
         first.setInputSettings(InputSettings(InputMode.PUSH_TO_TALK, threshold = 0.2f))
-        first.setAudioProcessing(AudioProcessing(noiseSuppression = false))
+        first.setAudioProcessing(AudioProcessing(noiseSuppression = NoiseSuppressionMode.OFF))
         first.setScreenFps(60)
         first.setLayout(Layout.SPEAKER)
         first.join(JoinSettings(url, "remember", "carol", CameraChoice.TestPattern, testAudio = true))
@@ -705,7 +745,7 @@ class MeetSessionTest {
 
         val second = MeetSession(scope, TestPlatform(settings = store))
         assertEquals(InputSettings(InputMode.PUSH_TO_TALK, 0.2f), second.inputSettings.value)
-        assertEquals(false, second.audioProcessing.value.noiseSuppression)
+        assertEquals(NoiseSuppressionMode.OFF, second.audioProcessing.value.noiseSuppression)
         assertEquals(60, second.screenFps.value)
         assertEquals(Layout.SPEAKER, second.layout.value)
         val fallback = JoinSettings("ws://other", "room", "name", CameraChoice.None, testAudio = false)

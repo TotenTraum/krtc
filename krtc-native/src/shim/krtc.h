@@ -63,11 +63,11 @@ double krtc_factory_output_level(krtc_factory *factory);
 
 /* Platform audio devices (KRTC_AUDIO_PLATFORM; none with synthetic audio). output: 1 speakers/headphones, 0
  * microphones. Names are freed with krtc_free. Switching works during a call: capture or playout restarts on the
- * new device. Returns 0 on success. */
+ * new device. Selecting the active device leaves audio running. Returns 0 on success. */
 int krtc_factory_audio_device_count(krtc_factory *factory, int output);
 char *krtc_factory_audio_device_name(krtc_factory *factory, int output, int index);
 int krtc_factory_set_audio_device(krtc_factory *factory, int output, int index);
-/* The device in use (-1 if unknown, e.g. the OS default). */
+/* The ADM's current device, or last successfully applied explicit choice when readback is unsupported (-1 if unknown). */
 int krtc_factory_audio_device(krtc_factory *factory, int output);
 
 /* Processing of the microphone (all on by default): echo cancellation, noise suppression, and automatic gain

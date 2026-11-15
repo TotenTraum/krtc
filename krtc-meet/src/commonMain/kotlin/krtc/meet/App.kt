@@ -62,6 +62,9 @@ import androidx.compose.ui.text.input.ImeAction
 import kotlin.math.roundToInt
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -220,7 +223,11 @@ private fun DevicePicker(label: String, options: List<String>, selected: Int?, o
         Box(Modifier.matchParentSize().clickable(enabled = options.isNotEmpty()) { open = true })
         DropdownMenu(open, onDismissRequest = { open = false }) {
             options.forEachIndexed { i, name ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(i); open = false })
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    trailingIcon = { if (i == selected) Text("Выбрано", style = MaterialTheme.typography.labelSmall) },
+                    onClick = { onSelect(i); open = false },
+                )
             }
         }
     }
@@ -761,11 +768,8 @@ private fun SettingsDialog(session: MeetSession, onClose: () -> Unit) {
                     InputModeSettings(session)
                     val processing by session.audioProcessing.collectAsState()
                     SettingsSection("Обработка микрофона")
-                    SwitchRow("Шумоподавление", processing.noiseSuppression) { session.setAudioProcessing(processing.copy(noiseSuppression = it)) }
-                    SwitchRow(
-                        "Сильное шумоподавление", processing.neuralNoiseSuppression, "Нейросеть RNNoise: убирает клавиатуру, вентилятор, улицу",
-                    ) { session.setAudioProcessing(processing.copy(neuralNoiseSuppression = it)) }
-                    SwitchRow("Эхоподавление", processing.echoCancellation) { session.setAudioProcessing(processing.copy(echoCancellation = it)) }
+                    NoiseSuppressionPicker(processing.noiseSuppression) { session.setAudioProcessing(processing.copy(noiseSuppression = it)) }
+                    SwitchRow("Эхоподавление", processing.echoCancellation, "Уменьшает эхо от ваших динамиков") { session.setAudioProcessing(processing.copy(echoCancellation = it)) }
                     SwitchRow("Адаптивная громкость", processing.autoGainControl, "Выравнивает громкость голоса автоматически") { session.setAudioProcessing(processing.copy(autoGainControl = it)) }
                     SettingsSection("Прочее")
                     val cues by session.cues.collectAsState()
@@ -775,6 +779,33 @@ private fun SettingsDialog(session: MeetSession, onClose: () -> Unit) {
                     val updates by session.updateCheck.collectAsState()
                     SwitchRow("Проверять обновления при запуске", updates, onChange = session::setUpdateCheck)
                     Text("Версия ${BuildInfo.VERSION}", style = MaterialTheme.typography.labelSmall, color = MeetColors.TextMuted, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+/** A single choice: selecting a denoiser also turns the other one off. */
+@Composable
+internal fun NoiseSuppressionPicker(selected: NoiseSuppressionMode, onSelect: (NoiseSuppressionMode) -> Unit) {
+    Text("Шумоподавление", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+    Column(Modifier.fillMaxWidth().selectableGroup()) {
+        for ((mode, label, note) in listOf(
+            Triple(NoiseSuppressionMode.OFF, "Выключено", "Без фильтрации фонового шума"),
+            Triple(NoiseSuppressionMode.STANDARD, "Обычное", "Снижает постоянный фоновый шум"),
+            Triple(NoiseSuppressionMode.STRONG, "Сильное", "Для кулера, клавиатуры и других фоновых звуков"),
+        )) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .background(if (selected == mode) MeetColors.Background else androidx.compose.ui.graphics.Color.Transparent)
+                    .selectable(selected = selected == mode, role = Role.RadioButton, onClick = { onSelect(mode) })
+                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = selected == mode, onClick = null)
+                Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                    Text(note, style = MaterialTheme.typography.labelSmall, color = MeetColors.TextMuted)
                 }
             }
         }

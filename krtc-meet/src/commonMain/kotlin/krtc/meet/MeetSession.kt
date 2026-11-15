@@ -34,6 +34,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** What the user picked on the join screen. */
 data class JoinSettings(
@@ -52,14 +54,15 @@ sealed class CameraChoice {
     data class Device(val index: Int, val name: String, val id: String = "") : CameraChoice()
 }
 
-/** Processing of the microphone (krtc-native `setAudioProcessing`); all on by default. */
+/** One microphone denoiser at a time. Echo cancellation and gain control are independent. */
+enum class NoiseSuppressionMode { OFF, STANDARD, STRONG }
+
+/** Processing of the microphone; standard suppression, echo cancellation and gain control are on by default. */
 data class AudioProcessing(
     val echoCancellation: Boolean = true,
-    val noiseSuppression: Boolean = true,
+    val noiseSuppression: NoiseSuppressionMode = NoiseSuppressionMode.STANDARD,
     /** Adaptive input: keeps quiet and loud voices at one level. */
     val autoGainControl: Boolean = true,
-    /** Strong (neural, RNNoise) noise suppression on top: keyboard, fans, street. Off by default. */
-    val neuralNoiseSuppression: Boolean = false,
 )
 
 /** How the call's connection is doing, from `getStats` every few seconds. */
@@ -170,6 +173,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     private val noticeFlow = MutableStateFlow<String?>(null)
     private val volumesFlow = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val processingFlow = MutableStateFlow(AudioProcessing())
+    private val processingMutex = Mutex()
 
     private val screenFpsFlow = MutableStateFlow(DEFAULT_SCREEN_FPS)
 
@@ -276,6 +280,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     private val outputsFlow = MutableStateFlow<List<String>>(emptyList())
     private val inputFlow = MutableStateFlow<Int?>(null)
     private val outputFlow = MutableStateFlow<Int?>(null)
+    private val audioDeviceMutex = Mutex()
 
     /** Microphones and speakers (platform audio), and the chosen ones (null: the system's default). */
     val audioInputs: StateFlow<List<String>> = inputsFlow.asStateFlow()
@@ -323,43 +328,59 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     /** Whether microphones and speakers can be chosen (desktop, iOS). */
     val audioDeviceChoice: Boolean get() = platform.sharedSystemAudio
 
-    /** Reads the device lists again (e.g. after plugging in a headset). */
+    private data class AudioDevices(val inputs: List<String>, val outputs: List<String>, val input: Int?, val output: Int?)
+
+    private fun readAudioDevices(f: NativePeerConnectionFactory): AudioDevices {
+        val inputs = f.audioInputs
+        val outputs = f.audioOutputs
+        return AudioDevices(inputs, outputs, f.audioInputIndex?.takeIf { it in inputs.indices }, f.audioOutputIndex?.takeIf { it in outputs.indices })
+    }
+
+    private fun showAudioDevices(devices: AudioDevices) {
+        inputsFlow.value = devices.inputs
+        outputsFlow.value = devices.outputs
+        inputFlow.value = devices.input
+        outputFlow.value = devices.output
+        log("audio devices: input=${devices.inputs.getOrNull(devices.input ?: -1) ?: "system default"}, output=${devices.outputs.getOrNull(devices.output ?: -1) ?: "system default"}")
+    }
+
+    /** Reads current device indexes from the engine, rather than treating the last UI selection as actual. */
     fun refreshAudioDevices() {
         if (!platform.sharedSystemAudio) return
         scope.launch {
-            val restore = inputFlow.value == null && outputFlow.value == null
-            val (lists, chosen) = offUi {
-                val f = platform()
-                (f.audioInputs to f.audioOutputs) to (if (restore) restoreDevices(f) else null to null)
+            audioDeviceMutex.withLock {
+                showAudioDevices(offUi {
+                    val f = platform()
+                    restoreDevices(f)
+                    readAudioDevices(f)
+                })
             }
-            inputsFlow.value = lists.first
-            outputsFlow.value = lists.second
-            chosen.first?.let { inputFlow.value = it }
-            chosen.second?.let { outputFlow.value = it }
         }
     }
 
-    /** Switches the microphone; works during a call too. */
     @Traced
-    fun selectAudioInput(index: Int) {
-        if (!platform.sharedSystemAudio) return
-        scope.launch {
-            if (offUi { platform().setAudioInput(index) }) {
-                inputFlow.value = index
-                store["audio.input"] = inputsFlow.value.getOrNull(index)
-            } else noticeFlow.value = "Не удалось переключить микрофон"
-        }
-    }
+    fun selectAudioInput(index: Int) = selectAudioDevice(index, output = false)
 
-    /** Switches the speakers or headphones; works during a call too. */
     @Traced
-    fun selectAudioOutput(index: Int) {
+    fun selectAudioOutput(index: Int) = selectAudioDevice(index, output = true)
+
+    private fun selectAudioDevice(index: Int, output: Boolean) {
         if (!platform.sharedSystemAudio) return
+        val name = (if (output) outputsFlow else inputsFlow).value.getOrNull(index) ?: return
         scope.launch {
-            if (offUi { platform().setAudioOutput(index) }) {
-                outputFlow.value = index
-                store["audio.output"] = outputsFlow.value.getOrNull(index)
-            } else noticeFlow.value = "Не удалось переключить динамики"
+            audioDeviceMutex.withLock {
+                val (success, devices) = offUi {
+                    val f = platform()
+                    // Bluetooth can reorder devices after this menu was opened. Resolve the displayed name again.
+                    val actualIndex = (if (output) f.audioOutputs else f.audioInputs).indexOf(name)
+                    val success = actualIndex >= 0 && (if (output) f.setAudioOutput(actualIndex) else f.setAudioInput(actualIndex))
+                    success to readAudioDevices(f)
+                }
+                showAudioDevices(devices)
+                log("audio ${if (output) "output" else "input"} requested='$name' applied=$success")
+                if (success) store[if (output) "audio.output" else "audio.input"] = name
+                else noticeFlow.value = if (output) "Не удалось переключить динамики" else "Не удалось переключить микрофон"
+            }
         }
     }
 
@@ -421,6 +442,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                     if (settings.testAudio) f.setTestTone(true)
                     applyProcessing(f, processing)
                 }
+                if (shared) audioDeviceMutex.withLock { showAudioDevices(offUi { restoreDevices(f); readAudioDevices(f) }) }
                 audioPlumbing = offUi({ it?.close() }) { platform.startAudio(f, settings.testAudio) }
                 mic = offUi({ it.release() }) { f.createAudioTrack("mic") }
                 camera = when (val c = settings.camera) {
@@ -447,6 +469,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 c.setMediaState(audioMuted = false, videoMuted = camera == null)
                 log("connecting")
                 withContext(native) { c.join(settings.room, settings.name, microphone = mic, camera = camera) }
+                if (shared) audioDeviceMutex.withLock { showAudioDevices(offUi { readAudioDevices(f) }) }
                 log("signaling socket open")
                 watch = scope.launch {
                     val watched = HashSet<String>()
@@ -987,9 +1010,13 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         fun int(key: String) = store[key]?.toIntOrNull()
         processingFlow.value = AudioProcessing(
             echoCancellation = bool("processing.echo") ?: true,
-            noiseSuppression = bool("processing.noise") ?: true,
+            noiseSuppression = store["processing.noiseMode"]?.let { saved -> NoiseSuppressionMode.entries.firstOrNull { it.name == saved } }
+                ?: when {
+                    bool("processing.neural") == true -> NoiseSuppressionMode.STRONG
+                    bool("processing.noise") == false -> NoiseSuppressionMode.OFF
+                    else -> NoiseSuppressionMode.STANDARD
+                },
             autoGainControl = bool("processing.agc") ?: true,
-            neuralNoiseSuppression = bool("processing.neural") ?: false,
         )
         inputFlowSettings.value = InputSettings(
             mode = store["input.mode"]?.let { m -> InputMode.entries.firstOrNull { it.name == m } } ?: InputMode.OPEN,
@@ -1002,7 +1029,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         int("screen.height")?.takeIf { it in SCREEN_HEIGHT_CHOICES }?.let { screenHeightFlow.value = it }
         store["layout"]?.let { l -> Layout.entries.firstOrNull { it.name == l } }?.let { layoutFlow.value = it }
         scope.launch {
-            launch { processingFlow.collect { store["processing.echo"] = "${it.echoCancellation}"; store["processing.noise"] = "${it.noiseSuppression}"; store["processing.agc"] = "${it.autoGainControl}"; store["processing.neural"] = "${it.neuralNoiseSuppression}" } }
+            launch { processingFlow.collect {
+                store["processing.echo"] = "${it.echoCancellation}"
+                store["processing.noiseMode"] = it.noiseSuppression.name
+                store["processing.agc"] = "${it.autoGainControl}"
+            } }
             launch { inputFlowSettings.collect { store["input.mode"] = it.mode.name; store["input.threshold"] = it.threshold.toString() } }
             launch { cuesFlow.collect { store["cues"] = it.toString() } }
             launch { logUploadFlow.collect { store["log.upload"] = it.toString() } }
@@ -1014,12 +1045,10 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     }
 
     /** Selects the microphone and speakers used last time, by name (indexes change as devices come and go). */
-    private fun restoreDevices(f: NativePeerConnectionFactory): Pair<Int?, Int?> {
-        val inputs = f.audioInputs
-        val outputs = f.audioOutputs
-        val input = store["audio.input"]?.let { inputs.indexOf(it) }?.takeIf { it >= 0 && f.setAudioInput(it) }
-        val output = store["audio.output"]?.let { outputs.indexOf(it) }?.takeIf { it >= 0 && f.setAudioOutput(it) }
-        return input to output
+    private fun restoreDevices(f: NativePeerConnectionFactory) {
+        store["audio.input"]?.let { name -> f.audioInputs.indexOf(name).takeIf { it >= 0 }?.let { f.setAudioInput(it) } }
+        // Selecting the microphone can change Bluetooth's profile and the device order: enumerate output afterwards.
+        store["audio.output"]?.let { name -> f.audioOutputs.indexOf(name).takeIf { it >= 0 }?.let { f.setAudioOutput(it) } }
     }
 
     /** Applies the chosen volumes to the participant's tracks, now and whenever they change. */
@@ -1039,32 +1068,34 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
      */
     @Traced
     fun setAudioProcessing(processing: AudioProcessing) {
-        val before = processingFlow.value
+        if (processingFlow.value == processing) return
         processingFlow.value = processing
-        val shared = platformFactory
-        val f = factory
-        val c = client
         scope.launch {
-            offUi {
-                shared?.let { applyProcessing(it, processing) }
-                f?.let { applyProcessing(it, processing) }
+            processingMutex.withLock {
+                // Rapid selection changes must not leave a track configured by an older request.
+                if (processingFlow.value != processing) return@launch
+                val shared = platformFactory
+                val f = factory
+                val c = client
+                offUi {
+                    shared?.let { applyProcessing(it, processing) }
+                    f?.let { applyProcessing(it, processing) }
+                }
+                if (f == null || c == null || client !== c) return@launch
+                val old = mic ?: return@launch
+                val fresh = offUi({ it.release() }) { f.createAudioTrack("mic").also { it.enabled = old.enabled } }
+                if (client !== c || mic !== old) return@launch teardown { fresh.release() }
+                mic = fresh
+                applyGate()
+                runCatching { withContext(native) { c.setMicrophone(fresh) } }
+                teardown { old.release() }
             }
-            // The neural suppression applies to the running microphone as it is; the rest needs a new track.
-            if (before.copy(neuralNoiseSuppression = processing.neuralNoiseSuppression) == processing) return@launch
-            if (f == null || c == null || client !== c) return@launch
-            val old = mic ?: return@launch
-            val fresh = offUi({ it.release() }) { f.createAudioTrack("mic").also { it.enabled = old.enabled } }
-            if (client !== c || mic !== old) return@launch teardown { fresh.release() }
-            mic = fresh
-            applyGate()
-            runCatching { withContext(native) { c.setMicrophone(fresh) } }
-            teardown { old.release() }
         }
     }
 
     private fun applyProcessing(f: NativePeerConnectionFactory, p: AudioProcessing) {
-        f.setAudioProcessing(p.echoCancellation, p.noiseSuppression, p.autoGainControl)
-        f.setNeuralNoiseSuppression(p.neuralNoiseSuppression)
+        f.setAudioProcessing(p.echoCancellation, p.noiseSuppression == NoiseSuppressionMode.STANDARD, p.autoGainControl)
+        f.setNeuralNoiseSuppression(p.noiseSuppression == NoiseSuppressionMode.STRONG)
     }
 
     @Traced

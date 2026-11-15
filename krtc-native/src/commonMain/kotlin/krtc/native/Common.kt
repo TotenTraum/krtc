@@ -86,10 +86,14 @@ public expect class NativePeerConnectionFactory(
     public val audioInputs: List<String>
     public val audioOutputs: List<String>
 
-    /** Switches the microphone ([audioInputs] index); a running capture restarts on it. False if it failed. */
+    /** The device module's current index, or the last successfully applied choice when readback is unsupported; null if unknown. */
+    public val audioInputIndex: Int?
+    public val audioOutputIndex: Int?
+
+    /** Switches the microphone ([audioInputs] index); selecting the active device does not restart audio. False if it failed. */
     public fun setAudioInput(index: Int): Boolean
 
-    /** Switches the speakers or headphones ([audioOutputs] index); playout restarts on them. False if it failed. */
+    /** Switches the speakers or headphones ([audioOutputs] index); selecting the active device does not restart audio. False if it failed. */
     public fun setAudioOutput(index: Int): Boolean
 
     /**

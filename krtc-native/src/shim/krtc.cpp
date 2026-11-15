@@ -3,6 +3,8 @@
 
 #include "krtc.h"
 #include "krtc_audio.h"
+#include "krtc_audio_devices.h"
+#include "krtc_denoiser.h"
 #include "krtc_platform.h"
 
 #include <algorithm>
@@ -46,7 +48,6 @@
 #include "api/video_codecs/video_encoder_factory_template_libvpx_vp8_adapter.h"
 #include "media/base/adapted_video_track_source.h"
 #include "rtc_base/event.h"
-#include "rnnoise.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
@@ -201,42 +202,6 @@ struct InputGateState {
 };
 
 /**
- * RNNoise over a 10 ms frame at 48 kHz (its own frame size), each channel with a state of its own. Frames at other
- * rates pass unchanged (the send path runs at 48 kHz with Opus).
- */
-class NeuralDenoiser {
-public:
-    ~NeuralDenoiser() { Reset(); }
-
-    void Process(AudioFrame &frame) {
-        const size_t samples = frame.samples_per_channel();
-        const size_t channels = frame.num_channels();
-        if (frame.sample_rate_hz() != 48000 || samples != static_cast<size_t>(rnnoise_get_frame_size()) || channels == 0 || channels > kMaxChannels) return;
-        int16_t *data = frame.mutable_data();
-        for (size_t c = 0; c < channels; ++c) {
-            if (!states_[c]) states_[c] = rnnoise_create(nullptr);
-            for (size_t i = 0; i < samples; ++i) in_[i] = data[i * channels + c]; // RNNoise works on 16-bit scale floats
-            rnnoise_process_frame(states_[c], out_, in_);
-            for (size_t i = 0; i < samples; ++i) data[i * channels + c] = static_cast<int16_t>(std::lrint(std::clamp(out_[i], -32768.0f, 32767.0f)));
-        }
-    }
-
-    /** Forgets the state (and frees it), so turning it on again starts clean. */
-    void Reset() {
-        for (DenoiseState *&st : states_) {
-            if (st) rnnoise_destroy(st);
-            st = nullptr;
-        }
-    }
-
-private:
-    static constexpr size_t kMaxChannels = 2;
-    DenoiseState *states_[kMaxChannels] = {};
-    float in_[480];
-    float out_[480];
-};
-
-/**
  * Sits on the captured audio after the processing (AudioTransport hands it every 10 ms frame): measures the level
  * and silences the frame while the gate is closed, with no delay beyond the frame itself.
  */
@@ -282,7 +247,7 @@ public:
 
 private:
     std::shared_ptr<InputGateState> state_;
-    NeuralDenoiser denoiser_; // the audio thread's only
+    krtc::NeuralDenoiser denoiser_; // the audio thread's only
     int64_t open_until_ = 0;
     std::mutex mu_;
     OnAudioFrameCallback sink_;
@@ -295,6 +260,7 @@ struct krtc_factory {
     scoped_refptr<AudioDeviceModule> adm;
     scoped_refptr<AudioProcessing> apm;
     bool synthetic_audio = false;
+    krtc::AudioDevicePreference preferred_input, preferred_output; // worker thread only
     std::atomic<bool> echo_cancellation{true}, noise_suppression{true}, auto_gain_control{true};
     std::function<void()> stop_format_watch;
     std::shared_ptr<std::atomic<int>> format_changes = std::make_shared<std::atomic<int>>(0);
@@ -568,33 +534,23 @@ KRTC_API char *krtc_factory_audio_device_name(krtc_factory *f, int output, int i
 KRTC_API int krtc_factory_set_audio_device(krtc_factory *f, int output, int index) {
     if (f->synthetic_audio || index < 0) return -1;
     return f->worker->BlockingCall([&] {
-        AudioDeviceModule *adm = f->adm.get();
-        EnsureInitialized(adm);
-        const auto i = static_cast<uint16_t>(index);
-        if (output) {
-            const bool playing = adm->Playing();
-            if (playing) adm->StopPlayout();
-            int32_t r = adm->SetPlayoutDevice(i);
-            if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
-            return static_cast<int>(r);
-        }
-        // Playout restarts too: a Bluetooth headset whose microphone was in use leaves the headset profile, and its
-        // output format changes under the running playout (heard as noise otherwise). WatchAudioFormat catches the
-        // switch when it happens later.
-        const bool recording = adm->Recording();
-        const bool playing = adm->Playing();
-        if (recording) adm->StopRecording();
-        if (playing) adm->StopPlayout();
-        int32_t r = adm->SetRecordingDevice(i);
-        if (recording && adm->InitRecording() == 0) adm->StartRecording();
-        if (playing && adm->InitPlayout() == 0) adm->StartPlayout();
-        return static_cast<int>(r);
+        EnsureInitialized(f->adm.get());
+        const auto requested = krtc::ReadAudioDevice(f->adm.get(), output != 0, index);
+        auto &preferred = output ? f->preferred_output : f->preferred_input;
+        const int confirmed = krtc::FindAudioDevice(f->adm.get(), output != 0, preferred);
+        const int result = krtc::SelectAudioDevice(f->adm.get(), output != 0, index, confirmed);
+        if (result == 0) preferred = requested;
+        return result;
     });
 }
 
 KRTC_API int krtc_factory_audio_device(krtc_factory *f, int output) {
     if (f->synthetic_audio) return -1;
-    return f->worker->BlockingCall([&] { return static_cast<int>(output ? f->adm->GetPlayoutDevice() : f->adm->GetRecordingDevice()); });
+    return f->worker->BlockingCall([&] {
+        const int current = output ? f->adm->GetPlayoutDevice() : f->adm->GetRecordingDevice();
+        // Windows' legacy ADM cannot read its index back. Only fall back to a choice successfully applied here.
+        return current >= 0 ? current : krtc::FindAudioDevice(f->adm.get(), output != 0, output ? f->preferred_output : f->preferred_input);
+    });
 }
 
 KRTC_API krtc_video_source *krtc_factory_create_video_source(krtc_factory *) {
@@ -830,6 +786,10 @@ KRTC_API krtc_pc *krtc_pc_create(krtc_factory *factory, krtc_event_fn on_event, 
         return nullptr;
     }
     p->pc = result.MoveValue();
+    if (!factory->synthetic_audio) factory->worker->BlockingCall([&] {
+        krtc::RestoreAudioDevice(factory->adm.get(), false, factory->preferred_input);
+        krtc::RestoreAudioDevice(factory->adm.get(), true, factory->preferred_output);
+    });
     return p;
 }
 
