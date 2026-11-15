@@ -163,7 +163,12 @@ internal actual class UdpServer actual constructor(
 
     internal actual fun start(): UdpServer = apply {
         groups.forEachIndexed { g, fds ->
-            fds.forEachIndexed { i, fd -> CoroutineScope(newSingleThreadContext("udp-rx-$g-$i")).launch { receiveLoop(fd, g) } }
+            fds.forEachIndexed { i, fd ->
+                CoroutineScope(newSingleThreadContext("udp-rx-$g-$i")).launch {
+                    setCurrentThreadName("sfu-udp-$g-$i")
+                    receiveLoop(fd, g)
+                }
+            }
         }
     }
 

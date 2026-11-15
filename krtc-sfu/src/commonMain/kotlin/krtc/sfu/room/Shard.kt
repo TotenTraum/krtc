@@ -53,6 +53,7 @@ internal class Shard(public val index: Int, capacity: Int = 16_384) : AutoClosea
 
     init {
         scope.launch {
+            krtc.sfu.platform.setCurrentThreadName("sfu-shard-$index")
             for (task in queue) {
                 depth.decrementAndFetch()
                 try {

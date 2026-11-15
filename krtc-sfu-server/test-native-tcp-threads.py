@@ -23,6 +23,28 @@ def thread_count(pid):
     raise RuntimeError("This check supports Linux and macOS")
 
 
+def check_linux_thread_names(pid, port):
+    if sys.platform != "linux":
+        return
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as connection:
+        expected = {"sfu-shard-0", "sfu-udp-0-0", "sfu-tcp-acc-0",
+                    f"sfu-tcp-{connection.getsockname()[1]}"}
+        deadline = time.monotonic() + 5
+        while True:
+            names = set()
+            for task in pathlib.Path(f"/proc/{pid}/task").iterdir():
+                try:
+                    names.add((task / "comm").read_text().strip())
+                except FileNotFoundError:
+                    pass  # Another reader can exit while we enumerate the tasks.
+            if expected <= names:
+                print("OS thread names verified:", ", ".join(sorted(expected)), flush=True)
+                return
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"Missing OS thread names: {expected - names}")
+            time.sleep(.1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=pathlib.Path)
@@ -46,6 +68,7 @@ def main():
                     break
                 except OSError:
                     time.sleep(.1)
+            check_linux_thread_names(process.pid, media_port)
             # Closing readers also initializes the lazy cleanup dispatcher. Warm it up
             # before measuring so its normal worker allocation is not counted as a leak.
             for _ in range(20):

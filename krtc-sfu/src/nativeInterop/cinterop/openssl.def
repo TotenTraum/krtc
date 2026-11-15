@@ -29,6 +29,24 @@ linkerOpts.linux_arm64 = -lpthread -ldl
 #include <openssl/x509.h>
 #include <openssl/core_names.h>
 
+#if defined(__linux__)
+#include <sys/prctl.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#endif
+
+/* Linux comm has room for 15 bytes plus NUL. Our labels are ASCII on both platforms. */
+static inline void krtc_set_thread_name(const char *name) {
+    char label[16];
+    strncpy(label, name, sizeof label - 1);
+    label[sizeof label - 1] = 0;
+#if defined(__linux__)
+    (void) prctl(PR_SET_NAME, label, 0UL, 0UL, 0UL);
+#elif defined(__APPLE__)
+    (void) pthread_setname_np(label);
+#endif
+}
+
 /* ---------------- Sockets: fields whose widths differ between macOS and Linux ---------------- */
 
 /* Fills a sockaddr_in (zeroed) with an IPv4 address already in network byte order and a host-order port. */

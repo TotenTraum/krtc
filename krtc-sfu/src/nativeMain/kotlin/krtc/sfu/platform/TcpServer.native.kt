@@ -79,7 +79,12 @@ internal actual class TcpServer actual constructor(
     }
 
     internal actual fun start(): TcpServer = apply {
-        listeners.forEachIndexed { g, fd -> CoroutineScope(newSingleThreadContext("tcp-accept-$g")).launch { acceptLoop(fd, g) } }
+        listeners.forEachIndexed { g, fd ->
+            CoroutineScope(newSingleThreadContext("tcp-accept-$g")).launch {
+                setCurrentThreadName("sfu-tcp-acc-$g")
+                acceptLoop(fd, g)
+            }
+        }
     }
 
     private fun acceptLoop(listener: Int, group: Int) = memScoped {
@@ -104,6 +109,7 @@ internal actual class TcpServer actual constructor(
             val context = newSingleThreadContext("tcp-$address")
             CoroutineScope(context).launch {
                 try {
+                    setCurrentThreadName("sfu-tcp-${address.port}")
                     readLoop(fd, address)
                 } finally {
                     synchronized(lock) { connections.remove(address) }

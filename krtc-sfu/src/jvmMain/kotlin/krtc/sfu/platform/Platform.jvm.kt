@@ -67,3 +67,7 @@ internal actual fun secureRandomBytes(size: Int): ByteArray = ByteArray(size).al
 internal actual fun availableProcessors(): Int = Runtime.getRuntime().availableProcessors()
 
 internal actual fun environment(name: String): String? = System.getenv(name)
+
+internal actual fun setCurrentThreadName(name: String) {
+    Thread.currentThread().name = name
+}

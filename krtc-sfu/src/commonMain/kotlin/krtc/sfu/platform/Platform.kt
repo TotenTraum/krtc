@@ -104,6 +104,9 @@ internal expect fun availableProcessors(): Int
 
 internal expect fun environment(name: String): String?
 
+/** Sets the OS name of a dedicated SFU thread; callers use short ASCII names. */
+internal expect fun setCurrentThreadName(name: String)
+
 /**
  * ICE-TCP (RFC 6544): passive TCP listeners on [port] at each of [addresses], for clients whose UDP is blocked.
  * Packets are framed with a 16-bit length (RFC 4571); each connection is a [PeerAddress] with `tcp = true`.

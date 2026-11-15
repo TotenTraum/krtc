@@ -102,3 +102,7 @@ internal actual fun secureRandomBytes(size: Int): ByteArray {
 internal actual fun availableProcessors(): Int = sysconf(_SC_NPROCESSORS_ONLN).toInt().coerceAtLeast(1)
 
 internal actual fun environment(name: String): String? = getenv(name)?.toKString()
+
+internal actual fun setCurrentThreadName(name: String) {
+    krtc.sfu.openssl.krtc_set_thread_name(name)
+}
