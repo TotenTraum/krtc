@@ -114,6 +114,14 @@ JVM:
 
 ## Тесты и бенчмарк
 
+Проверка освобождения потоков native ICE-TCP после некорректного кадра и обычного отключения
+(Python 3, macOS/Linux; передайте бинарник своей платформы):
+
+```bash
+./gradlew :krtc-sfu-server:linkDebugExecutableMacosArm64
+python3 krtc-sfu-server/test-native-tcp-threads.py krtc-sfu-server/build/bin/macosArm64/debugExecutable/krtc-sfu.kexe
+```
+
 ```bash
 ./gradlew :krtc-protocol:jvmTest :krtc-signaling:jvmTest :krtc-sfu:jvmTest :krtc-sfu:macosArm64Test :krtc-client:jvmTest
 ```

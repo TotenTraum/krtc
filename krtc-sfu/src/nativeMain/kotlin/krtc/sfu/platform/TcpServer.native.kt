@@ -16,6 +16,7 @@ import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
@@ -107,7 +108,9 @@ internal actual class TcpServer actual constructor(
                 } finally {
                     synchronized(lock) { connections.remove(address) }
                     close(fd)
-                    context.close()
+                    // Native close() waits for its workers to terminate. Calling it on
+                    // this reader's own worker deadlocks and leaks a thread per connection.
+                    CoroutineScope(Dispatchers.Default).launch { context.close() }
                 }
             }
         }
