@@ -124,7 +124,7 @@ Windows x64 проверялся на маке (2026-11-11), Windows-машин�
 
 ## JVM и Android
 
-По ADR-0002 — один JNI-слой поверх того же `krtc.h`: `krtc_jni.cpp` (C++) и `Jni.kt` + `JniWebRtc.kt` в общем source set `jvmAndAndroidMain`. Публичный API общий для всех платформ: `NativePeerConnectionFactory` и `NativeTrack` объявлены `expect` в `commonMain`, поэтому приложение создаёт бэкенд прямо из общего кода. Демо (`runDemo`) тоже общее.
+По ADR-0002 — один JNI-слой поверх того же `krtc.h`: `krtc_jni.cpp` (C++) и `Jni.kt` + `JniWebRtc.kt` в общем source set `jvmAndAndroidMain`. Публичный API общий для всех платформ: `NativePeerConnectionFactory` и `NativeTrack` объявлены `expect` в `commonMain`, поэтому приложение создаёт бэкенд прямо из общего кода. Демо (`runDemo`) тоже общее; исходники и задачи его сборки находятся в отдельном модуле `krtc-native-demo`, от которого зависит Android-приложение `krtc-native-android-demo`.
 
 - **Библиотека** `libkrtc_jni` (`build-jni.sh`) экспортирует только `Java_krtc_native_*` и `JNI_OnLoad`; libwebrtc, её C++-рантайм и BoringSSL остаются внутри — это и есть изоляция символов на macOS для JVM.
 - **Desktop JVM (macOS arm64):** dylib лежит в jar (`krtc/native/macos-arm64/`) и распаковывается при загрузке. Звонок: H.264 (VideoToolbox) 640×360 без потерь, тон доходит, видео Chrome 1280×720 принимается.

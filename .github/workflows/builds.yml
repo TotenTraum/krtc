@@ -19,7 +19,7 @@
 # Windows is cross-compiled on Linux (clang-cl + xwin in Docker): building that image accepts the Microsoft Visual
 # Studio license for the MSVC CRT and Windows SDK files it downloads (see krtc-native/docker/windows/Dockerfile).
 #
-# How to run each one: krtc-native/README.md, section "Сборки CI".
+# How to run each one: krtc-native-demo/README.md, section "Сборки CI".
 #
 # Releases (pushes only, not pull requests), downloadable without logging in, at fixed URLs:
 #   main      the pre-release "nightly" is replaced: https://github.com/<repo>/releases/tag/nightly
@@ -103,10 +103,10 @@ jobs:
         run: >
           ./gradlew
           :krtc-sfu-server:linkDebugExecutableMacosArm64
-          :krtc-native:linkDemoDebugExecutableMacosArm64
-          :krtc-native:linkDemoDebugExecutableIosSimulatorArm64
-          :krtc-native:linkDemoDebugExecutableIosArm64
-          :krtc-native:jvmDemoDistZip
+          :krtc-native-demo:linkDemoDebugExecutableMacosArm64
+          :krtc-native-demo:linkDemoDebugExecutableIosSimulatorArm64
+          :krtc-native-demo:linkDemoDebugExecutableIosArm64
+          :krtc-native-demo:jvmDemoDistZip
           :krtc-meet:packageDmg
           :krtc-meet:assembleIosSimulatorApp
           -Pkrtc.jvm.windows=false
@@ -118,10 +118,10 @@ jobs:
           mkdir -p out/meet-ios
           ditto -c -k --keepParent krtc-meet/build/ios/krtc-meet.app out/meet-ios/krtc-meet-simulator.zip
           cp krtc-sfu-server/build/bin/macosArm64/debugExecutable/krtc-sfu.kexe out/macos/
-          cp krtc-native/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe out/macos/
-          cp krtc-native/build/bin/iosSimulatorArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-simulator.kexe
-          cp krtc-native/build/bin/iosArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-device.kexe
-          cp krtc-native/build/dist/krtc-native-jvm-demo.zip out/jvm/
+          cp krtc-native-demo/build/bin/macosArm64/demoDebugExecutable/krtc-native-demo.kexe out/macos/
+          cp krtc-native-demo/build/bin/iosSimulatorArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-simulator.kexe
+          cp krtc-native-demo/build/bin/iosArm64/demoDebugExecutable/krtc-native-demo.kexe out/ios/krtc-native-demo-device.kexe
+          cp krtc-native-demo/build/dist/krtc-native-jvm-demo.zip out/jvm/
       # Artifacts are zipped by GitHub and lose the executable bit: chmod +x after unzipping.
       - uses: actions/upload-artifact@v4
         with:
@@ -199,8 +199,8 @@ jobs:
           :krtc-sfu-server:linkDebugExecutableLinuxX64
           :krtc-sfu-server:linkDebugExecutableLinuxArm64
           :krtc-sfu-server:jvmDistZip
-          :krtc-native:linkDemoDebugExecutableLinuxX64
-          :krtc-native:linkDemoDebugExecutableLinuxArm64
+          :krtc-native-demo:linkDemoDebugExecutableLinuxX64
+          :krtc-native-demo:linkDemoDebugExecutableLinuxArm64
           :krtc-native-android-demo:assembleDebug
           :krtc-meet-android:assembleDebug
       # Optimized SFU binaries for the image and the release (slower to build: pushes only).
@@ -222,20 +222,20 @@ jobs:
       - name: Desktop JVM for Linux
         run: |
           sudo apt-get install -y fakeroot
-          ./gradlew :krtc-native:jvmDemoDistZip :krtc-meet:packageDeb -Pkrtc.jvm.macos=false -Pkrtc.jvm.windows=false
+          ./gradlew :krtc-native-demo:jvmDemoDistZip :krtc-meet:packageDeb -Pkrtc.jvm.macos=false -Pkrtc.jvm.windows=false
       - name: Collect
         run: |
           mkdir -p out/linux-x64 out/linux-arm64 out/jvm out/android
           cp krtc-sfu-server/build/bin/linuxX64/debugExecutable/krtc-sfu.kexe out/linux-x64/
           cp krtc-sfu-server/build/bin/linuxArm64/debugExecutable/krtc-sfu.kexe out/linux-arm64/
-          cp krtc-native/build/bin/linuxX64/demoDebugExecutable/krtc-native-demo.kexe out/linux-x64/
-          cp krtc-native/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
+          cp krtc-native-demo/build/bin/linuxX64/demoDebugExecutable/krtc-native-demo.kexe out/linux-x64/
+          cp krtc-native-demo/build/bin/linuxArm64/demoDebugExecutable/krtc-native-demo.kexe out/linux-arm64/
           cp krtc-sfu-server/build/dist/krtc-sfu-jvm.zip out/jvm/
           cp krtc-native-android-demo/build/outputs/apk/debug/*.apk out/android/krtc-native-demo.apk
           mkdir -p out/meet-android out/meet-linux out/jvm-linux
           cp krtc-meet-android/build/outputs/apk/debug/*.apk out/meet-android/krtc-meet.apk
           cp krtc-meet/build/compose/binaries/main/deb/*.deb out/meet-linux/
-          cp krtc-native/build/dist/krtc-native-jvm-demo.zip out/jvm-linux/krtc-native-jvm-demo-linux.zip
+          cp krtc-native-demo/build/dist/krtc-native-jvm-demo.zip out/jvm-linux/krtc-native-jvm-demo-linux.zip
       - uses: actions/upload-artifact@v4
         with:
           name: krtc-linux-x64
@@ -299,16 +299,16 @@ jobs:
       - name: Build
         run: >
           ./gradlew
-          :krtc-native:linkDemoDebugExecutableMingwX64
-          :krtc-native:jvmDemoDistZip
+          :krtc-native-demo:linkDemoDebugExecutableMingwX64
+          :krtc-native-demo:jvmDemoDistZip
           -Pkrtc.jvm.macos=false
           -Pkrtc.jvm.linux=false
       - name: Collect
         run: |
           mkdir -p out/windows
-          cp krtc-native/build/bin/mingwX64/demoDebugExecutable/krtc-native-demo.exe out/windows/
-          cp krtc-native/build/bin/mingwX64/demoDebugExecutable/krtc.dll out/windows/
-          cp krtc-native/build/dist/krtc-native-jvm-demo.zip out/windows/krtc-native-jvm-demo-windows.zip
+          cp krtc-native-demo/build/bin/mingwX64/demoDebugExecutable/krtc-native-demo.exe out/windows/
+          cp krtc-native-demo/build/bin/mingwX64/demoDebugExecutable/krtc.dll out/windows/
+          cp krtc-native-demo/build/dist/krtc-native-jvm-demo.zip out/windows/krtc-native-jvm-demo-windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: krtc-windows-x64

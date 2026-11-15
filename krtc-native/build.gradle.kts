@@ -158,19 +158,6 @@ kotlin {
             includeDirs("src/shim")
             extraOpts(platform.libraries.flatMap { (dir, lib) -> listOf("-libraryPath", dir, "-staticLibrary", lib) })
         }
-        binaries.executable("demo") {
-            entryPoint = "krtc.native.demo.main"
-            baseName = "krtc-native-demo"
-            if (platform.linkage == Linkage.DLL) {
-                // Windows: the executable loads krtc.dll from its own directory.
-                val dll = platform.shimOut.file("krtc.dll").asFile
-                val outDir = outputDirectoryProperty
-                linkTaskProvider.configure {
-                    inputs.file(dll)
-                    doLast { dll.copyTo(outDir.get().asFile.resolve(dll.name), overwrite = true) }
-                }
-            }
-        }
     }
     macosArm64 { krtcNative() }
     linuxArm64 { krtcNative() }
@@ -185,7 +172,6 @@ kotlin {
         }
         commonMain.dependencies {
             api(project(":krtc-core"))
-            implementation(project(":krtc-client"))
             implementation(libs.atomicfu)
             implementation(libs.kotlinx.serialization.json)
         }
@@ -195,47 +181,6 @@ kotlin {
 
 extensions.getByType<com.android.build.api.variant.KotlinMultiplatformAndroidComponentsExtension>().onVariants { variant ->
     variant.sources.jniLibs?.addGeneratedSourceDirectory(androidJniLibs, AndroidJniLibs::output)
-}
-
-// Demo on the desktop JVM: ./gradlew :krtc-native:runJvmDemo --args="ws://<sfu>:8092 test jvm-client 30"
-tasks.register<JavaExec>("runJvmDemo") {
-    val jvm = kotlin.jvm()
-    dependsOn(jvm.compilations.getByName("main").compileTaskProvider, "jvmProcessResources")
-    classpath(jvm.compilations.getByName("main").output.allOutputs, jvm.compilations.getByName("main").runtimeDependencyFiles)
-    mainClass.set("krtc.native.demo.MainKt")
-}
-
-// A runnable JVM demo for testing on another machine (CI artifact): unzip, then
-//   krtc-native-jvm-demo/bin/krtc-native-demo ws://<sfu>:8092 test jvm-client 30      (Windows: bin\krtc-native-demo.bat)
-val jvmDemoStartScript = tasks.register("jvmDemoStartScript") {
-    val dir = layout.buildDirectory.dir("dist/scripts")
-    outputs.dir(dir)
-    doLast {
-        val out = dir.get().asFile.apply { mkdirs() }
-        out.resolve("krtc-native-demo.bat").writeText(
-            "@echo off\r\n" +
-                "java --enable-native-access=ALL-UNNAMED -cp \"%~dp0..\\lib\\*\" krtc.native.demo.MainKt %*\r\n",
-        )
-        out.resolve("krtc-native-demo").writeText(
-            "#!/bin/sh\n" +
-                "# Needs Java 21+.\n" +
-                "DIR=\"\$(cd \"\$(dirname \"\$0\")/..\" && pwd)\"\n" +
-                "exec java --enable-native-access=ALL-UNNAMED -cp \"\$DIR/lib/*\" krtc.native.demo.MainKt \"\$@\"\n",
-        )
-    }
-}
-tasks.register<Zip>("jvmDemoDistZip") {
-    group = "distribution"
-    archiveFileName.set("krtc-native-jvm-demo.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("dist"))
-    into("krtc-native-jvm-demo/lib") {
-        from(tasks.named("jvmJar"))
-        from(kotlin.jvm().compilations.getByName("main").runtimeDependencyFiles)
-    }
-    into("krtc-native-jvm-demo/bin") {
-        from(jvmDemoStartScript)
-        filePermissions { unix("rwxr-xr-x") }
-    }
 }
 
 tasks.matching { it.name.startsWith("cinteropKrtc") }.configureEach {

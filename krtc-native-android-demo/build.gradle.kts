@@ -21,6 +21,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":krtc-native"))
+    implementation(project(":krtc-native-demo"))
     implementation(libs.kotlinx.coroutines.core)
 }
