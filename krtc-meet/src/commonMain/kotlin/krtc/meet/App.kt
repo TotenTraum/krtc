@@ -908,6 +908,8 @@ private fun ChatPanel(session: MeetSession, modifier: Modifier, onTyping: (Boole
 
 @Composable
 private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boolean, expanded: Boolean, onExpand: (() -> Unit)?, modifier: Modifier, compact: Boolean, onClick: () -> Unit) {
+    var volumeOpen by remember(p.id) { mutableStateOf(false) }
+    LaunchedEffect(compact) { if (compact) volumeOpen = false }
     val video by p.video.collectAsState()
     val speaking by p.speaking.collectAsState()
     val audioMuted by p.audioMuted.collectAsState()
@@ -921,7 +923,8 @@ private fun RemoteTile(session: MeetSession, p: RemoteParticipant, pinned: Boole
         modifier.onSizeChanged { session.setTileHeight(p, it.height) },
         muted = audioMuted, deafened = deafened, pinned = pinned, expanded = expanded, onExpand = onExpand, onClick = onClick, compact = compact,
         warning = quality?.takeIf { it != LinkQuality.GOOD }?.let { "связь ${it.label()}" },
-        actions = { VolumeMenu(session, p, screen = false) },
+        controlsOpen = volumeOpen,
+        actions = { VolumeMenu(session, p, screen = false, open = volumeOpen, onOpenChange = { volumeOpen = it }) },
     )
 }
 
@@ -934,12 +937,15 @@ private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned:
     val screen by p.screen.collectAsState()
     val subscribed by p.screenSubscribed.collectAsState()
     val sound by p.screenAudio.collectAsState()
+    var volumeOpen by remember(p.id) { mutableStateOf(false) }
+    LaunchedEffect(compact, subscribed) { if (compact || !subscribed) volumeOpen = false }
     Tile(
         screen.takeIf { subscribed }, p.name, speaking = false, modifier, fit = true, placeholder = !subscribed, suffix = " — экран",
         pinned = pinned, expanded = expanded, onExpand = onExpand?.takeIf { subscribed }, onClick = onClick, compact = compact,
+        controlsOpen = volumeOpen,
         actions = if (!subscribed) null else ({
             // Always there: the volume is kept and applied once the stream's sound arrives.
-            VolumeMenu(session, p, screen = true, hasSound = sound != null)
+            VolumeMenu(session, p, screen = true, hasSound = sound != null, open = volumeOpen, onOpenChange = { volumeOpen = it })
             TileAction(MeetIcons.EyeOff, "Не смотреть стрим", { session.setScreenSubscribed(p, false) })
         }),
         badge = { hovered -> if (subscribed) StreamBadge(screen, details = hovered) },
@@ -960,19 +966,23 @@ private fun RemoteScreenTile(session: MeetSession, p: RemoteParticipant, pinned:
 
 /** The volume chip over a tile: an icon (and the level when it is not 100 %), the slider in its menu. */
 @Composable
-private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boolean, hasSound: Boolean = true) {
+private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boolean, hasSound: Boolean = true, open: Boolean, onOpenChange: (Boolean) -> Unit) {
     val volumes by session.volumes.collectAsState()
     val volume = volumes[MeetSession.volumeKey(p.id, screen)] ?: 1f
+    TileVolumeMenu(volume, screen, hasSound, open, onOpenChange) { session.setVolume(p, it, screen) }
+}
+
+@Composable
+internal fun TileVolumeMenu(volume: Float, screen: Boolean, hasSound: Boolean, open: Boolean, onOpenChange: (Boolean) -> Unit, onVolumeChange: (Float) -> Unit) {
     Box {
-        var open by remember { mutableStateOf(false) }
         TileAction(
             if (volume == 0f) MeetIcons.VolumeOff else MeetIcons.VolumeUp,
             if (screen) "Громкость стрима" else "Громкость",
-            { open = true },
+            { onOpenChange(true) },
             label = if (volume == 1f) null else "${(volume * 100).roundToInt()} %",
             tint = if (volume == 0f) MeetColors.Red else Color.White,
         )
-        DropdownMenu(open, onDismissRequest = { open = false }) { VolumeControls(session, p, screen, hasSound) }
+        DropdownMenu(open, onDismissRequest = { onOpenChange(false) }) { VolumeControls(volume, screen, hasSound, onVolumeChange) }
     }
 }
 
@@ -981,6 +991,11 @@ private fun VolumeMenu(session: MeetSession, p: RemoteParticipant, screen: Boole
 private fun VolumeControls(session: MeetSession, p: RemoteParticipant, screen: Boolean, hasSound: Boolean = true) {
     val volumes by session.volumes.collectAsState()
     val volume = volumes[MeetSession.volumeKey(p.id, screen)] ?: 1f
+    VolumeControls(volume, screen, hasSound) { session.setVolume(p, it, screen) }
+}
+
+@Composable
+private fun VolumeControls(volume: Float, screen: Boolean, hasSound: Boolean, onVolumeChange: (Float) -> Unit) {
     Column(Modifier.width(280.dp).padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (screen) "Звук стрима" else "Громкость голоса", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
@@ -990,10 +1005,10 @@ private fun VolumeControls(session: MeetSession, p: RemoteParticipant, screen: B
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (volume == 0f) MeetIcons.VolumeOff else MeetIcons.VolumeUp, if (volume == 0f) "Включить" else "Выключить",
-                Modifier.size(20.dp).clip(CircleShape).clickable { session.setVolume(p, if (volume == 0f) 1f else 0f, screen) },
+                Modifier.size(20.dp).clip(CircleShape).clickable { onVolumeChange(if (volume == 0f) 1f else 0f) },
                 tint = if (volume == 0f) MeetColors.Red else MeetColors.Text,
             )
-            Slider(volume, { session.setVolume(p, it, screen) }, valueRange = 0f..MeetSession.MAX_VOLUME, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            Slider(volume, onVolumeChange, valueRange = 0f..MeetSession.MAX_VOLUME, modifier = Modifier.weight(1f).padding(start = 8.dp))
         }
     }
 }
@@ -1027,7 +1042,7 @@ private fun StreamBadge(track: MediaStreamTrack?, details: Boolean) {
  * lights up on hover. [content] draws over the picture (e.g. an offer to watch).
  */
 @Composable
-private fun Tile(
+internal fun Tile(
     track: MediaStreamTrack?,
     name: String,
     speaking: Boolean,
@@ -1041,6 +1056,7 @@ private fun Tile(
     deafened: Boolean = false,
     expanded: Boolean = false,
     compact: Boolean = false,
+    controlsOpen: Boolean = false,
     suffix: String = "",
     onExpand: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -1050,7 +1066,8 @@ private fun Tile(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val controls = (hovered || !isDesktop) && !compact
+    // A Popup receives pointer events outside the tile. Keep its anchor composed until it is dismissed.
+    val controls = (hovered || controlsOpen || !isDesktop) && !compact
     val shape = RoundedCornerShape(if (expanded) 0.dp else 8.dp)
     Box(
         modifier.clip(shape).background(MeetColors.TileBackground).hoverable(interaction)

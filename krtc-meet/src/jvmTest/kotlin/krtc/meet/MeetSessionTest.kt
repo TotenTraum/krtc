@@ -53,7 +53,7 @@ class MeetSessionTest {
     private val logDir = java.nio.file.Files.createTempDirectory("krtc-client-logs").toFile()
 
     /** Synthetic audio, and a "screen" of pushed frames: no devices or permissions needed. [static]: always the same picture. */
-    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings(), private val noise: Boolean = false) : MediaPlatform {
+    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings(), private val noise: Boolean = false, private val screenTone: Boolean = false) : MediaPlatform {
         val factories = mutableListOf<NativePeerConnectionFactory>()
         override val sharedSystemAudio = false
         override fun createFactory(testAudio: Boolean) = NativePeerConnectionFactory(AudioDevice.SYNTHETIC).also { factories += it }
@@ -64,8 +64,24 @@ class MeetSessionTest {
             factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
         ): OpenedScreen {
             val source = factory.createScreencastSource()
-            return OpenedScreen(source, null, if (noise) NoisePusher(source, fps) else Pusher(source, fps, static))
+            val capture: AutoCloseable = if (noise) NoisePusher(source, fps) else Pusher(source, fps, static)
+            val audio = if (withAudio && screenTone) factory.createAudioSource() else null
+            val tone = audio?.let(::AudioPusher)
+            return OpenedScreen(source, audio, AutoCloseable { capture.close(); tone?.close() })
         }
+    }
+
+    /** A continuous screen sound, independent of the microphone and its mute/processing. */
+    private class AudioPusher(source: krtc.native.NativeAudioSource) : AutoCloseable {
+        @Volatile private var running = true
+        private val worker = thread {
+            val frame = ShortArray(480) { (6000 * kotlin.math.sin(2 * Math.PI * 1000 * it / 48_000)).toInt().toShort() }
+            while (running) {
+                source.push(frame)
+                Thread.sleep(10)
+            }
+        }
+        override fun close() { running = false; worker.join() }
     }
 
     /** Pushes frames at [fps], like a capture would. */
@@ -510,6 +526,47 @@ class MeetSessionTest {
             a.close()
             b.close()
             c.close()
+        }
+    }
+
+    /** Stream volume changes the decoded screen audio, including mute and amplification. */
+    @Test
+    fun screenAudioVolumeChangesPlayout(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform(screenTone = true))
+        val pb = TestPlatform()
+        val b = MeetSession(scope, pb)
+        try {
+            a.join(JoinSettings(url, "stream-volume", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "stream-volume", "bob", CameraChoice.None, testAudio = true))
+            waitUntil("both in the call") { a.phase.value is CallPhase.InCall && b.phase.value is CallPhase.InCall }
+            val alice = withTimeout(15_000) { b.participants.first { it.isNotEmpty() }.single() }
+            b.setVolume(alice, 0f) // isolate the screen sound from Alice's microphone
+            a.startScreen(a.screens().single(), withAudio = true)
+            val receiver = pb.factories.single()
+            waitUntil("screen sound reaches bob") { alice.screenAudio.value != null && receiver.outputLevel > 0.02 }
+            suspend fun level(): Double {
+                var sum = 0.0
+                repeat(30) { delay(25); sum += receiver.outputLevel }
+                return sum / 30
+            }
+            delay(500)
+            val normal = level()
+            assertTrue(normal > 0.02, "screen sound is audible: $normal")
+            b.setVolume(alice, 0f, screen = true)
+            delay(300)
+            assertTrue(level() < 0.001, "screen volume 0 silences the stream")
+            b.setVolume(alice, 0.5f, screen = true)
+            delay(300)
+            val half = level()
+            assertTrue(half / normal in 0.35..0.65, "screen volume 50% scales playout: $normal -> $half")
+            b.setVolume(alice, 2f, screen = true)
+            delay(300)
+            val amplified = level()
+            assertTrue(amplified / normal in 1.5..2.5, "screen volume 200% amplifies playout: $normal -> $amplified")
+            assertEquals(0f, b.volumes.value[MeetSession.volumeKey(alice.id, screen = false)], "voice volume stays independent")
+        } finally {
+            a.close()
+            b.close()
         }
     }
 
