@@ -714,8 +714,12 @@ class MeetSessionTest {
         waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
         a.toggleMic()
         waitUntil("chat open") { a.sendChat("my secret words") }
-        a.leave()
+        a.startScreen(a.screens().single(), withAudio = false)
         fun serverLog() = logDir.walk().filter { it.isFile }.joinToString("\n") { it.name + "\n" + it.readText() }
+        waitUntil("the actual screen codec in the uploaded log", timeoutMillis = 20_000) {
+            "codec selected: direction=out mid=s selected=video/" in serverLog()
+        }
+        a.leave()
         waitUntil("the log on the server") { "call ended: left" in serverLog() }
         val log = serverLog()
         assertTrue(Regex("AliceSmith-[0-9a-f]{6}\\.log").containsMatchIn(log), log.take(300))
@@ -723,6 +727,9 @@ class MeetSessionTest {
         assertTrue(Regex("D \\[MeetSession] toggleMic\\(\\) \\d+ ms").containsMatchIn(log), "traced call: " + log.take(2000))
         assertTrue(Regex("join\\(settings=JoinSettings\\(server=ws://").containsMatchIn(log), "traced arguments")
         assertTrue("sendChat()" in log && "my secret words" !in log, "chat text kept out")
+        assertTrue("video codecs available=" in log && "preference=auto" in log, "factory capabilities")
+        assertTrue("offered=[video/VP8" in log && "negotiated=[video/" in log, "negotiation candidates")
+        assertTrue("screen out:" in log && "codec=video/" in log && "implementation=" in log, "actual RTP codec and implementation")
         a.close()
     }
 

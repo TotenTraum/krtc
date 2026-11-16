@@ -88,6 +88,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":krtc-client"))
             implementation(project(":krtc-native"))
+            implementation(project(":krtc-protocol"))
             api(compose.runtime)
             api(compose.foundation)
             api(compose.material3)

@@ -438,6 +438,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 val f = if (shared) offUi { platform() } else offUi({ it.close() }) { platform.createFactory(settings.testAudio) }.also { callFactory = it }
                 factory = f
                 log("factory ready (${if (shared) "system audio, shared" else "per call"})")
+                log("video codecs available=${offUi { f.videoCodecs }} preference=${f.preferredVideoCodec ?: "auto"}")
                 offUi {
                     if (settings.testAudio) f.setTestTone(true)
                     applyProcessing(f, processing)
@@ -850,10 +851,12 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         var previous: Map<String, Pair<Long, Long>> = emptyMap() // inbound-rtp id -> (received, lost)
         var sentBytes = -1L
         val dropped = HashMap<String, Long>()
+        val codecs = CodecDiagnostics()
         while (true) {
             kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS)
             val pc = c.peerConnection ?: continue
             val report = runCatching { pc.getStats() }.getOrNull() ?: continue
+            codecs.sample(report, pc.remoteDescription?.sdp, pc.localDescription?.sdp).forEach(::log)
             fun Any?.num(): Double? = (this as? Number)?.toDouble()
             // The screen share going out (uplink m-line "s") and the capture behind it (its media-source).
             val out = report.values.firstOrNull { it.type == "outbound-rtp" && it.members["mid"] == "s" && it.members["kind"] == "video" }
@@ -874,7 +877,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 )
                 sentBytes = bytes
                 screenSendFlow.value = info
-                log("screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} encoder=${info.encoder} ${info.bitrateKbps}kbps")
+                log("screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} codec=${CodecDiagnostics.selected(report, out)} encoder=${info.encoder} ${info.bitrateKbps}kbps")
             }
             // Screen shares coming in: what arrives, the decoder, frames dropped before showing.
             for (s in report.values) {
@@ -886,7 +889,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 dropped[s.id] = drops
                 log(
                     "screen in ${c.participantOfMid(mid)}: ${s.members["frameWidth"].num()?.toInt()}x${s.members["frameHeight"].num()?.toInt()} " +
-                        "${s.members["framesPerSecond"].num()?.roundToInt()}fps decoder=${s.members["decoderImplementation"]} dropped=+$newDrops " +
+                        "${s.members["framesPerSecond"].num()?.roundToInt()}fps codec=${CodecDiagnostics.selected(report, s)} decoder=${s.members["decoderImplementation"]} dropped=+$newDrops " +
                         "freezes=${s.members["freezeCount"].num()?.toInt()} lost=${s.members["packetsLost"].num()?.toInt()}",
                 )
             }
