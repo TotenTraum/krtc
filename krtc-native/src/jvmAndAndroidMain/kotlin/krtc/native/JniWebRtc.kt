@@ -45,6 +45,8 @@ public actual class NativePeerConnectionFactory actual constructor(
     internal val handle: Long = Jni.factoryCreate(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
         .also { check(it != 0L) { "libwebrtc factory creation failed" } }
 
+    internal val effectiveVideoCodec: String? = preferredVideoCodec ?: Jni.factoryRecommendedVideoCodec(handle)
+
     /** Video codecs this factory can send, e.g. [video/VP8, video/H264, ...]. */
     public actual val audioInputs: List<String> get() = devices(false)
     public actual val audioOutputs: List<String> get() = devices(true)
@@ -349,7 +351,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
 
     override suspend fun setRemoteDescription(description: RTCSessionDescription) {
         call { done -> guard.use { Jni.pcSetRemoteDescription(it, description.type.value, description.sdp, done) } }
-        factory.preferredVideoCodec?.let { mime ->
+        factory.effectiveVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
                 if (t.receiver.track.kind == "video") (t as NativeTransceiver).guard.useOr(Unit) { Jni.transceiverPreferCodec(factory.handle, it, mime) }
             }
@@ -363,7 +365,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     override suspend fun setLocalDescription(description: RTCSessionDescription) {
         call { done -> guard.use { Jni.pcSetLocalDescription(it, description.type.value, description.sdp, done) } }
         // As answerer libwebrtc sends with the offer's first codec; pick the preferred one explicitly.
-        factory.preferredVideoCodec?.let { mime ->
+        factory.effectiveVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
                 if (t.receiver.track.kind == "video" && t.sender.track != null) (t as NativeTransceiver).guard.useOr(Unit) { Jni.transceiverSetSendCodec(it, mime) }
             }

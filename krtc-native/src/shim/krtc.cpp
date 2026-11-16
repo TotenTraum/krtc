@@ -255,6 +255,7 @@ private:
 }  // namespace
 
 struct krtc_factory {
+    const char *recommended_video_codec = nullptr;
     std::shared_ptr<InputGateState> gate = std::make_shared<InputGateState>();
     std::unique_ptr<Thread> network, worker, signaling;
     scoped_refptr<AudioDeviceModule> adm;
@@ -407,6 +408,16 @@ KRTC_API krtc_factory *krtc_factory_create_with(int audio_mode, int platform_vid
                                   : CreateAudioDeviceModule(CreateEnvironment(), AudioDeviceModule::kPlatformDefaultAudio);
     });
     std::unique_ptr<VideoEncoderFactory> encoders = platform_video_codecs ? krtc::PlatformVideoEncoderFactory() : nullptr;
+#if defined(_WIN32)
+    if (encoders) {
+        for (const auto &format : encoders->GetSupportedFormats()) {
+            if (format.name == "H264" && encoders->QueryCodecSupport(format, std::nullopt, std::nullopt).is_power_efficient) {
+                k->recommended_video_codec = "video/H264";
+                break;
+            }
+        }
+    }
+#endif
     std::unique_ptr<VideoDecoderFactory> decoders = platform_video_codecs ? krtc::PlatformVideoDecoderFactory() : nullptr;
     if (!encoders) encoders = std::make_unique<VideoEncoderFactoryTemplate<LibvpxVp8EncoderTemplateAdapter>>();
     if (!decoders) decoders = std::make_unique<VideoDecoderFactoryTemplate<LibvpxVp8DecoderTemplateAdapter>>();
@@ -472,6 +483,8 @@ KRTC_API char *krtc_factory_video_codecs(krtc_factory *f) {
     }
     return Dup(out);
 }
+
+KRTC_API const char *krtc_factory_recommended_video_codec(krtc_factory *f) { return f->recommended_video_codec; }
 
 KRTC_API void krtc_factory_set_audio_processing(krtc_factory *f, int echo_cancellation, int noise_suppression, int auto_gain_control) {
     f->echo_cancellation = echo_cancellation != 0;

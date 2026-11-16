@@ -72,7 +72,7 @@ win)
         /implib:"$OUT/krtc.lib" /opt:ref /opt:icf "$OUT/krtc_jni.obj" "$OUT/krtc_shim.lib" "$WEBRTC/lib/webrtc.lib" \
         winmm.lib secur32.lib ws2_32.lib iphlpapi.lib msdmo.lib dmoguids.lib wmcodecdspuuid.lib strmiids.lib \
         ole32.lib oleaut32.lib crypt32.lib d3d11.lib dxgi.lib dwmapi.lib user32.lib gdi32.lib shell32.lib \
-        advapi32.lib shcore.lib uuid.lib
+        advapi32.lib shcore.lib uuid.lib mfuuid.lib
     llvm-dlltool -m i386:x86-64 -d "$OUT/krtc.def" -D krtc.dll -l "$OUT/libkrtc.dll.a"
     echo "built $OUT/krtc.dll ($(grep -c '^    krtc_' "$OUT/krtc.def") krtc_* exports + JNI)"
     ;;

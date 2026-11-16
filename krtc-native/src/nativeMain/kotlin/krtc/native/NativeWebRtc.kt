@@ -74,6 +74,8 @@ public actual class NativePeerConnectionFactory actual constructor(
         krtc_factory_create_with(if (audioDevice == AudioDevice.PLATFORM) 1 else 0, if (platformVideoCodecs) 1 else 0)
             ?: error("libwebrtc factory creation failed")
 
+    internal val effectiveVideoCodec: String? = preferredVideoCodec ?: krtc_factory_recommended_video_codec(handle)?.toKString()
+
     public actual val audioInputs: List<String> get() = devices(0)
     public actual val audioOutputs: List<String> get() = devices(1)
     public actual val audioInputIndex: Int? get() = krtc_factory_audio_device(handle, 0).takeIf { it >= 0 }
@@ -470,7 +472,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
 
     override suspend fun setRemoteDescription(description: RTCSessionDescription) {
         call { done -> guard.use { krtc_pc_set_remote_description(it, description.type.value, description.sdp, doneCallback, done) } }
-        factory.preferredVideoCodec?.let { mime ->
+        factory.effectiveVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
                 if (t.receiver.track.kind == "video") (t as NativeTransceiver).guard.useOr(Unit) { krtc_transceiver_prefer_codec(factory.handle, it, mime) }
             }
@@ -489,7 +491,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
         call { done -> guard.use { krtc_pc_set_local_description(it, description.type.value, description.sdp, doneCallback, done) } }
         // As answerer libwebrtc sends with the offer's first codec; pick the preferred one explicitly
         // (RTCRtpEncodingParameters.codec). Not negotiated -> keep the default.
-        factory.preferredVideoCodec?.let { mime ->
+        factory.effectiveVideoCodec?.let { mime ->
             for (t in getTransceivers()) {
                 if (t.receiver.track.kind == "video" && t.sender.track != null) (t as NativeTransceiver).guard.useOr(Unit) { krtc_transceiver_set_send_codec(it, mime) }
             }

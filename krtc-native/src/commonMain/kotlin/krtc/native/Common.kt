@@ -69,7 +69,8 @@ private fun JsonElement.toKotlin(): Any? = when (this) {
 /**
  * krtc-core backend on libwebrtc via the krtc C shim (Kotlin/Native: cinterop; JVM and Android: JNI).
  * One factory owns libwebrtc's threads. [platformVideoCodecs] enables the platform's codecs (VideoToolbox on
- * Apple); [preferredVideoCodec] (e.g. "video/H264") is negotiated first and used for sending when offered.
+ * Apple, Media Foundation H.264 with software fallback on Windows). [preferredVideoCodec] is negotiated first
+ * when offered; null automatically prefers H.264 on Windows when a hardware encoder is detected.
  */
 public expect class NativePeerConnectionFactory(
     audioDevice: AudioDevice = AudioDevice.SYNTHETIC,

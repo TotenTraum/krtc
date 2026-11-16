@@ -178,6 +178,10 @@ KRTC_JNI(jint, factoryPullAudio)(JNIEnv *env, jclass, jlong f, jshortArray out) 
 }
 KRTC_JNI(jdouble, factoryOutputLevel)(JNIEnv *, jclass, jlong f) { return krtc_factory_output_level(H<krtc_factory>(f)); }
 KRTC_JNI(jstring, factoryVideoCodecs)(JNIEnv *env, jclass, jlong f) { return Take(env, krtc_factory_video_codecs(H<krtc_factory>(f))); }
+KRTC_JNI(jstring, factoryRecommendedVideoCodec)(JNIEnv *env, jclass, jlong f) {
+    const char *mime = krtc_factory_recommended_video_codec(H<krtc_factory>(f));
+    return mime ? env->NewStringUTF(mime) : nullptr;
+}
 KRTC_JNI(jlong, factoryCreateAudioTrack)(JNIEnv *env, jclass, jlong f, jstring id) {
     return J(krtc_factory_create_audio_track(H<krtc_factory>(f), Utf(env, id).get()));
 }

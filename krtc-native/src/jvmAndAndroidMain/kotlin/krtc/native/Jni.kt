@@ -42,6 +42,7 @@ internal object Jni {
     @JvmStatic external fun factoryPullAudio(factory: Long, out: ShortArray): Int
     @JvmStatic external fun factoryOutputLevel(factory: Long): Double
     @JvmStatic external fun factoryVideoCodecs(factory: Long): String
+    @JvmStatic external fun factoryRecommendedVideoCodec(factory: Long): String?
     @JvmStatic external fun factoryAudioDeviceCount(factory: Long, output: Boolean): Int
     @JvmStatic external fun factoryAudioDevice(factory: Long, output: Boolean): Int
     @JvmStatic external fun factoryAudioDeviceName(factory: Long, output: Boolean, index: Int): String?

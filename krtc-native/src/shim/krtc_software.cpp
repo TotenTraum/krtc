@@ -26,6 +26,7 @@
 #include <thread>
 #include <future>
 #if defined(_WIN32)
+#include "krtc_windows_encoder.h"
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <audioclientactivationparams.h>
@@ -51,7 +52,7 @@
 namespace krtc {
 
 std::unique_ptr<webrtc::VideoEncoderFactory> PlatformVideoEncoderFactory() {
-    return std::make_unique<webrtc::VideoEncoderFactoryTemplate<
+    auto software = std::make_unique<webrtc::VideoEncoderFactoryTemplate<
         webrtc::LibvpxVp8EncoderTemplateAdapter
 #if defined(RTC_ENABLE_VP9)
         , webrtc::LibvpxVp9EncoderTemplateAdapter
@@ -63,6 +64,11 @@ std::unique_ptr<webrtc::VideoEncoderFactory> PlatformVideoEncoderFactory() {
         , webrtc::LibaomAv1EncoderTemplateAdapter
 #endif
         >>();
+#if defined(_WIN32)
+    return WindowsVideoEncoderFactory(std::move(software));
+#else
+    return software;
+#endif
 }
 
 std::unique_ptr<webrtc::VideoDecoderFactory> PlatformVideoDecoderFactory() {

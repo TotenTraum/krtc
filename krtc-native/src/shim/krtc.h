@@ -89,6 +89,8 @@ int krtc_factory_input_gate_open(krtc_factory *factory);
 
 /* Video codecs this factory can send, as "video/VP8 video/H264 ..." (free with krtc_free). */
 char *krtc_factory_video_codecs(krtc_factory *factory);
+/* Borrowed MIME string for automatic hardware codec selection, or NULL to retain normal negotiation. */
+const char *krtc_factory_recommended_video_codec(krtc_factory *factory);
 
 /* Local tracks. The test video track generates frames internally (no camera needed). */
 krtc_track *krtc_factory_create_audio_track(krtc_factory *factory, const char *id);

@@ -44,7 +44,7 @@ esac
 if [ "$TARGET" = win ]; then
     # libwebrtc is built without exceptions and RTTI (its defines include _HAS_EXCEPTIONS=0).
     OBJS=""
-    for f in krtc.cpp krtc_audio.cpp krtc_software.cpp; do
+    for f in krtc.cpp krtc_audio.cpp krtc_software.cpp krtc_windows_encoder.cpp; do
         $CXX $TARGET_FLAGS /c /std:c++20 /O2 /MT /GR- /EHs-c- /Zc:inline /Gw /Gy -Wno-deprecated-declarations \
             -Wno-nullability-completeness -Wno-unknown-pragmas "$@" $INCLUDES "$SRC/$f" /Fo"$OUT/${f%.*}.obj"
         OBJS="$OBJS $OUT/${f%.*}.obj"
