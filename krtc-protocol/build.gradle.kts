@@ -15,6 +15,7 @@ kotlin {
         namespace = "krtc.protocol"
         compileSdk = 36
         minSdk = 24
+        withHostTest { }
     }
 
     jvm {

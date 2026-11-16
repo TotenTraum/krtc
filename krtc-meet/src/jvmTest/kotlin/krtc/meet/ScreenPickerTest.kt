@@ -23,7 +23,7 @@ import kotlin.test.assertEquals
 
 class ScreenPickerTest {
     @Test
-    fun waitsForPreviewAndClearsSelectionOnRefresh(): Unit = runBlocking(Dispatchers.Default) {
+    fun selectionDoesNotWaitForPreviewAndRefreshClearsIt(): Unit = runBlocking(Dispatchers.Default) {
         val allowPreview = CountDownLatch(1)
         val failedPreview = CountDownLatch(1)
         val listings = AtomicInteger()
@@ -68,22 +68,29 @@ class ScreenPickerTest {
             settle()
             assertEquals(1, listings.get())
             assertEquals(0L, failedPreview.count, "a slow window must not block checking another window")
-            click(100f, 180f) // select the remaining real window while its preview is loading
+            click(100f, 180f) // a window is selectable while its preview is still loading
             settle("loading")
             click(780f, 664f)
             settle()
-            assertEquals(0, closes.get(), "start is disabled until an actual frame arrives")
-            allowPreview.countDown()
-            settle("ready")
+            assertEquals(1, closes.get(), "starting a share must not wait for a thumbnail")
+            click(400f, 180f) // a missing thumbnail is not proof that the window cannot be shared
+            settle("missing-preview")
             click(780f, 664f)
             settle()
-            assertEquals(1, closes.get(), "the same start button works after preview succeeds")
-            click(805f, 36f) // refresh the source list, IDs change to model a closed/reopened window
+            assertEquals(2, closes.get(), "a failed thumbnail must not disable the source")
+            click(805f, 36f) // reload sources while the old thumbnail is still running
             settle("refreshed")
             assertEquals(2, listings.get())
             click(780f, 664f)
             settle()
-            assertEquals(1, closes.get(), "refresh cannot start a stale selected window")
+            assertEquals(2, closes.get(), "refresh cannot start a stale selected window")
+            allowPreview.countDown()
+            settle("ready")
+            click(100f, 180f)
+            settle("selected")
+            click(780f, 664f)
+            settle()
+            assertEquals(3, closes.get(), "the refreshed source remains selectable")
         } finally {
             allowPreview.countDown()
             scene.close()

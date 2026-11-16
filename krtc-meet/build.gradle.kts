@@ -17,12 +17,29 @@ plugins {
 // The desktop platform of Compose's runtime (Skia): the build machine's, or another with -Pkrtc.meet.desktop=
 // linux-x64 | linux-arm64 | windows-x64 | macos-arm64, e.g. to run the app in a Linux container from macOS
 // (desktopClasspath, see README).
-val desktopRuntime: String = when (val target = findProperty("krtc.meet.desktop") as String?) {
-    null -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.currentOs
-    "linux-x64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.linux_x64
-    "linux-arm64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.linux_arm64
-    "windows-x64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.windows_x64
-    "macos-arm64" -> org.jetbrains.compose.ComposePlugin.DesktopDependencies.macos_arm64
+val desktopTarget: String = (findProperty("krtc.meet.desktop") as String?) ?: run {
+    val os = System.getProperty("os.name").lowercase().let {
+        when {
+            it.startsWith("mac") -> "macos"
+            it.startsWith("windows") -> "windows"
+            it.startsWith("linux") -> "linux"
+            else -> error("unsupported desktop OS: $it")
+        }
+    }
+    val arch = when (val arch = System.getProperty("os.arch").lowercase()) {
+        "aarch64", "arm64" -> "arm64"
+        "amd64", "x86_64" -> "x64"
+        else -> error("unsupported desktop architecture: $arch")
+    }
+    "$os-$arch"
+}
+val desktopRuntime = when (val target = desktopTarget) {
+    "linux-x64" -> libs.compose.desktop.linux.x64
+    "linux-arm64" -> libs.compose.desktop.linux.arm64
+    "windows-x64" -> libs.compose.desktop.windows.x64
+    "windows-arm64" -> libs.compose.desktop.windows.arm64
+    "macos-x64" -> libs.compose.desktop.macos.x64
+    "macos-arm64" -> libs.compose.desktop.macos.arm64
     else -> error("unknown krtc.meet.desktop: $target")
 }
 
@@ -69,6 +86,7 @@ kotlin {
     }
 
     // woven: JVM and iOS, where kaop weaves @Traced.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
     applyDefaultHierarchyTemplate {
         common {
             group("woven") {
@@ -89,10 +107,10 @@ kotlin {
             implementation(project(":krtc-client"))
             implementation(project(":krtc-native"))
             implementation(project(":krtc-protocol"))
-            api(compose.runtime)
-            api(compose.foundation)
-            api(compose.material3)
-            api(compose.ui)
+            api(libs.compose.runtime)
+            api(libs.compose.foundation)
+            api(libs.compose.material3)
+            api(libs.compose.ui)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.atomicfu)
             implementation(libs.ktor.client.core)

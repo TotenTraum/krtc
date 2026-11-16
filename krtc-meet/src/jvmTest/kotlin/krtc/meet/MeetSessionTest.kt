@@ -690,7 +690,7 @@ class MeetSessionTest {
     fun joinThatNeverCompletesEndsWithAnError(): Unit = runBlocking(main) {
         val silent = embeddedServer(CIO, port = 0) {
             install(WebSockets)
-            routing { webSocket("/ws") { for (frame in incoming) Unit } }
+            routing { webSocket("/ws") { for (frame in incoming) { /* Deliberately ignore signaling. */ } } }
         }.also { it.start(wait = false) }
         try {
             val port = silent.engine.resolvedConnectors().first().port

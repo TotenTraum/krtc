@@ -46,6 +46,11 @@ kotlin {
             languageSettings.optIn("kotlin.concurrent.atomics.ExperimentalAtomicApi")
             languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
             languageSettings.optIn("kotlinx.coroutines.DelicateCoroutinesApi")
+        }
+        matching {
+            it.name.startsWith("native") || it.name.startsWith("apple") ||
+                it.name.startsWith("macos") || it.name.startsWith("linux")
+        }.configureEach {
             languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi")
         }
         commonMain.dependencies {

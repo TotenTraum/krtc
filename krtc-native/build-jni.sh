@@ -24,7 +24,7 @@ macos)
     $CXX -c $CFLAGS -I"$JDK/include" -I"$JDK/include/darwin" "$SRC/krtc_jni.cpp" -o "$OUT/krtc_jni.o"
     printf '_Java_krtc_native_*\n_JNI_OnLoad\n' > "$OUT/jni.exports"
     $CXX -dynamiclib $TARGET_FLAGS -o "$OUT/libkrtc_jni.dylib" "$OUT/krtc_jni.o" "$OUT/libkrtc_shim.a" "$WEBRTC/lib/libwebrtc.a" \
-        -Wl,-exported_symbols_list,"$OUT/jni.exports" -ObjC -lc++ \
+        -Wl,-exported_symbols_list,"$OUT/jni.exports" -ObjC \
         -framework Foundation -framework AVFoundation -framework Security -framework CoreAudio -framework AudioToolbox \
         -framework AppKit -framework CoreMedia -framework CoreGraphics -framework VideoToolbox -framework CoreVideo \
         -framework OpenGL -framework Metal -framework MetalKit -framework QuartzCore -framework IOKit -framework IOSurface \

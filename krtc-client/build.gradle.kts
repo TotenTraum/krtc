@@ -15,6 +15,7 @@ kotlin {
         namespace = "krtc.client"
         compileSdk = 36
         minSdk = 24
+        withHostTest { }
     }
     jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }
     iosArm64()

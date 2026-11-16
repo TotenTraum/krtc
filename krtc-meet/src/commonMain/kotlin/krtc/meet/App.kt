@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.window.Dialog
@@ -87,6 +87,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.derivedStateOf
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -659,28 +663,31 @@ internal fun ScreenPickerContent(session: MeetSession, live: Boolean, onClose: (
     var withAudio by remember { mutableStateOf(false) }
     val previewSources = if (windows.isEmpty() || displays.isEmpty()) choices else if (tab == 0) windows else displays
     val thumbs = remember(refresh) { mutableStateMapOf<ScreenChoice, ImageBitmap?>() }
-    val availableWindows = windows.filter { it !in thumbs || thumbs[it] != null }
-    val shown = previewSources.filter { !it.isWindow || it in availableWindows }
-    val hiddenWindows = windows.size - availableWindows.size
-    val ready = selected?.let { it in choices && (!isDesktop || it.source == null || thumbs[it] != null) } == true
-    // Each thumbnail starts a capture for a moment: windows are taken once, the few displays every 5 s.
-    // Keep the effect keyed to the original sources: hiding a failed card must not cancel another capture.
-    LaunchedEffect(refresh, previewSources) {
+    val shown = previewSources
+    val ready = selected?.let { it in choices } == true
+    val gridState = rememberLazyGridState()
+    val visible by remember { derivedStateOf { gridState.layoutInfo.visibleItemsInfo.map { it.index }.toSet() } }
+    val previewTargets = previewSources.filterIndexed { index, choice -> index in visible || choice === selected }
+        .ifEmpty { previewSources.take(8) }.sortedBy { it !== selected }
+    val previewSlots = remember { Semaphore(4) }
+    // Source metadata controls the list. Thumbnail loading is optional, limited to visible/selected cards,
+    // and never disables selection or starts a full screen-share stream on modern macOS.
+    LaunchedEffect(refresh, previewTargets) {
         if (!isDesktop) return@LaunchedEffect // ReplayKit/MediaProjection ask on start and cannot be previewed.
         while (true) {
-            for (batch in previewSources.chunked(2)) {
-                coroutineScope {
-                    for (c in batch) {
-                        if (c.source == null || (c.isWindow && c in thumbs)) continue
-                        launch {
+            coroutineScope {
+                for (c in previewTargets) {
+                    if (c.source == null) continue
+                    launch {
+                        previewSlots.withPermit {
                             val frame = withContext(Dispatchers.Default) { runCatching { session.screenThumbnail(c) }.getOrNull() }
-                            thumbs[c] = frame?.let { FrameBitmap().apply { write(it) }.image }
-                            if (frame == null && selected === c) selected = null
+                            val image = frame?.let { FrameBitmap().apply { write(it) }.image }
+                            if (image != null || c !in thumbs) thumbs[c] = image
                         }
                     }
                 }
             }
-            if (previewSources.all { it.isWindow || it.source == null }) break
+            if (previewTargets.all { it.source == null }) break
             delay(5_000)
         }
     }
@@ -694,21 +701,20 @@ internal fun ScreenPickerContent(session: MeetSession, live: Boolean, onClose: (
                 TextButton(onClick = { refresh++ }, enabled = loaded != null) { Text("Обновить") }
             }
             if (windows.isNotEmpty() && displays.isNotEmpty()) {
-                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Приложения · ${availableWindows.size}") })
+                PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Приложения · ${windows.size}") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Экраны · ${displays.size}") })
                 }
             }
             if (loaded == null) Text("Ищу окна и экраны…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (hiddenWindows > 0) Text("Не удалось захватить окон: $hiddenWindows. Нажмите «Обновить», чтобы повторить проверку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loaded != null && shown.isEmpty()) Text("Нет доступных окон. Откройте нужное окно или выберите экран целиком.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             choices.firstNotNullOfOrNull { it.note }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            LazyVerticalGrid(GridCells.Adaptive(minSize = 220.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyVerticalGrid(GridCells.Adaptive(minSize = 220.dp), Modifier.weight(1f).fillMaxWidth(), state = gridState, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(shown, key = { it.source?.let { s -> "${s.isWindow}/${s.id}" } ?: it.label }) { c ->
                     val isSelected = selected === c
                     val shape = RoundedCornerShape(10.dp)
                     Column(
-                        Modifier.clip(shape).clickable(enabled = !isDesktop || c !in thumbs || thumbs[c] != null || c.source == null) { selected = c }
+                        Modifier.clip(shape).clickable { selected = c }
                             .border(BorderStroke(3.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent), shape)
                             .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                             .padding(8.dp),
@@ -719,7 +725,7 @@ internal fun ScreenPickerContent(session: MeetSession, live: Boolean, onClose: (
                             when {
                                 image != null -> Image(image, c.label, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                                 c.source == null || !isDesktop -> Text(if (c.isWindow) "Окно" else "Экран", color = Color.Gray)
-                                c in thumbs -> Text("Источник недоступен", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                                c in thumbs -> Text("Превью недоступно", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
                                 else -> Text("Загружаю превью…", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
                             }
                         }

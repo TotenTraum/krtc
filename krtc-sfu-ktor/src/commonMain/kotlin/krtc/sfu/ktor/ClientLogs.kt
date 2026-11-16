@@ -7,7 +7,7 @@ import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.buffered
@@ -60,7 +60,7 @@ public fun Route.krtcClientLogs(
         val length = call.request.contentLength()
         if (length != null && length > maxBodyBytes) return@post call.respond(HttpStatusCode.PayloadTooLarge)
         if (!limiter.allow(call.request.origin.remoteHost)) return@post call.respond(HttpStatusCode.TooManyRequests)
-        val body = call.receiveChannel().readRemaining(maxBodyBytes + 1).readByteArray()
+        val body = call.receiveChannel().readBuffer(maxBodyBytes + 1).readByteArray()
         if (body.size > maxBodyBytes) return@post call.respond(HttpStatusCode.PayloadTooLarge)
         val batch = parseClientLogBatch(body.decodeToString()) ?: return@post call.respond(HttpStatusCode.BadRequest)
         store.store(batch)

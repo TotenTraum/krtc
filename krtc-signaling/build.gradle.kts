@@ -15,6 +15,7 @@ kotlin {
         namespace = "krtc.signaling"
         compileSdk = 36
         minSdk = 24
+        withHostTest { }
     }
     jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
     iosArm64()

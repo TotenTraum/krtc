@@ -18,6 +18,16 @@ val libraries = setOf("krtc-protocol", "krtc-signaling", "krtc-sfu", "krtc-sfu-k
 subprojects {
     group = providers.gradleProperty("krtc.group").get()
     version = providers.gradleProperty("krtc.version").get()
+    tasks.withType<Test>().configureEach {
+        // JNI-backed integration tests intentionally load libwebrtc.
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
+    }
+    plugins.withId("org.jetbrains.kotlin.multiplatform") {
+        extensions.configure<KotlinMultiplatformExtension> {
+            // This project deliberately uses expect/actual classes for its platform backends.
+            compilerOptions.freeCompilerArgs.add("-Xexpect-actual-classes")
+        }
+    }
     if (name in libraries) {
         apply(plugin = "maven-publish")
         plugins.withId("org.jetbrains.kotlin.multiplatform") {

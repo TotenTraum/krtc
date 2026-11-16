@@ -108,6 +108,9 @@ std::function<void()> StartCamera(int index, int width, int height, int fps, Pus
  */
 std::vector<ScreenSource> ScreenSources();
 
+// macOS 14+: a still image via SCScreenshotManager, without starting a stream. -2 means use the legacy path.
+int ScreenThumbnail(int64_t id, bool window, int maxWidth, int maxHeight, uint32_t *argb, int *width, int *height);
+
 /**
  * Starts capturing [id] (a display, or a window if [window]) at up to [fps] into [source], scaled down to at most
  * [maxWidth] × [maxHeight]. Returns a function that stops it, or nullptr if capture is unavailable or not permitted.

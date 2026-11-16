@@ -31,7 +31,7 @@ kotlin {
 }
 
 // The browser test page is compiled into the binary (Kotlin/Native has no classpath resources).
-val generateWeb by tasks.registering {
+val generateWeb = tasks.register("generateWeb") {
     val input = file("src/commonMain/web/index.html")
     val output = layout.buildDirectory.file("generated/web/krtc/sfu/server/WebPage.kt")
     inputs.file(input)

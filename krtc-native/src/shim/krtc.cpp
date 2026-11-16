@@ -605,6 +605,10 @@ KRTC_API int krtc_screen_thumbnail(int64_t id, int window, int max_width, int ma
     return -1; // ReplayKit: starting it would capture (and announce) the app itself
 #else
     if (max_width <= 0 || max_height <= 0) return -1;
+#if defined(__APPLE__)
+    const int snapshot = krtc::ScreenThumbnail(id, window != 0, max_width, max_height, argb, width, height);
+    if (snapshot != -2) return snapshot;
+#endif
     auto source = make_ref_counted<krtc::PushVideoSource>(true);
     FirstFrame first;
     VideoTrackSourceInterface *video = source.get(); // the sink methods are public on the interface

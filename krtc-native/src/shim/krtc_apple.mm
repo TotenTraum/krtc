@@ -21,6 +21,8 @@
 #include "modules/desktop_capture/desktop_capture_options.h"
 #include "modules/desktop_capture/desktop_capturer.h"
 #include "modules/desktop_capture/desktop_frame.h"
+#include "modules/desktop_capture/mac/desktop_frame_utils.h"
+#include "libyuv/scale_argb.h"
 #else
 #import <ReplayKit/ReplayKit.h>
 #endif
@@ -192,7 +194,7 @@ std::function<void()> StartCamera(int index, int width, int height, int fps, Pus
 
 namespace {
 
-API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent();
+API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent(bool cached = false);
 
 webrtc::DesktopCaptureOptions ScreenOptions() {
     webrtc::DesktopCaptureOptions options = webrtc::DesktopCaptureOptions::CreateDefault();
@@ -284,7 +286,8 @@ std::vector<ScreenSource> ScreenSources() {
                 ![app.bundleURL.path hasPrefix:@"/System/Library/"];
             if (regular || userAccessory) applications.insert(app.processIdentifier);
         }
-        return SckSources(content, getpid(), applications);
+        NSArray<NSDictionary *> *info = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID));
+        return SckSources(content, getpid(), applications, info);
     }
     for (bool window : {false, true}) {
         // Listing also runs on a thread of its own (ScreenCaptureKit answers asynchronously on other queues).
@@ -304,7 +307,14 @@ std::vector<ScreenSource> ScreenSources() {
 
 namespace {
 /** ScreenCaptureKit's shareable content, waited for (it answers on another queue). */
-API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent() {
+API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent(bool cached) {
+    static std::mutex cacheLock;
+    static SCShareableContent *lastContent = nil;
+    static std::chrono::steady_clock::time_point lastListed;
+    if (cached) {
+        std::lock_guard<std::mutex> lock(cacheLock);
+        if (lastContent && std::chrono::steady_clock::now() - lastListed < std::chrono::seconds(2)) return lastContent;
+    }
     __block SCShareableContent *content = nil;
     dispatch_semaphore_t listed = dispatch_semaphore_create(0);
     // Include windows on other Spaces and full-screen apps. Do not require a title: it is optional in SCK.
@@ -316,6 +326,11 @@ API_AVAILABLE(macos(13.0)) SCShareableContent *ShareableContent() {
     if (dispatch_semaphore_wait(listed, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) != 0) {
         NSLog(@"krtc: listing screen sources timed out");
         return nil;
+    }
+    if (content) {
+        std::lock_guard<std::mutex> lock(cacheLock);
+        lastContent = content;
+        lastListed = std::chrono::steady_clock::now();
     }
     return content;
 }
@@ -552,6 +567,74 @@ API_AVAILABLE(macos(13.0)) std::function<void()> StartSckScreen(int64_t id, bool
     };
 }
 }  // namespace
+
+int ScreenThumbnail(int64_t id, bool window, int maxWidth, int maxHeight, uint32_t *argb, int *width, int *height) {
+    if (@available(macOS 14.0, *)) {
+        if (!CGPreflightScreenCaptureAccess()) return -1;
+        SCShareableContent *content = ShareableContent(true);
+        if (!content) return -1;
+        SCContentFilter *filter = nil;
+        CGSize size = CGSizeZero;
+        if (window) {
+            for (SCWindow *w in content.windows) {
+                if (static_cast<int64_t>(w.windowID) != id) continue;
+                filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:w];
+                size = w.frame.size;
+                break;
+            }
+        } else {
+            for (SCDisplay *d in content.displays) {
+                if (static_cast<int64_t>(d.displayID) != (id < 0 ? static_cast<int64_t>(CGMainDisplayID()) : id)) continue;
+                filter = [[SCContentFilter alloc] initWithDisplay:d excludingWindows:@[]];
+                size = d.frame.size;
+                break;
+            }
+        }
+        if (!filter || size.width <= 0 || size.height <= 0) return -1;
+        auto [w, h] = Fit(size.width, size.height, maxWidth, maxHeight);
+        SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+        config.width = w;
+        config.height = h;
+        config.showsCursor = NO;
+        // The callback owns this result too: a late screenshot after timeout never writes to the caller's buffer.
+        struct Snapshot {
+            std::mutex lock;
+            dispatch_semaphore_t done = dispatch_semaphore_create(0);
+            CGImageRef image = nullptr;
+            ~Snapshot() { if (image) CGImageRelease(image); }
+        };
+        auto result = std::make_shared<Snapshot>();
+        static std::atomic<int> screenshotsInFlight{0};
+        if (screenshotsInFlight.fetch_add(1) >= 8) {
+            screenshotsInFlight.fetch_sub(1);
+            return -1;
+        }
+        [SCScreenshotManager captureImageWithFilter:filter configuration:config completionHandler:^(CGImageRef image, NSError *error) {
+            if (!error && image) {
+                std::lock_guard<std::mutex> lock(result->lock);
+                result->image = CGImageRetain(image);
+            }
+            screenshotsInFlight.fetch_sub(1);
+            dispatch_semaphore_signal(result->done);
+        }];
+        if (dispatch_semaphore_wait(result->done, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0) return -1;
+        std::unique_ptr<webrtc::DesktopFrame> frame;
+        {
+            std::lock_guard<std::mutex> lock(result->lock);
+            if (!result->image) return -1;
+            frame = webrtc::CreateDesktopFrameFromCGImage(
+                webrtc::ScopedCFTypeRef<CGImageRef>(result->image, webrtc::RetainPolicy::RETAIN));
+        }
+        if (!frame || frame->size().width() <= 0 || frame->size().height() <= 0) return -1;
+        auto [outW, outH] = Fit(frame->size().width(), frame->size().height(), maxWidth, maxHeight);
+        if (libyuv::ARGBScale(frame->data(), frame->stride(), frame->size().width(), frame->size().height(),
+            reinterpret_cast<uint8_t *>(argb), outW * 4, outW, outH, libyuv::kFilterBilinear) != 0) return -1;
+        *width = outW;
+        *height = outH;
+        return 0;
+    }
+    return -2;
+}
 
 std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
     if (!ScreenAuthorized()) return nullptr;

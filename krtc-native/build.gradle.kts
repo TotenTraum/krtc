@@ -133,7 +133,6 @@ val androidJniLibs = tasks.register<AndroidJniLibs>("androidJniLibs") {
 
 kotlin {
     explicitApi()
-    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
     // jvmAndAndroidMain: the JNI backend shared by the desktop JVM and Android.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
     applyDefaultHierarchyTemplate {
