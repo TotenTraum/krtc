@@ -20,11 +20,41 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
+#include <mutex>
+#include <deque>
+
 
 namespace krtc {
 namespace {
 using Microsoft::WRL::ComPtr;
 using namespace webrtc;
+
+// Process-wide, bounded diagnostics survive encoder teardown and are sampled with getStats.
+std::mutex diagnosticMutex;
+std::deque<std::pair<uint64_t, std::string>> diagnosticEvents;
+uint64_t diagnosticSequence = 0;
+void Diagnostic(const std::string& message) {
+    std::lock_guard<std::mutex> lock(diagnosticMutex);
+    diagnosticEvents.emplace_back(++diagnosticSequence, "tMs=" + std::to_string(TimeMillis()) + " tid=" + std::to_string(GetCurrentThreadId()) + " " + message);
+    if (diagnosticEvents.size() > 64) diagnosticEvents.pop_front();
+    std::fprintf(stderr, "krtc encoder: %s\n", message.c_str());
+}
+bool Check(HRESULT hr, const char* operation) {
+    if (SUCCEEDED(hr)) return true;
+    char code[16];
+    std::snprintf(code, sizeof(code), "0x%08lX", static_cast<unsigned long>(hr));
+    Diagnostic(std::string(operation) + " failed hr=" + code);
+    return false;
+}
+std::string JsonString(const std::string& value) {
+    std::string out = "\"";
+    for (unsigned char c : value) {
+        if (c == '\\' || c == '"') out += '\\';
+        if (c < 32) { char hex[7]; std::snprintf(hex, sizeof(hex), "\\u%04x", c); out += hex; }
+        else out += static_cast<char>(c);
+    }
+    return out + "\"";
+}
 
 // Dynamic loading also keeps the complete krtc DLL usable on Windows N without Media Feature Pack.
 struct MfApi {
@@ -48,7 +78,8 @@ MfApi& Api() { static MfApi api; return api; }
 
 struct MfSession {
     HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    bool started = SUCCEEDED(com) && Api().available() && SUCCEEDED(Api().MFStartup(MF_VERSION, MFSTARTUP_FULL));
+    bool started = Check(com, "CoInitializeEx") && Api().available() && Check(Api().MFStartup(MF_VERSION, MFSTARTUP_FULL), "MFStartup");
+    MfSession() { if (!Api().available()) Diagnostic("Media Foundation DLL/entry points unavailable; mfplatLoaded=" + std::to_string(Api().dll != nullptr)); }
     ~MfSession() {
         if (started) Api().MFShutdown();
         if (SUCCEEDED(com)) CoUninitialize();
@@ -61,8 +92,9 @@ struct Activations {
     explicit Activations(bool enabled) {
         MFT_REGISTER_TYPE_INFO input{MFMediaType_Video, MFVideoFormat_NV12};
         MFT_REGISTER_TYPE_INFO output{MFMediaType_Video, MFVideoFormat_H264};
-        if (enabled) Api().MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
-            MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER, &input, &output, &items, &count);
+        if (enabled) Check(Api().MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
+            MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER, &input, &output, &items, &count), "MFTEnumEx NV12/H264 hardware");
+        Diagnostic("hardware MFT candidates=" + std::to_string(count));
     }
     ~Activations() {
         for (UINT32 i = 0; i < count; ++i) items[i]->Release();
@@ -96,7 +128,12 @@ public:
 
     int InitEncode(const VideoCodec* codec, const Settings&) override {
         if (!running_ || !codec || !codec->width || !codec->height || codec->width % 2 || codec->height % 2 ||
-            codec->numberOfSimulcastStreams > 1) return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+            codec->numberOfSimulcastStreams > 1) {
+            Diagnostic("hardware init rejected: invalid/odd dimensions, simulcast or worker unavailable");
+            return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+        }
+        Diagnostic("hardware init " + std::to_string(codec->width) + "x" + std::to_string(codec->height) +
+            " fps=" + std::to_string(codec->maxFramerate) + " startKbps=" + std::to_string(codec->startBitrate));
         const bool ok = thread_->BlockingCall([&] {
             Reset();
             width_ = codec->width;
@@ -106,7 +143,19 @@ public:
             session_ = std::make_unique<MfSession>();
             Activations list(session_->started);
             for (UINT32 i = 0; i < list.count; ++i) {
-                if (SUCCEEDED(list.items[i]->ActivateObject(IID_PPV_ARGS(&transform_))) && Configure()) return true;
+                WCHAR* name = nullptr;
+                if (SUCCEEDED(list.items[i]->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &name, nullptr))) {
+                    const int size = WideCharToMultiByte(CP_UTF8, 0, name, -1, nullptr, 0, nullptr, nullptr);
+                    std::string utf8(size > 0 ? size : 1, '\0');
+                    if (size > 0) WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8.data(), size, nullptr, nullptr);
+                    CoTaskMemFree(name);
+                    utf8.resize(utf8.size() - 1);
+                    Diagnostic("trying MFT=" + utf8);
+                }
+                if (Check(list.items[i]->ActivateObject(IID_PPV_ARGS(&transform_)), "ActivateObject") && Configure()) {
+                    Diagnostic("hardware init successful");
+                    return true;
+                }
                 events_.Reset();
                 codecApi_.Reset();
                 transform_.Reset();
@@ -115,7 +164,7 @@ public:
             Reset();
             return false;
         });
-        if (!ok) std::fprintf(stderr, "krtc: Media Foundation H264 unavailable for this stream; using software\n");
+        if (!ok) Diagnostic("hardware init failed; fallback=software");
         return ok ? WEBRTC_VIDEO_CODEC_OK : WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
     }
 
@@ -139,7 +188,7 @@ public:
         });
         if (paused) return WEBRTC_VIDEO_CODEC_OK;
         if (!image) {
-            std::fprintf(stderr, "krtc: Media Foundation H264 encode failed; switching to software\n");
+            Diagnostic("hardware encode failed; fallback=software stage=" + stage_);
             return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
         }
         image->SetEncodeTime(encodeStart, TimeMillis());
@@ -192,40 +241,40 @@ private:
         VARIANT v{};
         v.vt = VT_UI4;
         v.ulVal = value;
-        return codecApi_ && SUCCEEDED(codecApi_->SetValue(&key, &v));
+        return codecApi_ && Check(codecApi_->SetValue(&key, &v), "codecApi_->SetValue");
     }
     bool Configure() {
         ComPtr<IMFAttributes> attrs;
-        if (FAILED(transform_->GetAttributes(&attrs)) ||
-            FAILED(attrs->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE)) ||
-            FAILED(transform_.As(&events_)) || FAILED(transform_.As(&codecApi_))) return false;
+        if (!Check(transform_->GetAttributes(&attrs), "transform_->GetAttributes") ||
+            !Check(attrs->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE), "attrs->SetUINT32") ||
+            !Check(transform_.As(&events_), "transform_.As") || !Check(transform_.As(&codecApi_), "transform_.As")) return false;
         VARIANT lowLatency{};
         lowLatency.vt = VT_BOOL;
         lowLatency.boolVal = VARIANT_TRUE;
-        if (FAILED(codecApi_->SetValue(&CODECAPI_AVLowLatencyMode, &lowLatency))) return false;
+        if (!Check(codecApi_->SetValue(&CODECAPI_AVLowLatencyMode, &lowLatency), "codecApi_->SetValue")) return false;
         SetUInt(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR);
         SetUInt(CODECAPI_AVEncMPVDefaultBPictureCount, 0);
         SetUInt(CODECAPI_AVEncMPVGOPSize, fps_ * 2);
 
         ComPtr<IMFMediaType> output, input;
         if (!MediaType(&output, MFVideoFormat_H264) ||
-            FAILED(output->SetUINT32(MF_MT_AVG_BITRATE, bitrate_)) ||
-            FAILED(output->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base)) ||
-            FAILED(transform_->SetOutputType(0, output.Get(), 0)) || !MediaType(&input, MFVideoFormat_NV12) ||
-            FAILED(transform_->SetInputType(0, input.Get(), 0))) return false;
+            !Check(output->SetUINT32(MF_MT_AVG_BITRATE, bitrate_), "output->SetUINT32") ||
+            !Check(output->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base), "output->SetUINT32") ||
+            !Check(transform_->SetOutputType(0, output.Get(), 0), "transform_->SetOutputType") || !MediaType(&input, MFVideoFormat_NV12) ||
+            !Check(transform_->SetInputType(0, input.Get(), 0), "transform_->SetInputType")) return false;
         SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_);
-        return SUCCEEDED(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)) &&
-               SUCCEEDED(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0));
+        return Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0), "transform_->ProcessMessage") &&
+               Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0), "transform_->ProcessMessage");
     }
     bool MediaType(IMFMediaType** out, const GUID& subtype) {
-        if (FAILED(Api().MFCreateMediaType(out))) return false;
+        if (!Check(Api().MFCreateMediaType(out), "MFCreateMediaType")) return false;
         auto* type = *out;
-        return SUCCEEDED(type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video)) &&
-               SUCCEEDED(type->SetGUID(MF_MT_SUBTYPE, subtype)) &&
-               SUCCEEDED(type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive)) &&
-               SUCCEEDED(MFSetAttributeSize(type, MF_MT_FRAME_SIZE, width_, height_)) &&
-               SUCCEEDED(MFSetAttributeRatio(type, MF_MT_FRAME_RATE, fps_, 1)) &&
-               SUCCEEDED(MFSetAttributeRatio(type, MF_MT_PIXEL_ASPECT_RATIO, 1, 1));
+        return Check(type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video), "type->SetGUID") &&
+               Check(type->SetGUID(MF_MT_SUBTYPE, subtype), "type->SetGUID") &&
+               Check(type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive), "type->SetUINT32") &&
+               Check(MFSetAttributeSize(type, MF_MT_FRAME_SIZE, width_, height_), "MFSetAttributeSize") &&
+               Check(MFSetAttributeRatio(type, MF_MT_FRAME_RATE, fps_, 1), "MFSetAttributeRatio") &&
+               Check(MFSetAttributeRatio(type, MF_MT_PIXEL_ASPECT_RATIO, 1, 1), "MFSetAttributeRatio");
     }
     bool Wait(MediaEventType wanted) {
         if (wanted == METransformNeedInput && needInput_) { --needInput_; return true; }
@@ -235,60 +284,73 @@ private:
             ComPtr<IMFMediaEvent> event;
             HRESULT hr = events_->GetEvent(MF_EVENT_FLAG_NO_WAIT, &event);
             if (hr == MF_E_NO_EVENTS_AVAILABLE) { Sleep(1); continue; }
-            if (FAILED(hr)) return false;
+            if (!Check(hr, "GetEvent")) return false;
             MediaEventType type;
             HRESULT status;
-            if (FAILED(event->GetType(&type)) || FAILED(event->GetStatus(&status)) || FAILED(status) || type == MEError) return false;
+            if (!Check(event->GetType(&type), "event->GetType") || !Check(event->GetStatus(&status), "event->GetStatus") || !Check(status, "status") || type == MEError) return false;
             if (type == wanted) return true;
             if (type == METransformNeedInput) ++needInput_;
         }
+        Diagnostic("MFT event timeout wanted=" + std::to_string(wanted));
         return false;
     }
     std::optional<EncodedImage> EncodeFrame(const VideoFrame& frame, bool key) {
+        stage_ = "input validation / rate update";
         if (!transform_ || failed_ || frame.width() != width_ || frame.height() != height_) return std::nullopt;
         if (paused_) return std::nullopt;
+        stage_ = "convert / wait input";
         auto i420 = frame.video_frame_buffer()->ToI420();
         if (!i420 || !Wait(METransformNeedInput)) return std::nullopt;
         if (key && !SetUInt(CODECAPI_AVEncVideoForceKeyFrame, TRUE)) return std::nullopt;
         ComPtr<IMFSample> input;
         ComPtr<IMFMediaBuffer> pixels;
         const DWORD size = width_ * height_ * 3 / 2;
-        if (FAILED(Api().MFCreateSample(&input)) || FAILED(Api().MFCreateMemoryBuffer(size, &pixels))) return std::nullopt;
+        if (!Check(Api().MFCreateSample(&input), "MFCreateSample") || !Check(Api().MFCreateMemoryBuffer(size, &pixels), "MFCreateMemoryBuffer")) return std::nullopt;
         BYTE* data = nullptr;
-        if (FAILED(pixels->Lock(&data, nullptr, nullptr))) return std::nullopt;
+        if (!Check(pixels->Lock(&data, nullptr, nullptr), "pixels->Lock")) return std::nullopt;
         int converted = libyuv::I420ToNV12(i420->DataY(), i420->StrideY(), i420->DataU(), i420->StrideU(),
             i420->DataV(), i420->StrideV(), data, width_, data + width_ * height_, width_, width_, height_);
         pixels->Unlock();
         const LONGLONG duration = 10000000LL / fps_;
-        if (converted || FAILED(pixels->SetCurrentLength(size)) || FAILED(input->AddBuffer(pixels.Get())) ||
-            FAILED(input->SetSampleTime(time_)) || FAILED(input->SetSampleDuration(duration)) ||
-            FAILED(transform_->ProcessInput(0, input.Get(), 0)) || !Wait(METransformHaveOutput)) return std::nullopt;
+        stage_ = "submit input / wait output";
+        if (converted || !Check(pixels->SetCurrentLength(size), "pixels->SetCurrentLength") || !Check(input->AddBuffer(pixels.Get()), "input->AddBuffer") ||
+            !Check(input->SetSampleTime(time_), "input->SetSampleTime") || !Check(input->SetSampleDuration(duration), "input->SetSampleDuration") ||
+            !Check(transform_->ProcessInput(0, input.Get(), 0), "transform_->ProcessInput") || !Wait(METransformHaveOutput)) return std::nullopt;
 
+        stage_ = "read output";
         ComPtr<IMFSample> output = ReadOutput();
         if (!output) return std::nullopt;
+        stage_ = "output timestamp / bitstream";
         LONGLONG outputTime;
-        if (FAILED(output->GetSampleTime(&outputTime)) || outputTime != time_) return std::nullopt;
+        if (!Check(output->GetSampleTime(&outputTime), "output->GetSampleTime")) return std::nullopt;
+        if (outputTime != time_) {
+            Diagnostic("output timestamp mismatch expected=" + std::to_string(time_) + " actual=" + std::to_string(outputTime));
+            return std::nullopt;
+        }
         time_ += duration;
         ComPtr<IMFMediaBuffer> buffer;
-        if (FAILED(output->ConvertToContiguousBuffer(&buffer))) return std::nullopt;
+        if (!Check(output->ConvertToContiguousBuffer(&buffer), "output->ConvertToContiguousBuffer")) return std::nullopt;
         DWORD length = 0;
-        if (FAILED(buffer->Lock(&data, nullptr, &length))) return std::nullopt;
+        if (!Check(buffer->Lock(&data, nullptr, &length), "buffer->Lock")) return std::nullopt;
         std::vector<uint8_t> bytes;
         bool valid = H264AnnexB(data, length, bytes);
         buffer->Unlock();
-        if (!valid) return std::nullopt;
+        if (!valid) { Diagnostic("invalid H264 output bitstream"); return std::nullopt; }
         const bool idr = H264HasNal(bytes, 5);
         if (idr && (!H264HasNal(bytes, 7) || !H264HasNal(bytes, 8))) {
             ComPtr<IMFMediaType> type;
             UINT32 headerSize = 0;
-            if (FAILED(transform_->GetOutputCurrentType(0, &type)) ||
-                FAILED(type->GetBlobSize(MF_MT_MPEG_SEQUENCE_HEADER, &headerSize))) return std::nullopt;
+            if (!Check(transform_->GetOutputCurrentType(0, &type), "transform_->GetOutputCurrentType") ||
+                !Check(type->GetBlobSize(MF_MT_MPEG_SEQUENCE_HEADER, &headerSize), "type->GetBlobSize")) return std::nullopt;
             std::vector<uint8_t> raw(headerSize);
-            if (FAILED(type->GetBlob(MF_MT_MPEG_SEQUENCE_HEADER, raw.data(), headerSize, nullptr)) ||
+            if (!Check(type->GetBlob(MF_MT_MPEG_SEQUENCE_HEADER, raw.data(), headerSize, nullptr), "type->GetBlob") ||
                 !H264AnnexB(raw.data(), raw.size(), headers_) || !H264HasNal(headers_, 7) || !H264HasNal(headers_, 8)) return std::nullopt;
             bytes.insert(bytes.begin(), headers_.begin(), headers_.end());
         }
-        if ((key && !idr) || (idr && (!H264HasConstrainedBaselineSps(bytes) || !H264HasNal(bytes, 8)))) return std::nullopt;
+        if ((key && !idr) || (idr && (!H264HasConstrainedBaselineSps(bytes) || !H264HasNal(bytes, 8)))) {
+            Diagnostic("H264 output rejected: keyframe/profile/SPS/PPS requirements; requestedKey=" + std::to_string(key) + " idr=" + std::to_string(idr));
+            return std::nullopt;
+        }
         EncodedImage image;
         image.SetEncodedData(EncodedImageBuffer::Create(bytes.data(), bytes.size()));
         image.SetRtpTimestamp(frame.rtp_timestamp());
@@ -303,14 +365,14 @@ private:
     ComPtr<IMFSample> ReadOutput() {
         for (int attempt = 0; attempt < 2; ++attempt) {
             MFT_OUTPUT_STREAM_INFO stream{};
-            if (FAILED(transform_->GetOutputStreamInfo(0, &stream))) return {};
+            if (!Check(transform_->GetOutputStreamInfo(0, &stream), "transform_->GetOutputStreamInfo")) return {};
             ComPtr<IMFSample> supplied;
             if (!(stream.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES)) {
                 ComPtr<IMFMediaBuffer> buffer;
-                if (FAILED(Api().MFCreateSample(&supplied)) ||
-                    FAILED(Api().MFCreateAlignedMemoryBuffer(std::max(stream.cbSize, DWORD(width_ * height_ * 3 / 2)),
-                        stream.cbAlignment ? stream.cbAlignment - 1 : 0, &buffer)) ||
-                    FAILED(supplied->AddBuffer(buffer.Get()))) return {};
+                if (!Check(Api().MFCreateSample(&supplied), "MFCreateSample") ||
+                    !Check(Api().MFCreateAlignedMemoryBuffer(std::max(stream.cbSize, DWORD(width_ * height_ * 3 / 2)),
+                        stream.cbAlignment ? stream.cbAlignment - 1 : 0, &buffer), "Api") ||
+                    !Check(supplied->AddBuffer(buffer.Get()), "supplied->AddBuffer")) return {};
             }
             MFT_OUTPUT_DATA_BUFFER result{};
             result.pSample = supplied.Get();
@@ -323,12 +385,12 @@ private:
             if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                 ComPtr<IMFMediaType> type;
                 GUID subtype{};
-                if (FAILED(transform_->GetOutputAvailableType(0, 0, &type)) ||
-                    FAILED(type->GetGUID(MF_MT_SUBTYPE, &subtype)) || subtype != MFVideoFormat_H264 ||
-                    FAILED(transform_->SetOutputType(0, type.Get(), 0))) return {};
+                if (!Check(transform_->GetOutputAvailableType(0, 0, &type), "transform_->GetOutputAvailableType") ||
+                    !Check(type->GetGUID(MF_MT_SUBTYPE, &subtype), "type->GetGUID") || subtype != MFVideoFormat_H264 ||
+                    !Check(transform_->SetOutputType(0, type.Get(), 0), "transform_->SetOutputType")) return {};
                 continue;
             }
-            return SUCCEEDED(hr) ? output : ComPtr<IMFSample>{};
+            return Check(hr, "ProcessOutput") ? output : ComPtr<IMFSample>{};
         }
         return {};
     }
@@ -340,6 +402,7 @@ private:
     ComPtr<IMFTransform> transform_;
     ComPtr<IMFMediaEventGenerator> events_;
     ComPtr<ICodecAPI> codecApi_;
+    std::string stage_;
     int width_ = 0, height_ = 0;
     UINT32 fps_ = 30, bitrate_ = 0, needInput_ = 0;
     LONGLONG time_ = 0;
@@ -360,12 +423,27 @@ public:
     }
     std::unique_ptr<VideoEncoder> Create(const Environment& env, const SdpVideoFormat& format) override {
         auto software = software_->Create(env, format);
-        if (!software || !HardwareFormat(format) || !HardwareAvailable()) return software;
+        if (!software || !HardwareFormat(format) || !HardwareAvailable()) {
+            Diagnostic("create codec=" + format.name + " hardwareFormat=" + std::to_string(HardwareFormat(format)) + " implementation=software");
+            return software;
+        }
+        Diagnostic("create codec=H264 implementation=MediaFoundation with software fallback");
         return CreateVideoEncoderSoftwareFallbackWrapper(env, std::move(software), std::make_unique<MfH264Encoder>(), false);
     }
 private:
     std::unique_ptr<VideoEncoderFactory> software_;
 };
+}
+
+std::string WindowsEncoderDiagnosticsJson() {
+    std::lock_guard<std::mutex> lock(diagnosticMutex);
+    std::string result;
+    for (const auto& entry : diagnosticEvents) {
+        if (!result.empty()) result += ",";
+        result += "{\"id\":\"krtc-encoder-" + std::to_string(entry.first) +
+            "\",\"type\":\"krtc-encoder-diagnostic\",\"timestamp\":0,\"message\":" + JsonString(entry.second) + "}";
+    }
+    return result;
 }
 
 std::unique_ptr<webrtc::VideoEncoderFactory> WindowsVideoEncoderFactory(

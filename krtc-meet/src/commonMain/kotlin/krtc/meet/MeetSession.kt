@@ -415,6 +415,19 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         @Suppress("NAME_SHADOWING")
         val settings = settings.copy(server = normalizeServer(settings.server))
         this.settings = settings
+        diagnosticCallId = kotlin.random.Random.nextLong().toULong().toString(16)
+        diagnosticOutgoing = null
+        diagnosticStreams.clear()
+        screenDiagnostics.reset(mapOf("callId" to diagnosticCallId, "room" to settings.room,
+            "clientVersion" to BuildInfo.VERSION, "clientRevision" to BuildInfo.REVISION,
+            "platform" to platformName(), "startedEpochMs" to kotlin.time.Clock.System.now().toEpochMilliseconds().toString()))
+        val environmentCall = diagnosticCallId
+        scope.launch {
+            val environment = withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching { diagnosticEnvironment() }.getOrElse { mapOf("environmentProbeError" to it.toString()) }
+            }
+            if (diagnosticCallId == environmentCall) screenDiagnostics.context(environment)
+        }
         phaseFlow.value = CallPhase.Joining
         val attempt = ++joinAttempt
         rememberJoin(settings)
@@ -438,7 +451,9 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 val f = if (shared) offUi { platform() } else offUi({ it.close() }) { platform.createFactory(settings.testAudio) }.also { callFactory = it }
                 factory = f
                 log("factory ready (${if (shared) "system audio, shared" else "per call"})")
-                log("video codecs available=${offUi { f.videoCodecs }} preference=${f.preferredVideoCodec ?: "auto"}")
+                val availableCodecs = offUi { f.videoCodecs }
+                log("video codecs available=$availableCodecs preference=${f.preferredVideoCodec ?: "auto"}")
+                screenDiagnostics.context(mapOf("availableCodecs" to availableCodecs.toString(), "codecPreference" to (f.preferredVideoCodec ?: "auto")))
                 offUi {
                     if (settings.testAudio) f.setTestTone(true)
                     applyProcessing(f, processing)
@@ -507,6 +522,10 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                         }
                     }
                     launch { watchConnection(c) }
+                    launch {
+                        // Independent of getStats: a missing native callback must not disable startup timeouts.
+                        while (true) { kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS); screenDiagnostics.tick() }
+                    }
                     launch { logFrames() }
                     launch { watchInput() }
                     launch { c.selfSpeaking.collect { selfSpeakingFlow.value = it } }
@@ -520,8 +539,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                     }
                     c.state.collectLatest { s ->
                         log("room state $s")
+                        screenDiagnostics.event("room_state", mapOf("state" to s.toString()))
                         when (s) {
                             is RoomState.Connected -> {
+                                screenDiagnostics.context(mapOf("selfId" to s.selfId, "room" to s.room))
+                                log("diagnostic correlation: callId=$diagnosticCallId room=${s.room} selfId=${s.selfId}")
                                 reconnectingFlow.value = null
                                 phaseFlow.value = CallPhase.InCall(s.room)
                             }
@@ -703,37 +725,97 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     /** A picker's still image of [choice]: captures briefly, so call it off the UI thread. */
     fun screenThumbnail(choice: ScreenChoice): VideoFrame? = runCatching { platform.screenThumbnail(choice, THUMB_WIDTH, THUMB_HEIGHT) }.getOrNull()
 
+    private var diagnosticCallId = "idle"
+    private val diagnosticStreams = mutableMapOf<String, String>() // peer -> current screen track
+    private var diagnosticOutgoing: String? = null
+    private val screenDiagnostics = ScreenDiagnostics { id, report ->
+        val phase = report["completion"].toString()
+        ClientLog.w("screen-report", "id=$id phase=$phase reason=${report["reason"]} stream=${report["stream"]}")
+        val text = report.toString()
+        val chunks = text.chunked(6000)
+        chunks.forEachIndexed { i, chunk -> ClientLog.w("screen-report", "id=$id phase=$phase part=${i + 1}/${chunks.size} json=$chunk") }
+        teardownScope.launch {
+            val path = saveDiagnosticReport(id, text)
+            ClientLog.i("screen-report", "id=$id saved=${path ?: "log_only_or_save_failed"}")
+        }
+    }
+
+    private val screenMutex = Mutex()
+    private var screenRequest = 0L
+
     /** Shares [choice] (with the system's sound if [withAudio]); replaces a running share. */
     @Traced
     fun startScreen(choice: ScreenChoice, withAudio: Boolean) {
         val f = factory ?: return
         val c = client ?: return
+        val request = ++screenRequest
+        diagnosticOutgoing?.let(screenDiagnostics::stop)
+        val diagnosticKey = "out:$request"
+        diagnosticOutgoing = diagnosticKey
+        screenDiagnostics.start(diagnosticKey, mapOf("direction" to "out", "attempt" to request.toString(),
+            "source" to choice.label, "sourceId" to (choice.source?.id?.toString() ?: "system_picker"),
+            "window" to choice.isWindow.toString(), "requestedFps" to screenFpsFlow.value.toString(),
+            "requestedHeight" to screenHeightFlow.value.toString(), "withAudio" to withAudio.toString()), screenFpsFlow.value)
+        val fps = screenFpsFlow.value
+        val height = screenHeightFlow.value
+        log("screen start requested: request=$request source=${choice.label} id=${choice.source} window=${choice.isWindow} audio=$withAudio size=${height * 16 / 9}x$height fps=$fps")
         scope.launch {
-            val height = screenHeightFlow.value
-            val opened = runCatching { platform.openScreen(f, choice, withAudio, screenFpsFlow.value, height * 16 / 9, height) }.getOrNull()
-            if (opened == null) {
-                noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
-                return@launch
+            try {
+                screenMutex.withLock {
+                    if (client !== c || request != screenRequest) return@launch
+                    val opened = runCatching { platform.openScreen(f, choice, withAudio, fps, height * 16 / 9, height) }.onFailure {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        screenDiagnostics.event("capture_exception", mapOf("stream" to diagnosticKey, "error" to it.toString()))
+                        log("screen capture failed: request=$request ${it.stackTraceToString()}")
+                    }.getOrNull()
+                    if (opened == null) {
+                        screenDiagnostics.failure(diagnosticKey, "capture_open_failed")
+                        log("screen capture unavailable: request=$request source=${choice.label}")
+                        noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
+                        return@launch
+                    }
+                    if (client !== c || request != screenRequest) {
+                        screenDiagnostics.event("start_superseded", mapOf("stream" to diagnosticKey))
+                        log("screen start superseded: request=$request")
+                        return@launch teardown { opened.close() }
+                    }
+                    screenDiagnostics.event("capture_opened", mapOf("stream" to diagnosticKey))
+                    val (video, audio) = offUi({ (v, a) -> v.release(); a?.release(); opened.close() }) {
+                        // 30 and 60 fps are for motion (video, games): encoded like a camera. As screen content (libwebrtc's
+                        // default for a screen) the encoder keeps every detail and drops frames, down to a few per second.
+                        val v = f.createVideoTrack(opened.video, "screen")
+                        try {
+                            v.contentHint = if (fps >= 30) "motion" else "detail"
+                            v to opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
+                        } catch (t: Throwable) { v.release(); opened.close(); throw t }
+                    }
+                    if (client !== c || request != screenRequest) return@launch teardown { video.release(); audio?.release(); opened.close() }
+                    if (withAudio && audio == null) noticeFlow.value = "Звук экрана на этой платформе недоступен, показ без звука"
+                    val parameters = screenSendParameters(fps, height)
+                    log("screen attaching: request=$request track=${video.id} audio=${audio?.id} parameters=$parameters")
+                    runCatching { withContext(native) { c.setScreen(video, audio, parameters) } }.onFailure {
+                        teardown { video.release(); audio?.release(); opened.close() }
+                        screenDiagnostics.failure(diagnosticKey, "track_attach_failed", it.toString())
+                        log("screen attach failed: request=$request ${it.stackTraceToString()}")
+                        noticeFlow.value = "Не удалось начать показ экрана: ${it.message}"
+                        return@launch
+                    }
+                    if (client !== c) return@launch teardown { video.release(); audio?.release(); opened.close() }
+                    releaseScreen()
+                    openedScreen = opened
+                    screenTrack = video
+                    screenAudioTrack = audio
+                    screenFlow.value = video
+                    screenDiagnostics.event("track_attached", mapOf("stream" to diagnosticKey, "trackId" to video.id, "parameters" to parameters.toString()))
+                    log("screen attached: request=$request track=${video.id}")
+                }
+            } catch (t: kotlinx.coroutines.CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                screenDiagnostics.failure(diagnosticKey, "screen_start_exception", t.toString())
+                log("screen start exception: request=$request ${t.stackTraceToString()}")
+                noticeFlow.value = "Не удалось начать показ экрана: ${t.message}"
             }
-            if (client !== c) return@launch teardown { opened.close() } // the call ended meanwhile
-            val (video, audio) = offUi({ (v, a) -> v.release(); a?.release(); opened.close() }) {
-                // 30 and 60 fps are for motion (video, games): encoded like a camera. As screen content (libwebrtc's
-                // default for a screen) the encoder keeps every detail and drops frames, down to a few per second.
-                f.createVideoTrack(opened.video, "screen").also { it.contentHint = if (screenFpsFlow.value >= 30) "motion" else "detail" } to
-                    opened.audio?.let { f.createAudioTrack(it, "screen-audio") }
-            }
-            if (withAudio && audio == null) noticeFlow.value = "Звук экрана на этой платформе недоступен, показ без звука"
-            val parameters = screenSendParameters(screenFpsFlow.value, height)
-            runCatching { withContext(native) { c.setScreen(video, audio, parameters) } }.onFailure {
-                teardown { video.release(); audio?.release(); opened.close() }
-                noticeFlow.value = "Не удалось начать показ экрана: ${it.message}"
-                return@launch
-            }
-            releaseScreen()
-            openedScreen = opened
-            screenTrack = video
-            screenAudioTrack = audio
-            screenFlow.value = video
         }
     }
 
@@ -756,14 +838,26 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     @Traced
     fun stopScreen() {
         val c = client
+        val request = ++screenRequest
+        diagnosticOutgoing?.let(screenDiagnostics::stop)
+        diagnosticOutgoing = null
+        screenDiagnostics.event("stop_requested", mapOf("attempt" to request.toString()))
+        log("screen stop requested: request=$request")
         scope.launch {
-            runCatching { withContext(native) { c?.setScreen(null) } }
-            releaseScreen()
+            screenMutex.withLock {
+                if (client !== c) return@launch
+                runCatching { withContext(native) { c?.setScreen(null) } }.onFailure {
+                    log("screen detach failed: ${it.stackTraceToString()}")
+                }
+                releaseScreen()
+                log("screen stopped: request=$request")
+            }
         }
     }
 
     private fun releaseScreen() {
         screenFlow.value = null
+        screenSendFlow.value = null
         val video = screenTrack
         val audio = screenAudioTrack
         val opened = openedScreen
@@ -852,19 +946,76 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         var sentBytes = -1L
         val dropped = HashMap<String, Long>()
         val codecs = CodecDiagnostics()
+        val nativeDiagnosticIds = HashSet<String>()
+        var previousScreen: krtc.core.RTCStats? = null
+        var missingScreenSamples = 0
+        var lastDiagnosticTick = kotlin.time.TimeSource.Monotonic.markNow()
         while (true) {
             kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS)
+            val gapMs = lastDiagnosticTick.elapsedNow().inWholeMilliseconds
+            lastDiagnosticTick = kotlin.time.TimeSource.Monotonic.markNow()
+            if (gapMs > STATS_INTERVAL_MILLIS * 2) screenDiagnostics.event("sampling_delay_or_sleep", mapOf("gapMs" to gapMs.toString()))
+            screenDiagnostics.tick()
             val pc = c.peerConnection ?: continue
-            val report = runCatching { pc.getStats() }.getOrNull() ?: continue
-            codecs.sample(report, pc.remoteDescription?.sdp, pc.localDescription?.sdp).forEach(::log)
+            val report = runCatching { pc.getStats() }.onFailure { log("stats failed: ${it.message}"); screenDiagnostics.event("stats_failed", mapOf("error" to it.toString())) }.getOrNull() ?: continue
+            report.values.filter { it.type == "krtc-encoder-diagnostic" }.forEach {
+                if (nativeDiagnosticIds.add(it.id)) {
+                    log("native encoder: ${it.members["message"]}")
+                    screenDiagnostics.event("native_encoder", mapOf("message" to it.members["message"].toString()))
+                }
+            }
+            codecs.sample(report, pc.remoteDescription?.sdp, pc.localDescription?.sdp).forEach {
+                log(it)
+                screenDiagnostics.event("codec_selection", mapOf("message" to it))
+            }
             fun Any?.num(): Double? = (this as? Number)?.toDouble()
+            val resources = withContext(native) {
+                runCatching { diagnosticResources() }.getOrElse { mapOf("probeError" to it.toString()) }
+            }
+            val activeIncoming = participantsFlow.value.filter { it.screen.value != null && it.screenSubscribed.value }
+            for ((peer, track) in diagnosticStreams.toMap()) {
+                if (activeIncoming.none { it.id == peer && it.screen.value?.id == track }) {
+                    screenDiagnostics.stop("in:$peer:$track")
+                    diagnosticStreams.remove(peer)
+                }
+            }
+            for (peer in activeIncoming) {
+                val track = peer.screen.value ?: continue
+                if (diagnosticStreams[peer.id] != track.id) {
+                    diagnosticStreams[peer.id] = track.id
+                    screenDiagnostics.start("in:${peer.id}:${track.id}", mapOf("direction" to "in", "publisherId" to peer.id, "trackId" to track.id))
+                }
+                val incoming = report.values.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" &&
+                    (it.members["mid"] as? String)?.let { mid -> mid.startsWith("s") && c.participantOfMid(mid) == peer.id } == true }
+                val delivered = (track as? NativeTrack)?.videoStats()?.frames
+                screenDiagnostics.sample("in:${peer.id}:${track.id}", ScreenDiagnostics.stats(report, incoming) +
+                    resources.mapKeys { "process.${it.key}" } + mapOf("deliveredFrames" to delivered),
+                    incoming?.members?.get("framesPerSecond").num(), (delivered ?: 0) > 0)
+            }
             // The screen share going out (uplink m-line "s") and the capture behind it (its media-source).
             val out = report.values.firstOrNull { it.type == "outbound-rtp" && it.members["mid"] == "s" && it.members["kind"] == "video" }
             val bytes = out?.members?.get("bytesSent").num()?.toLong()
+            diagnosticOutgoing?.let { key ->
+                val source = (out?.members?.get("mediaSourceId") as? String)?.let { report[it] }
+                val data = ScreenDiagnostics.stats(report, out.takeIf { screenFlow.value != null }) + resources.mapKeys { "process.${it.key}" }
+                screenDiagnostics.sample(key, data, out?.members?.get("framesPerSecond").num(),
+                    (out?.members?.get("framesSent").num() ?: 0.0) > 0 && screenFlow.value != null,
+                    source?.members?.get("framesPerSecond").num())
+            }
+            nativeDiagnosticIds.retainAll(report.keys)
             if (out == null || screenFlow.value == null || bytes == null) {
                 screenSendFlow.value = null
                 sentBytes = -1
+                previousScreen = null
+                if (screenFlow.value != null) {
+                    missingScreenSamples++
+                    if (missingScreenSamples == 1 || missingScreenSamples % 5 == 0) {
+                        val uplinks = withContext(native) { pc.getTransceivers().filter { it.mid == "s" || it.mid == "sa" }.map { "mid=${it.mid} direction=${it.direction} track=${it.sender.track?.id}" } }
+                        log("screen awaiting RTP: samples=$missingScreenSamples uplinks=$uplinks")
+                    }
+                } else missingScreenSamples = 0
             } else {
+                missingScreenSamples = 0
                 val source = (out.members["mediaSourceId"] as? String)?.let { report[it] }
                 val info = StreamSendInfo(
                     width = out.members["frameWidth"].num()?.toInt() ?: 0,
@@ -878,6 +1029,17 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 sentBytes = bytes
                 screenSendFlow.value = info
                 log("screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} codec=${CodecDiagnostics.selected(report, out)} encoder=${info.encoder} ${info.bitrateKbps}kbps")
+                val old = previousScreen?.takeIf { it.id == out.id }
+                fun delta(key: String): Double? = out.members[key].num()?.let { value -> old?.members?.get(key).num()?.let { value - it } }?.takeIf { it >= 0 }
+                val encoded = delta("framesEncoded")
+                val encodeMs = if (encoded != null && encoded > 0) delta("totalEncodeTime")?.let { it * 1000 / encoded } else null
+                val transport = (out.members["transportId"] as? String)?.let { report[it] }
+                val pair = (transport?.members?.get("selectedCandidatePairId") as? String)?.let { report[it] }
+                val feedback = (out.members["remoteId"] as? String)?.let { report[it] }
+                val local = (pair?.members?.get("localCandidateId") as? String)?.let { report[it] }
+                val remote = (pair?.members?.get("remoteCandidateId") as? String)?.let { report[it] }
+                log("screen diagnostics: targetBps=${out.members["targetBitrate"]} availableBps=${pair?.members?.get("availableOutgoingBitrate")} encodeMs=$encodeMs encodedDelta=$encoded sentDelta=${delta("framesSent")} sourceFrames=${source?.members?.get("frames")} remoteLost=${feedback?.members?.get("packetsLost")} remoteFractionLost=${feedback?.members?.get("fractionLost")} nackDelta=${delta("nackCount")} pliDelta=${delta("pliCount")} retransmitBytesDelta=${delta("retransmittedBytesSent")} sendDelayDelta=${delta("totalPacketSendDelay")} limitationDurations=${out.members["qualityLimitationDurations"]} resolutionChanges=${out.members["qualityLimitationResolutionChanges"]} transport=${local?.members?.get("protocol")} localType=${local?.members?.get("candidateType")} remoteType=${remote?.members?.get("candidateType")} rtt=${pair?.members?.get("currentRoundTripTime")}")
+                previousScreen = out
             }
             // Screen shares coming in: what arrives, the decoder, frames dropped before showing.
             for (s in report.values) {
@@ -1111,6 +1273,8 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
 
     private fun end(reason: String?) {
         log("call ended: $reason")
+        screenDiagnostics.event("call_ended", mapOf("reason" to reason.orEmpty()))
+        screenDiagnostics.flush("call_ended")
         // What happened up to the end, including why it ended, still goes out; then the uploader stops.
         uploader?.let { u ->
             uploader = null
@@ -1124,7 +1288,12 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         joining = null
         watch?.cancel()
         watch = null
+        diagnosticOutgoing?.let(screenDiagnostics::stop)
+        diagnosticOutgoing = null
+        diagnosticStreams.forEach { (peer, track) -> screenDiagnostics.stop("in:$peer:$track") }
+        diagnosticStreams.clear()
         val leaving = client
+        ++screenRequest // invalidate any capture still opening
         client = null
         teardown { leaving?.leave() } // closes the peer connection: native, so not on the UI thread
         releaseScreen()

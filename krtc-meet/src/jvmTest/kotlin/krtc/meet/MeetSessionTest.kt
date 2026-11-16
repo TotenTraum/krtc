@@ -53,8 +53,10 @@ class MeetSessionTest {
     private val logDir = java.nio.file.Files.createTempDirectory("krtc-client-logs").toFile()
 
     /** Synthetic audio, and a "screen" of pushed frames: no devices or permissions needed. [static]: always the same picture. */
-    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings(), private val noise: Boolean = false, private val screenTone: Boolean = false) : MediaPlatform {
+    private class TestPlatform(private val static: Boolean = false, override val settings: SettingsStore = MemorySettings(), private val noise: Boolean = false, private val screenTone: Boolean = false, private val openGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null, private val captureFails: Boolean = false) : MediaPlatform {
         val factories = mutableListOf<NativePeerConnectionFactory>()
+        val opening = kotlinx.coroutines.CompletableDeferred<Unit>()
+        private var openedOnce = false
         override val sharedSystemAudio = false
         override fun createFactory(testAudio: Boolean) = NativePeerConnectionFactory(AudioDevice.SYNTHETIC).also { factories += it }
         override fun cameras() = emptyList<CameraChoice.Device>()
@@ -62,7 +64,13 @@ class MeetSessionTest {
         override fun screens() = listOf(ScreenChoice("test"))
         override suspend fun openScreen(
             factory: NativePeerConnectionFactory, choice: ScreenChoice, withAudio: Boolean, fps: Int, maxWidth: Int, maxHeight: Int,
-        ): OpenedScreen {
+        ): OpenedScreen? {
+            if (captureFails) return null
+            if (!openedOnce) {
+                openedOnce = true
+                opening.complete(Unit)
+                openGate?.await()
+            }
             val source = factory.createScreencastSource()
             val capture: AutoCloseable = if (noise) NoisePusher(source, fps) else Pusher(source, fps, static)
             val audio = if (withAudio && screenTone) factory.createAudioSource() else null
@@ -661,6 +669,69 @@ class MeetSessionTest {
     }
 
     @Test
+    fun failedScreenStartSavesAndUploadsDiagnosticReport(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform(captureFails = true))
+        try {
+            a.join(JoinSettings(url, "failed-capture", "reporter", CameraChoice.None, testAudio = true))
+            waitUntil("joined") { a.phase.value is CallPhase.InCall }
+            a.startScreen(a.screens().single(), withAudio = false)
+            waitUntil("capture failed") { a.notice.value != null }
+            a.leave() // finalizes post-context even when the user immediately leaves
+            fun serverLog() = logDir.walk().filter { it.isFile }.joinToString("\n") { it.readText() }
+            waitUntil("diagnostic report uploaded", 20_000) { "[screen-report]" in serverLog() && "capture_open_failed" in serverLog() && "call_ended" in serverLog() }
+            val dir = java.io.File(java.io.File(logLocation()!!).parentFile, "diagnostics")
+            waitUntil("standalone report saved") {
+                dir.listFiles()?.any { it.readText().contains("failed-capture") && it.readText().contains("call_ended") } == true
+            }
+            val file = dir.listFiles()!!.first { it.readText().contains("failed-capture") && it.readText().contains("call_ended") }
+            val report = kotlinx.serialization.json.Json.parseToJsonElement(file.readText())
+            assertTrue(report.toString().contains("clientRevision"))
+            assertTrue(report.toString().contains("selfId"))
+            assertTrue(report.toString().contains("capture_open_failed"))
+        } finally { a.close() }
+    }
+
+    @Test
+    fun stopDuringCaptureOpeningDoesNotResurrectShare(): Unit = runBlocking(main) {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val platform = TestPlatform(openGate = gate)
+        val a = MeetSession(scope, platform)
+        try {
+            a.join(JoinSettings(url, "opening", "alice", CameraChoice.None, testAudio = true))
+            waitUntil("joined") { a.phase.value is CallPhase.InCall }
+            a.startScreen(a.screens().single(), withAudio = false)
+            platform.opening.await()
+            a.stopScreen()
+            delay(100)
+            gate.complete(Unit)
+            delay(1_000)
+            assertEquals(null, a.screen.value, "a stopped pending capture must not attach later")
+            a.startScreen(a.screens().single(), withAudio = false)
+            waitUntil("restart sends frames", 20_000) { (a.screenSend.value?.fps ?: 0) > 0 }
+        } finally { gate.complete(Unit); a.close() }
+    }
+
+    @Test
+    fun screenCanRestartAfterStopping(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform())
+        val b = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "restart", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "restart", "bob", CameraChoice.None, testAudio = true))
+            waitUntil("both joined") { a.phase.value is CallPhase.InCall && b.phase.value is CallPhase.InCall }
+            val alice = withTimeout(15_000) { b.participants.first { it.any { p -> p.name == "alice" } }.single { it.name == "alice" } }
+            repeat(3) {
+                a.startScreen(a.screens().single(), withAudio = true)
+                waitUntil("screen $it sends frames", 20_000) { (a.screenSend.value?.fps ?: 0) > 0 }
+                waitUntil("screen $it reaches viewer", 20_000) { frames(alice.screen.value) > 5 }
+                a.stopScreen()
+                waitUntil("screen $it stopped") { a.screen.value == null && alice.screen.value == null }
+                delay(500)
+            }
+        } finally { a.close(); b.close() }
+    }
+
+    @Test
     fun lateViewersGetAStaticScreen(): Unit = runBlocking(main) {
         val a = MeetSession(scope, TestPlatform(static = true))
         val b = MeetSession(scope, TestPlatform())
@@ -730,6 +801,8 @@ class MeetSessionTest {
         assertTrue("video codecs available=" in log && "preference=auto" in log, "factory capabilities")
         assertTrue("offered=[video/VP8" in log && "negotiated=[video/" in log, "negotiation candidates")
         assertTrue("screen out:" in log && "codec=video/" in log && "implementation=" in log, "actual RTP codec and implementation")
+        assertTrue("screen start requested:" in log && "source=test" in log && "screen attached:" in log, "screen lifecycle and named source")
+        assertTrue("screen diagnostics:" in log && "targetBps=" in log && "encodeMs=" in log && "transport=" in log, "encoder and network diagnostics")
         a.close()
     }
 
@@ -760,6 +833,33 @@ class MeetSessionTest {
         } finally {
             flaky.stop(100, 500)
         }
+    }
+
+    @Test
+    fun largeDiagnosticBatchesRespectServerBodyLimit(): Unit = runBlocking(main) {
+        val bodies = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val oversized = java.util.concurrent.atomic.AtomicInteger()
+        val receiver = embeddedServer(CIO, port = 0) {
+            routing { post("/logs") {
+                val body = call.receiveText()
+                if (body.encodeToByteArray().size > 256 * 1024) {
+                    oversized.incrementAndGet()
+                    call.respond(io.ktor.http.HttpStatusCode.PayloadTooLarge)
+                } else { bodies += body; call.respond(io.ktor.http.HttpStatusCode.NoContent) }
+            } }
+        }.also { it.start(wait = false) }
+        val port = receiver.engine.resolvedConnectors().first().port
+        val up = krtc.meet.log.LogUploader("http://127.0.0.1:$port/logs", "large", "test", "jvm", intervalMillis = 100)
+        try {
+            krtc.meet.log.ClientLog.take(Int.MAX_VALUE)
+            repeat(40) { krtc.meet.log.ClientLog.w("large-report", "diagnostic-entry-$it " + "Ж\"".repeat(5000)) }
+            up.start(scope)
+            waitUntil("large reports delivered", 20_000) { bodies.joinToString().contains("diagnostic-entry-39 ") }
+            assertEquals(0, oversized.get())
+            val ids = bodies.flatMap { Regex("diagnostic-entry-(\\d+) ").findAll(it).map { match -> match.groupValues[1].toInt() }.toList() }
+            assertEquals((0 until 40).toList(), ids, "all oversized-batch entries arrive once and in order")
+            assertTrue(bodies.size > 1)
+        } finally { up.stop(); receiver.stop(100, 500) }
     }
 
     /** Existing toggle combinations migrate to one mode; a later explicit choice wins over legacy values. */

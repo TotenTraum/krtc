@@ -104,5 +104,10 @@ int main(int argc, char** argv) {
             std::make_unique<BrokenHardware>(initFails), false);
         EncodeFrames(*fallback, true, false);
     }
+    const auto diagnostics = krtc::WindowsEncoderDiagnosticsJson();
+    assert(diagnostics.find("hardware MFT candidates=") != std::string::npos);
+    assert(diagnostics.find("krtc-encoder-diagnostic") != std::string::npos);
+    assert(diagnostics == krtc::WindowsEncoderDiagnosticsJson()); // reading must not consume another PC's events
+    std::printf("diagnostics=[%s]\n", diagnostics.c_str());
     std::puts("Windows H264 and software fallback checks passed");
 }

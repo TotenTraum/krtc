@@ -6,6 +6,9 @@
 #include "krtc_audio_devices.h"
 #include "krtc_denoiser.h"
 #include "krtc_platform.h"
+#if defined(_WIN32)
+#include "krtc_windows_encoder.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -304,6 +307,14 @@ public:
     StatsCallback(krtc_done_fn fn, void *user) : fn_(fn), user_(user) {}
     void OnStatsDelivered(const scoped_refptr<const RTCStatsReport> &report) override {
         std::string json = report->ToJson();
+#if defined(_WIN32)
+        const auto diagnostics = krtc::WindowsEncoderDiagnosticsJson();
+        if (!diagnostics.empty() && !json.empty() && json.back() == ']') {
+            json.pop_back();
+            if (json.size() > 1) json += ",";
+            json += diagnostics + "]";
+        }
+#endif
         fn_(user_, json.c_str(), nullptr);
     }
 

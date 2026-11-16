@@ -20,3 +20,12 @@ expect fun watchdog(afterMillis: Long, stillStuck: () -> Boolean, onStuck: () ->
 
 /** The OS, its version and the device, for the log's header on the server. */
 expect fun platformName(): String
+
+/** Cheap process resources. Unsupported counters are omitted, never invented. Call off the UI thread. */
+internal expect fun diagnosticResources(): Map<String, String>
+
+/** Collected once per call, off the UI thread (may query GPU/driver information). */
+internal expect fun diagnosticEnvironment(): Map<String, String>
+
+/** Retained standalone JSON reports on desktop; mobile reports still go to ClientLog. */
+internal expect fun saveDiagnosticReport(id: String, json: String): String?

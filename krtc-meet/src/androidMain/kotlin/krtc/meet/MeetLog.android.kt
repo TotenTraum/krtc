@@ -21,3 +21,12 @@ actual fun watchdog(afterMillis: Long, stillStuck: () -> Boolean, onStuck: () ->
 }
 
 actual fun platformName(): String = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+
+internal actual fun diagnosticResources(): Map<String, String> = buildMap {
+    val runtime = Runtime.getRuntime()
+    put("heapUsedBytes", (runtime.totalMemory() - runtime.freeMemory()).toString())
+    put("logicalCpu", runtime.availableProcessors().toString())
+    put("processCpuTimeMs", android.os.Process.getElapsedCpuTime().toString())
+}
+internal actual fun diagnosticEnvironment(): Map<String, String> = mapOf("platform" to platformName())
+internal actual fun saveDiagnosticReport(id: String, json: String): String? = null

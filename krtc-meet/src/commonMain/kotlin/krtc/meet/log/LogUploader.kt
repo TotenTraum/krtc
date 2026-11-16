@@ -12,6 +12,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -32,6 +34,7 @@ class LogUploader(
     private val batchSize: Int = 200,
 ) {
     private var job: Job? = null
+    private val sendMutex = Mutex()
 
     /** False once the server said it takes no logs. */
     var accepted: Boolean = true
@@ -62,11 +65,11 @@ class LogUploader(
     }
 
     /** Sends one batch; true if it was delivered or there was nothing to send. */
-    private suspend fun sendOnce(): Boolean {
-        if (!accepted) return false
-        val entries = ClientLog.take(batchSize)
-        if (entries.isEmpty()) return true
-        val body = buildJsonObject {
+    private suspend fun sendOnce(): Boolean = sendMutex.withLock {
+        if (!accepted) return@withLock false
+        var entries = ClientLog.take(batchSize)
+        if (entries.isEmpty()) return@withLock true
+        fun encode() = buildJsonObject {
             put("client", client)
             put("app", app)
             put("platform", platform)
@@ -79,13 +82,21 @@ class LogUploader(
                 })
             })
         }.toString()
+        var body = encode()
+        // Diagnostic reports can contain many long entries. Bound actual UTF-8 JSON bytes, including escaping.
+        while (body.encodeToByteArray().size > MAX_BODY_BYTES && entries.size > 1) {
+            val count = (entries.size / 2).coerceAtLeast(1)
+            ClientLog.putBack(entries.drop(count))
+            entries = entries.take(count)
+            body = encode()
+        }
         val status = runCatching {
             http.post(endpoint) {
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }.status
         }.getOrNull()
-        return when {
+        when {
             status != null && status.value in 200..299 -> true
             status == HttpStatusCode.NotFound -> {
                 accepted = false // nothing listens there: keep the entries in the local log only
@@ -103,6 +114,7 @@ class LogUploader(
     companion object {
         const val MAX_PAUSE_MILLIS: Long = 60_000
         private const val FLUSH_BATCHES = 5
+        private const val MAX_BODY_BYTES = 256 * 1024
 
         /** The log endpoint of the server behind a signaling URL: `ws://host:port` → `http://host:port/logs`. */
         fun endpointFor(serverUrl: String): String {
