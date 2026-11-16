@@ -24,6 +24,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import krtc.native.NativeTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.focusable
@@ -631,82 +633,108 @@ private val Live = MeetColors.Red
  */
 @Composable
 private fun ScreenPicker(session: MeetSession, live: Boolean, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        ScreenPickerContent(session, live, onClose)
+    }
+}
+
+@Composable
+internal fun ScreenPickerContent(session: MeetSession, live: Boolean, onClose: () -> Unit) {
     // Listing windows waits for the system (ScreenCaptureKit): off the UI thread.
-    var loaded by remember { mutableStateOf<List<ScreenChoice>?>(null) }
-    LaunchedEffect(Unit) { loaded = withContext(Dispatchers.Default) { runCatching { session.screens() }.getOrDefault(emptyList()) } }
+    var refresh by remember { mutableStateOf(0) }
+    var loaded by remember(refresh) { mutableStateOf<List<ScreenChoice>?>(null) }
+    LaunchedEffect(refresh) { loaded = withContext(Dispatchers.Default) { runCatching { session.screens() }.getOrDefault(emptyList()) } }
     val choices = loaded.orEmpty()
     val windows = choices.filter { it.isWindow }
     val displays = choices.filter { !it.isWindow }
     var tab by remember { mutableStateOf(0) }
-    LaunchedEffect(loaded) { if (windows.isEmpty()) tab = 1 }
-    var selected by remember { mutableStateOf<ScreenChoice?>(null) }
-    LaunchedEffect(loaded) { if (selected == null) selected = choices.singleOrNull() }
-    var withAudio by remember { mutableStateOf(false) }
-    val shown = if (windows.isEmpty() || displays.isEmpty()) choices else if (tab == 0) windows else displays
-    // Thumbnails of the tab shown, captured one by one off the UI thread and refreshed while the picker is open.
-    val thumbs = remember { mutableStateMapOf<ScreenChoice, ImageBitmap?>() }
-    // Each thumbnail starts a capture for a moment: windows are taken once, the few displays every 5 s.
-    LaunchedEffect(shown) {
-        var first = true
-        while (true) {
-            for (c in shown) {
-                if (c.source == null || (!first && c.isWindow)) continue
-                val frame = withContext(Dispatchers.Default) { session.screenThumbnail(c) }
-                thumbs[c] = frame?.let { FrameBitmap().apply { write(it) }.image }
-            }
-            first = false
-            if (shown.all { it.isWindow }) break
-            delay(5_000)
+    LaunchedEffect(loaded) {
+        if (loaded != null) {
+            if (windows.isEmpty()) tab = 1
+            else if (displays.isEmpty()) tab = 0
         }
     }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(
-            Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).widthIn(max = 980.dp),
-            shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (live) "Сменить трансляцию" else "Демонстрация экрана", style = MaterialTheme.typography.titleLarge)
-                if (windows.isNotEmpty() && displays.isNotEmpty()) {
-                    TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Приложения · ${windows.size}") })
-                        Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Экраны · ${displays.size}") })
-                    }
-                }
-                if (loaded == null) Text("Ищу окна и экраны…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                choices.firstNotNullOfOrNull { it.note }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                LazyVerticalGrid(GridCells.Adaptive(minSize = 220.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(shown, key = { it.source?.let { s -> "${s.isWindow}/${s.id}" } ?: it.label }) { c ->
-                        val isSelected = selected === c
-                        val shape = RoundedCornerShape(10.dp)
-                        Column(
-                            Modifier.clip(shape).clickable { selected = c }
-                                .border(BorderStroke(3.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent), shape)
-                                .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF111216)), contentAlignment = Alignment.Center) {
-                                val image = thumbs[c]
-                                when {
-                                    image != null -> Image(image, c.label, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                                    c.source == null -> Text(if (c.isWindow) "Окно" else "Экран", color = Color.Gray)
-                                    c in thumbs -> Text("Нет превью", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-                                    else -> Text("…", color = Color.Gray)
-                                }
-                            }
-                            Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+    var selected by remember(refresh) { mutableStateOf<ScreenChoice?>(null) }
+    LaunchedEffect(loaded) { if (selected == null) selected = choices.singleOrNull() }
+    var withAudio by remember { mutableStateOf(false) }
+    val previewSources = if (windows.isEmpty() || displays.isEmpty()) choices else if (tab == 0) windows else displays
+    val thumbs = remember(refresh) { mutableStateMapOf<ScreenChoice, ImageBitmap?>() }
+    val availableWindows = windows.filter { it !in thumbs || thumbs[it] != null }
+    val shown = previewSources.filter { !it.isWindow || it in availableWindows }
+    val hiddenWindows = windows.size - availableWindows.size
+    val ready = selected?.let { it in choices && (!isDesktop || it.source == null || thumbs[it] != null) } == true
+    // Each thumbnail starts a capture for a moment: windows are taken once, the few displays every 5 s.
+    // Keep the effect keyed to the original sources: hiding a failed card must not cancel another capture.
+    LaunchedEffect(refresh, previewSources) {
+        if (!isDesktop) return@LaunchedEffect // ReplayKit/MediaProjection ask on start and cannot be previewed.
+        while (true) {
+            for (batch in previewSources.chunked(2)) {
+                coroutineScope {
+                    for (c in batch) {
+                        if (c.source == null || (c.isWindow && c in thumbs)) continue
+                        launch {
+                            val frame = withContext(Dispatchers.Default) { runCatching { session.screenThumbnail(c) }.getOrNull() }
+                            thumbs[c] = frame?.let { FrameBitmap().apply { write(it) }.image }
+                            if (frame == null && selected === c) selected = null
                         }
                     }
                 }
-                StreamSettings(session, withAudio, window = selected?.isWindow == true) { withAudio = it }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                    TextButton(onClick = onClose) { Text("Отмена") }
-                    Button(
-                        onClick = { selected?.let { session.startScreen(it, withAudio) }; onClose() },
-                        enabled = selected != null,
-                        colors = ButtonDefaults.buttonColors(containerColor = Live),
-                    ) { Text(if (live) "Сменить" else "Начать трансляцию") }
+            }
+            if (previewSources.all { it.isWindow || it.source == null }) break
+            delay(5_000)
+        }
+    }
+    Surface(
+        Modifier.fillMaxWidth(0.92f).fillMaxHeight(0.88f).widthIn(max = 980.dp),
+        shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (live) "Сменить трансляцию" else "Демонстрация экрана", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = { refresh++ }, enabled = loaded != null) { Text("Обновить") }
+            }
+            if (windows.isNotEmpty() && displays.isNotEmpty()) {
+                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Приложения · ${availableWindows.size}") })
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Экраны · ${displays.size}") })
                 }
+            }
+            if (loaded == null) Text("Ищу окна и экраны…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (hiddenWindows > 0) Text("Не удалось захватить окон: $hiddenWindows. Нажмите «Обновить», чтобы повторить проверку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (loaded != null && shown.isEmpty()) Text("Нет доступных окон. Откройте нужное окно или выберите экран целиком.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            choices.firstNotNullOfOrNull { it.note }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            LazyVerticalGrid(GridCells.Adaptive(minSize = 220.dp), Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(shown, key = { it.source?.let { s -> "${s.isWindow}/${s.id}" } ?: it.label }) { c ->
+                    val isSelected = selected === c
+                    val shape = RoundedCornerShape(10.dp)
+                    Column(
+                        Modifier.clip(shape).clickable(enabled = !isDesktop || c !in thumbs || thumbs[c] != null || c.source == null) { selected = c }
+                            .border(BorderStroke(3.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent), shape)
+                            .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF111216)), contentAlignment = Alignment.Center) {
+                            val image = thumbs[c]
+                            when {
+                                image != null -> Image(image, c.label, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                c.source == null || !isDesktop -> Text(if (c.isWindow) "Окно" else "Экран", color = Color.Gray)
+                                c in thumbs -> Text("Источник недоступен", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                                else -> Text("Загружаю превью…", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            StreamSettings(session, withAudio, window = selected?.isWindow == true) { withAudio = it }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                TextButton(onClick = onClose) { Text("Отмена") }
+                Button(
+                    onClick = { if (ready) { selected?.let { session.startScreen(it, withAudio) }; onClose() } },
+                    enabled = ready,
+                    colors = ButtonDefaults.buttonColors(containerColor = Live),
+                ) { Text(if (live) "Сменить" else "Начать трансляцию") }
             }
         }
     }

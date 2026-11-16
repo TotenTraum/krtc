@@ -14,6 +14,7 @@
 #include <vector>
 #include <unistd.h>
 #if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #include "krtc_sck_sources.h"
@@ -272,7 +273,18 @@ std::vector<ScreenSource> ScreenSources() {
         // untitled/custom windows (including some browsers and game-streaming clients).
         SCShareableContent *content = ShareableContent();
         if (!content) return out;
-        return SckSources(content, getpid());
+        std::unordered_set<pid_t> applications;
+        for (NSRunningApplication *app in NSWorkspace.sharedWorkspace.runningApplications) {
+            if (app.terminated) continue;
+            // Regular GUI apps include Finder and apps on other Spaces. Also allow user menu-bar apps
+            // with windows; exclude background-only processes and Apple's system presentation agents.
+            const bool regular = app.activationPolicy == NSApplicationActivationPolicyRegular;
+            const bool userAccessory = app.activationPolicy == NSApplicationActivationPolicyAccessory &&
+                [app.bundleURL.path.pathExtension isEqualToString:@"app"] &&
+                ![app.bundleURL.path hasPrefix:@"/System/Library/"];
+            if (regular || userAccessory) applications.insert(app.processIdentifier);
+        }
+        return SckSources(content, getpid(), applications);
     }
     for (bool window : {false, true}) {
         // Listing also runs on a thread of its own (ScreenCaptureKit answers asynchronously on other queues).
