@@ -819,19 +819,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         }
     }
 
-    /**
-     * The share's encoding: a bitrate for its size and frame rate (libwebrtc's default caps 1080p near 2.5 Mbit/s,
-     * which at 60 fps with motion leaves the encoder dropping frames), and at 60 fps keeping the frame rate rather
-     * than the resolution when bandwidth runs short; at 15 fps (text, slides) the other way round.
-     */
+    /** Motion shares favor FPS. The 15 fps mode favors sharp text and slides. */
     private fun screenSendParameters(fps: Int, height: Int): RTCRtpSendParameters {
         val pixels = height.toLong() * (height * 16 / 9)
         val bitrate = (pixels * fps * BITS_PER_PIXEL).toLong().coerceIn(MIN_SCREEN_BITRATE, MAX_SCREEN_BITRATE)
-        val degradation = when {
-            fps >= 60 -> RTCDegradationPreference.MAINTAIN_FRAMERATE
-            fps <= 15 -> RTCDegradationPreference.MAINTAIN_RESOLUTION
-            else -> RTCDegradationPreference.BALANCED
-        }
+        val degradation = if (fps >= 30) RTCDegradationPreference.MAINTAIN_FRAMERATE else RTCDegradationPreference.MAINTAIN_RESOLUTION
         return RTCRtpSendParameters(listOf(RTCRtpEncodingParameters(maxBitrate = bitrate, maxFramerate = fps.toDouble())), degradation)
     }
 

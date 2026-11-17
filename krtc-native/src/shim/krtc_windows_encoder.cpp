@@ -65,12 +65,11 @@ struct MfApi {
     MF_FUNCTION(MFTEnumEx);
     MF_FUNCTION(MFCreateMediaType);
     MF_FUNCTION(MFCreateSample);
-    MF_FUNCTION(MFCreateMemoryBuffer);
     MF_FUNCTION(MFCreateAlignedMemoryBuffer);
 #undef MF_FUNCTION
     bool available() const {
         return MFStartup && MFShutdown && MFTEnumEx && MFCreateMediaType && MFCreateSample &&
-               MFCreateMemoryBuffer && MFCreateAlignedMemoryBuffer;
+               MFCreateAlignedMemoryBuffer;
     }
     ~MfApi() { if (dll) FreeLibrary(dll); }
 };
@@ -141,26 +140,8 @@ public:
             fps_ = std::max(1u, codec->maxFramerate);
             bitrate_ = std::max(1u, codec->startBitrate) * 1000u;
             session_ = std::make_unique<MfSession>();
-            Activations list(session_->started);
-            for (UINT32 i = 0; i < list.count; ++i) {
-                WCHAR* name = nullptr;
-                if (SUCCEEDED(list.items[i]->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &name, nullptr))) {
-                    const int size = WideCharToMultiByte(CP_UTF8, 0, name, -1, nullptr, 0, nullptr, nullptr);
-                    std::string utf8(size > 0 ? size : 1, '\0');
-                    if (size > 0) WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8.data(), size, nullptr, nullptr);
-                    CoTaskMemFree(name);
-                    utf8.resize(utf8.size() - 1);
-                    Diagnostic("trying MFT=" + utf8);
-                }
-                if (Check(list.items[i]->ActivateObject(IID_PPV_ARGS(&transform_)), "ActivateObject") && Configure()) {
-                    Diagnostic("hardware init successful");
-                    return true;
-                }
-                events_.Reset();
-                codecApi_.Reset();
-                transform_.Reset();
-                list.items[i]->ShutdownObject();
-            }
+            candidates_ = std::make_unique<Activations>(session_->started);
+            if (TryNextTransform()) return true;
             Reset();
             return false;
         });
@@ -184,7 +165,16 @@ public:
         bool paused = false;
         std::optional<EncodedImage> image = thread_->BlockingCall([&] {
             paused = paused_;
-            return paused ? std::optional<EncodedImage>{} : EncodeFrame(frame, key);
+            if (paused) return std::optional<EncodedImage>{};
+            auto image = EncodeFrame(frame, key);
+            while (!image && candidates_ && nextCandidate_ < candidates_->count) {
+                Diagnostic("hardware encode failed at " + stage_ + "; trying another hardware MFT");
+                ResetTransform();
+                if (!TryNextTransform()) break;
+                // The replacement encoder has no references. Start its output with an IDR.
+                image = EncodeFrame(frame, true);
+            }
+            return image;
         });
         if (paused) return WEBRTC_VIDEO_CODEC_OK;
         if (!image) {
@@ -221,21 +211,51 @@ public:
     }
 
 private:
-    void Reset() {
-        if (transform_) transform_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+    bool TryNextTransform() {
+        while (nextCandidate_ < candidates_->count) {
+            auto* candidate = candidates_->items[nextCandidate_++];
+            WCHAR* name = nullptr;
+            if (SUCCEEDED(candidate->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &name, nullptr))) {
+                const int size = WideCharToMultiByte(CP_UTF8, 0, name, -1, nullptr, 0, nullptr, nullptr);
+                std::string utf8(size > 0 ? size : 1, '\0');
+                if (size > 0) WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8.data(), size, nullptr, nullptr);
+                CoTaskMemFree(name);
+                utf8.resize(utf8.size() - 1);
+                Diagnostic("trying MFT=" + utf8);
+            }
+            if (Check(candidate->ActivateObject(IID_PPV_ARGS(&transform_)), "ActivateObject") && Configure()) {
+                active_ = candidate;
+                Diagnostic("hardware init successful");
+                return true;
+            }
+            ResetTransform();
+            candidate->ShutdownObject();
+        }
+        return false;
+    }
+
+    void ResetTransform() {
         if (transform_) {
-            ComPtr<IMFShutdown> shutdown;
-            if (SUCCEEDED(transform_.As(&shutdown))) shutdown->Shutdown();
+            transform_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+            transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
         }
         events_.Reset();
         codecApi_.Reset();
         transform_.Reset();
-        session_.reset();
+        if (active_) active_->ShutdownObject();
+        active_ = nullptr;
         needInput_ = 0;
         time_ = 0;
         failed_ = false;
-        paused_ = false;
         headers_.clear();
+    }
+
+    void Reset() {
+        ResetTransform();
+        candidates_.reset();
+        session_.reset();
+        nextCandidate_ = 0;
+        paused_ = false;
     }
     bool SetUInt(const GUID& key, ULONG value) {
         VARIANT v{};
@@ -248,6 +268,12 @@ private:
         if (!Check(transform_->GetAttributes(&attrs), "transform_->GetAttributes") ||
             !Check(attrs->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE), "attrs->SetUINT32") ||
             !Check(transform_.As(&events_), "transform_.As") || !Check(transform_.As(&codecApi_), "transform_.As")) return false;
+        inputId_ = outputId_ = 0;
+        DWORD inputs = 0, outputs = 0;
+        if (!Check(transform_->GetStreamCount(&inputs, &outputs), "GetStreamCount") || inputs != 1 || outputs != 1)
+            return false;
+        const HRESULT ids = transform_->GetStreamIDs(1, &inputId_, 1, &outputId_);
+        if (ids != E_NOTIMPL && !Check(ids, "GetStreamIDs")) return false;
         VARIANT lowLatency{};
         lowLatency.vt = VT_BOOL;
         lowLatency.boolVal = VARIANT_TRUE;
@@ -260,8 +286,10 @@ private:
         if (!MediaType(&output, MFVideoFormat_H264) ||
             !Check(output->SetUINT32(MF_MT_AVG_BITRATE, bitrate_), "output->SetUINT32") ||
             !Check(output->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base), "output->SetUINT32") ||
-            !Check(transform_->SetOutputType(0, output.Get(), 0), "transform_->SetOutputType") || !MediaType(&input, MFVideoFormat_NV12) ||
-            !Check(transform_->SetInputType(0, input.Get(), 0), "transform_->SetInputType")) return false;
+            !Check(transform_->SetOutputType(outputId_, output.Get(), 0), "transform_->SetOutputType") || !MediaType(&input, MFVideoFormat_NV12) ||
+            !Check(input->SetUINT32(MF_MT_DEFAULT_STRIDE, width_), "NV12 stride") ||
+            !Check(transform_->SetInputType(inputId_, input.Get(), 0), "transform_->SetInputType") ||
+            !Check(transform_->GetInputStreamInfo(inputId_, &inputInfo_), "GetInputStreamInfo")) return false;
         SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_);
         return Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0), "transform_->ProcessMessage") &&
                Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0), "transform_->ProcessMessage");
@@ -305,7 +333,9 @@ private:
         ComPtr<IMFSample> input;
         ComPtr<IMFMediaBuffer> pixels;
         const DWORD size = width_ * height_ * 3 / 2;
-        if (!Check(Api().MFCreateSample(&input), "MFCreateSample") || !Check(Api().MFCreateMemoryBuffer(size, &pixels), "MFCreateMemoryBuffer")) return std::nullopt;
+        if (!Check(Api().MFCreateSample(&input), "MFCreateSample") ||
+            !Check(Api().MFCreateAlignedMemoryBuffer(std::max(size, inputInfo_.cbSize),
+                inputInfo_.cbAlignment ? inputInfo_.cbAlignment - 1 : 0, &pixels), "allocate aligned NV12 buffer")) return std::nullopt;
         BYTE* data = nullptr;
         if (!Check(pixels->Lock(&data, nullptr, nullptr), "pixels->Lock")) return std::nullopt;
         int converted = libyuv::I420ToNV12(i420->DataY(), i420->StrideY(), i420->DataU(), i420->StrideU(),
@@ -315,7 +345,7 @@ private:
         stage_ = "submit input / wait output";
         if (converted || !Check(pixels->SetCurrentLength(size), "pixels->SetCurrentLength") || !Check(input->AddBuffer(pixels.Get()), "input->AddBuffer") ||
             !Check(input->SetSampleTime(time_), "input->SetSampleTime") || !Check(input->SetSampleDuration(duration), "input->SetSampleDuration") ||
-            !Check(transform_->ProcessInput(0, input.Get(), 0), "transform_->ProcessInput") || !Wait(METransformHaveOutput)) return std::nullopt;
+            !Check(transform_->ProcessInput(inputId_, input.Get(), 0), "transform_->ProcessInput") || !Wait(METransformHaveOutput)) return std::nullopt;
 
         stage_ = "read output";
         ComPtr<IMFSample> output = ReadOutput();
@@ -340,7 +370,7 @@ private:
         if (idr && (!H264HasNal(bytes, 7) || !H264HasNal(bytes, 8))) {
             ComPtr<IMFMediaType> type;
             UINT32 headerSize = 0;
-            if (!Check(transform_->GetOutputCurrentType(0, &type), "transform_->GetOutputCurrentType") ||
+            if (!Check(transform_->GetOutputCurrentType(outputId_, &type), "transform_->GetOutputCurrentType") ||
                 !Check(type->GetBlobSize(MF_MT_MPEG_SEQUENCE_HEADER, &headerSize), "type->GetBlobSize")) return std::nullopt;
             std::vector<uint8_t> raw(headerSize);
             if (!Check(type->GetBlob(MF_MT_MPEG_SEQUENCE_HEADER, raw.data(), headerSize, nullptr), "type->GetBlob") ||
@@ -365,9 +395,9 @@ private:
     ComPtr<IMFSample> ReadOutput() {
         for (int attempt = 0; attempt < 2; ++attempt) {
             MFT_OUTPUT_STREAM_INFO stream{};
-            if (!Check(transform_->GetOutputStreamInfo(0, &stream), "transform_->GetOutputStreamInfo")) return {};
+            if (!Check(transform_->GetOutputStreamInfo(outputId_, &stream), "transform_->GetOutputStreamInfo")) return {};
             ComPtr<IMFSample> supplied;
-            if (!(stream.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES)) {
+            if (!(stream.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES))) {
                 ComPtr<IMFMediaBuffer> buffer;
                 if (!Check(Api().MFCreateSample(&supplied), "MFCreateSample") ||
                     !Check(Api().MFCreateAlignedMemoryBuffer(std::max(stream.cbSize, DWORD(width_ * height_ * 3 / 2)),
@@ -375,6 +405,7 @@ private:
                     !Check(supplied->AddBuffer(buffer.Get()), "supplied->AddBuffer")) return {};
             }
             MFT_OUTPUT_DATA_BUFFER result{};
+            result.dwStreamID = outputId_;
             result.pSample = supplied.Get();
             DWORD status = 0;
             HRESULT hr = transform_->ProcessOutput(0, 1, &result, &status);
@@ -385,12 +416,20 @@ private:
             if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                 ComPtr<IMFMediaType> type;
                 GUID subtype{};
-                if (!Check(transform_->GetOutputAvailableType(0, 0, &type), "transform_->GetOutputAvailableType") ||
+                if (!Check(transform_->GetOutputAvailableType(outputId_, 0, &type), "transform_->GetOutputAvailableType") ||
                     !Check(type->GetGUID(MF_MT_SUBTYPE, &subtype), "type->GetGUID") || subtype != MFVideoFormat_H264 ||
-                    !Check(transform_->SetOutputType(0, type.Get(), 0), "transform_->SetOutputType")) return {};
+                    !Check(transform_->SetOutputType(outputId_, type.Get(), 0), "transform_->SetOutputType")) return {};
+                Diagnostic("MFT output format changed; waiting for the next output event");
+                if (!Wait(METransformHaveOutput)) return {};
                 continue;
             }
-            return Check(hr, "ProcessOutput") ? output : ComPtr<IMFSample>{};
+            if (!Check(hr, "ProcessOutput")) {
+                Diagnostic("MFT output flags=" + std::to_string(stream.dwFlags) +
+                    " sampleSupplied=" + std::to_string(supplied != nullptr) +
+                    " status=" + std::to_string(result.dwStatus));
+                return {};
+            }
+            return output;
         }
         return {};
     }
@@ -399,6 +438,11 @@ private:
     bool running_ = false;
     EncodedImageCallback* callback_ = nullptr;
     std::unique_ptr<MfSession> session_;
+    std::unique_ptr<Activations> candidates_;
+    UINT32 nextCandidate_ = 0;
+    IMFActivate* active_ = nullptr; // owned by candidates_
+    DWORD inputId_ = 0, outputId_ = 0;
+    MFT_INPUT_STREAM_INFO inputInfo_{};
     ComPtr<IMFTransform> transform_;
     ComPtr<IMFMediaEventGenerator> events_;
     ComPtr<ICodecAPI> codecApi_;

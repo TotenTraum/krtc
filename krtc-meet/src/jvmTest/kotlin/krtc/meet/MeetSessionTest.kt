@@ -454,7 +454,7 @@ class MeetSessionTest {
         }
     }
 
-    /** The share's sender gets a bitrate for its size and frame rate, and at 60 fps keeps the frame rate. */
+    /** The share's sender gets a bitrate for its size and frame rate, and preserves FPS for motion. */
     @Test
     fun screenEncodingFollowsTheChosenQuality(): Unit = runBlocking(main) {
         val a = MeetSession(scope, TestPlatform())
@@ -463,19 +463,23 @@ class MeetSessionTest {
             a.join(JoinSettings(url, "quality", "alice", CameraChoice.None, testAudio = true))
             b.join(JoinSettings(url, "quality", "bob", CameraChoice.None, testAudio = true))
             waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
-            a.setScreenFps(60)
             a.setScreenHeight(1080)
-            a.startScreen(a.screens().single(), withAudio = false)
-            var parameters: krtc.core.RTCRtpSendParameters? = null
-            waitUntil("the screen sender's parameters") {
-                val sender = a.roomClient?.peerConnection?.getTransceivers()?.firstOrNull { it.mid == "s" && it.sender.track != null }?.sender
-                parameters = sender?.let { runBlocking { it.getParameters() } }
-                parameters?.encodings?.firstOrNull()?.maxBitrate != null
+            for (fps in listOf(30, 60, 15)) {
+                a.setScreenFps(fps)
+                a.startScreen(a.screens().single(), withAudio = false)
+                var parameters: krtc.core.RTCRtpSendParameters? = null
+                waitUntil("the screen sender's parameters") {
+                    val sender = a.roomClient?.peerConnection?.getTransceivers()?.firstOrNull { it.mid == "s" && it.sender.track != null }?.sender
+                    parameters = sender?.let { runBlocking { it.getParameters() } }
+                    parameters?.encodings?.firstOrNull()?.maxFramerate == fps.toDouble()
+                }
+                val encoding = parameters!!.encodings.first()
+                assertEquals(fps.toDouble(), encoding.maxFramerate)
+                if (fps == 60) assertEquals(MAX_SCREEN_BITRATE_IN_TEST, encoding.maxBitrate)
+                val expected = if (fps >= 30) krtc.core.RTCDegradationPreference.MAINTAIN_FRAMERATE
+                    else krtc.core.RTCDegradationPreference.MAINTAIN_RESOLUTION
+                assertEquals(expected, parameters!!.degradationPreference)
             }
-            val encoding = parameters!!.encodings.first()
-            assertEquals(60.0, encoding.maxFramerate)
-            assertEquals(MAX_SCREEN_BITRATE_IN_TEST, encoding.maxBitrate, "1080p at 60 fps gets the most there is")
-            assertEquals(krtc.core.RTCDegradationPreference.MAINTAIN_FRAMERATE, parameters!!.degradationPreference)
         } finally {
             a.close()
             b.close()

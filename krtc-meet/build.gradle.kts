@@ -150,6 +150,7 @@ compose.desktop {
         jvmArgs += listOf("--enable-native-access=ALL-UNNAMED")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            modules("java.management", "jdk.management") // process CPU and JVM counters in the bundled runtime
             packageName = "krtc-meet"
             packageVersion = meetVersion
             macOS {
