@@ -1,23 +1,20 @@
 package krtc.meet.log
 
-import io.ktor.client.HttpClient
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Sends [ClientLog] to [endpoint] (krtc-sfu-server `--client-logs`, or the host's `krtcClientLogs` route) in batches:
@@ -46,7 +43,7 @@ class LogUploader(
             var pause = intervalMillis
             while (accepted) {
                 // Wait for the interval, or less once a full batch is there.
-                withTimeoutOrNull(pause) { ClientLog.waiting.first { it >= batchSize } }
+                withTimeoutOrNull(pause.milliseconds) { ClientLog.waiting.first { it >= batchSize } }
                 pause = if (sendOnce()) intervalMillis else minOf(pause * 2, MAX_PAUSE_MILLIS)
             }
         }
@@ -54,7 +51,7 @@ class LogUploader(
 
     /** Sends what waits (a few batches at most), e.g. before the call ends; gives up after [timeoutMillis]. */
     suspend fun flush(timeoutMillis: Long = 3_000) {
-        withTimeoutOrNull(timeoutMillis) {
+        withTimeoutOrNull(timeoutMillis.milliseconds) {
             repeat(FLUSH_BATCHES) { if (ClientLog.waiting.value == 0 || !sendOnce()) return@withTimeoutOrNull }
         }
     }

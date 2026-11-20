@@ -2,7 +2,6 @@ package krtc.meet
 
 import platform.Foundation.NSLog
 import platform.Foundation.NSThread
-import kotlin.concurrent.AtomicInt
 
 actual fun appendLog(line: String) {
     NSLog("krtc-meet: %@", line)

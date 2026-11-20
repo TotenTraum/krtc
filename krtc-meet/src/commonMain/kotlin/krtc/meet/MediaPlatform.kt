@@ -1,14 +1,6 @@
 package krtc.meet
 
-import krtc.native.AudioDevice
-import krtc.native.NativeAudioSource
-import krtc.native.NativePeerConnectionFactory
-import krtc.native.NativeVideoSource
-import krtc.native.ScreenSource
-import krtc.native.nativeCameras
-import krtc.native.nativeScreenSources
-import krtc.native.nativeScreenThumbnail
-import krtc.native.VideoFrame
+import krtc.native.*
 
 /** A camera opened for a call: its source, and whatever else must be closed with it (e.g. Android's Camera2 capture). */
 class OpenedCamera(val source: NativeVideoSource, private val capture: AutoCloseable? = null) : AutoCloseable {
@@ -18,7 +10,6 @@ class OpenedCamera(val source: NativeVideoSource, private val capture: AutoClose
     }
 }
 
-/** Something to share: a display or a window ([source]), or null where the platform asks the user itself. */
 /**
  * Something to share: a display or a window ([source]), or null where the platform asks the user itself. [note]
  * explains a missing list (no permission yet, or the system dialog that follows).

@@ -10,8 +10,7 @@ internal actual fun exitWithError(message: String): Nothing {
 /**
  * Tries an IPv4 and an IPv6 listener on [port], each on a socket of its own family: the JVM's default sockets are
  * IPv6 even for 0.0.0.0 and would not notice an IPv4 listener.
- */
-/**
+ * 
  * Whether nothing listens on TCP [port], on the wildcard or loopback addresses. With SO_REUSEADDR (not on Windows,
  * where it lets a socket take over a port) so connections of a server that just stopped (TIME_WAIT, FIN_WAIT) do not
  * count: the HTTP server binds with it too.

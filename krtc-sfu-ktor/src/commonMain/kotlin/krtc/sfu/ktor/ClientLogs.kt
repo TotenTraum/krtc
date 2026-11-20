@@ -1,13 +1,11 @@
 package krtc.sfu.ktor
 
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.plugins.origin
-import io.ktor.server.request.contentLength
-import io.ktor.server.request.receiveChannel
-import io.ktor.server.response.respond
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.post
-import io.ktor.utils.io.readBuffer
+import io.ktor.http.*
+import io.ktor.server.plugins.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.buffered
@@ -15,14 +13,8 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.io.writeString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.*
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 /**
  * One batch of a client's log, as sent to [krtcClientLogs]:
@@ -104,7 +96,6 @@ public class FileClientLogStore(
 ) : ClientLogStore {
     private val lock = Mutex()
 
-    @OptIn(ExperimentalTime::class)
     override suspend fun store(batch: ClientLogBatch) {
         val day = isoDate(Clock.System.now().toEpochMilliseconds())
         val dayDir = Path(dir, day)
@@ -130,7 +121,6 @@ private class RateLimiter(private val perMinute: Int) {
     private val lock = Mutex()
     private val windows = HashMap<String, Pair<Long, Int>>()
 
-    @OptIn(ExperimentalTime::class)
     suspend fun allow(address: String): Boolean = lock.withLock {
         val now = Clock.System.now().toEpochMilliseconds()
         if (windows.size > 10_000) windows.entries.removeAll { now - it.value.first > 60_000 }

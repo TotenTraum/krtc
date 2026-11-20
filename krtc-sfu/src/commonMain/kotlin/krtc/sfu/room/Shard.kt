@@ -1,17 +1,12 @@
 package krtc.sfu.room
 
-import kotlin.concurrent.atomics.incrementAndFetch
-import kotlin.concurrent.atomics.decrementAndFetch
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.decrementAndFetch
+import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Per-shard counters: written by one thread only, so increments never contend across cores. */
 internal class ShardCounters {
@@ -38,7 +33,7 @@ internal class ShardCounters {
  * cores. The inbound queue is bounded: under overload packets are dropped (and counted) instead of
  * accumulating latency and memory.
  */
-internal class Shard(public val index: Int, capacity: Int = 16_384) : AutoCloseable {
+internal class Shard(val index: Int, capacity: Int = 16_384) : AutoCloseable {
     private val dispatcher = newSingleThreadContext("shard-$index")
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
     private val queue = Channel<() -> Unit>(capacity)
@@ -79,7 +74,7 @@ internal class Shard(public val index: Int, capacity: Int = 16_384) : AutoClosea
     internal fun every(periodMillis: Long, task: () -> Unit) {
         scope.launch {
             while (isActive) {
-                delay(periodMillis)
+                delay(periodMillis.milliseconds)
                 execute(task)
             }
         }

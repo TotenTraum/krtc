@@ -1,41 +1,26 @@
 package krtc.meet
 
-import kotlin.math.roundToInt
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import krtc.client.RemoteParticipant
 import krtc.client.RoomClient
 import krtc.client.RoomState
 import krtc.client.VideoQuality
+import krtc.core.MediaStreamTrack
 import krtc.core.RTCDegradationPreference
 import krtc.core.RTCRtpEncodingParameters
 import krtc.core.RTCRtpSendParameters
-import krtc.core.MediaStreamTrack
-import krtc.native.AudioDevice
-import krtc.native.InputGate
-import krtc.native.VideoFrame
 import krtc.meet.log.ClientLog
 import krtc.meet.log.LogUploader
 import krtc.meet.log.Traced
+import krtc.native.InputGate
 import krtc.native.NativePeerConnectionFactory
 import krtc.native.NativeTrack
-import krtc.native.NativeVideoSource
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import krtc.native.VideoFrame
+import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 
 /** What the user picked on the join screen. */
 data class JoinSettings(
@@ -296,8 +281,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
      * Native work (libwebrtc, devices, capture) runs here, one call at a time, not on the UI thread: a device or a
      * libwebrtc thread that takes long (or hangs) must not freeze the window.
      */
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val native = kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
+    private val native = Dispatchers.Default.limitedParallelism(1)
 
     /**
      * Runs [block] on [native]. It is not interrupted when the caller is cancelled (native calls cannot be); if the
@@ -317,7 +301,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         val value = withContext(NonCancellable + native) { block() }
         if (!currentCoroutineContext().isActive) {
             runCatching { release(value) }
-            throw kotlinx.coroutines.CancellationException("the call ended")
+            throw CancellationException("the call ended")
         }
         return value
     }
@@ -524,7 +508,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                     launch { watchConnection(c) }
                     launch {
                         // Independent of getStats: a missing native callback must not disable startup timeouts.
-                        while (true) { kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS); screenDiagnostics.tick() }
+                        while (true) { kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS.milliseconds); screenDiagnostics.tick() }
                     }
                     launch { logFrames() }
                     launch { watchInput() }
@@ -594,7 +578,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     private suspend fun logFrames() {
         val last = HashMap<String, Long>()
         while (true) {
-            kotlinx.coroutines.delay(FRAME_LOG_MILLIS)
+            kotlinx.coroutines.delay(FRAME_LOG_MILLIS.milliseconds)
             val parts = ArrayList<String>()
             for (p in participantsFlow.value) {
                 for ((kind, track) in listOf("camera" to p.video.value, "screen" to p.screen.value)) {
@@ -643,7 +627,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         if (!held) pttReleasedAt = clock.markNow()
         applyGate()
         if (!held && inputFlowSettings.value.mode == InputMode.PUSH_TO_TALK) {
-            scope.launch { kotlinx.coroutines.delay(PTT_RELEASE_MILLIS + 20); applyGate() } // close after the tail
+            scope.launch { kotlinx.coroutines.delay((PTT_RELEASE_MILLIS + 20).milliseconds); applyGate() } // close after the tail
         }
     }
 
@@ -686,7 +670,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     /** Follows the microphone's level and the gate, for the meter and the "transmitting" indicator. */
     private suspend fun watchInput() {
         while (true) {
-            kotlinx.coroutines.delay(LEVEL_POLL_MILLIS)
+            kotlinx.coroutines.delay(LEVEL_POLL_MILLIS.milliseconds)
             val f = factory ?: continue
             inputLevelFlow.value = f.inputLevel.toFloat()
             transmittingFlow.value = micOnFlow.value && !deafenedFlow.value && f.inputGateOpen
@@ -943,7 +927,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         var missingScreenSamples = 0
         var lastDiagnosticTick = kotlin.time.TimeSource.Monotonic.markNow()
         while (true) {
-            kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS)
+            kotlinx.coroutines.delay(STATS_INTERVAL_MILLIS.milliseconds)
             val gapMs = lastDiagnosticTick.elapsedNow().inWholeMilliseconds
             lastDiagnosticTick = kotlin.time.TimeSource.Monotonic.markNow()
             if (gapMs > STATS_INTERVAL_MILLIS * 2) screenDiagnostics.event("sampling_delay_or_sleep", mapOf("gapMs" to gapMs.toString()))

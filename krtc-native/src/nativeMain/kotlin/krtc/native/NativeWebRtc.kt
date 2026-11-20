@@ -1,60 +1,13 @@
 package krtc.native
 
-import kotlinx.cinterop.reinterpret
-
-import kotlinx.cinterop.convert
-
-import kotlinx.cinterop.UIntVar
-
-import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.DoubleVar
-import kotlinx.cinterop.IntVar
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.get
-import kotlinx.cinterop.LongVar
-import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.asStableRef
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlinx.cinterop.staticCFunction
-import kotlinx.cinterop.toKString
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
-import kotlinx.cinterop.value
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
-import krtc.core.MediaStreamTrack
-import krtc.core.PeerConnectionFactory
-import krtc.core.RTCConfiguration
-import krtc.core.RTCDataChannel
-import krtc.core.RTCDataChannelInit
-import krtc.core.RTCPeerConnection
-import krtc.core.RTCPeerConnectionState
-import krtc.core.RTCRtpReceiver
-import krtc.core.RTCDegradationPreference
-import krtc.core.RTCRtpEncodingParameters
-import krtc.core.RTCRtpSendParameters
-import krtc.core.RTCRtpSender
-import krtc.core.RTCRtpTransceiver
-import krtc.core.RTCRtpTransceiverDirection
-import krtc.core.RTCSdpType
-import krtc.core.RTCStats
-import krtc.core.RTCSessionDescription
-import krtc.core.RTCTrackEvent
-import cnames.structs.krtc_factory
-import cnames.structs.krtc_pc
-import cnames.structs.krtc_track
-import cnames.structs.krtc_transceiver
-import cnames.structs.krtc_video_source
-import krtc.native.shim.*
+import cnames.structs.*
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
+import kotlinx.cinterop.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.suspendCancellableCoroutine
+import krtc.core.*
+import krtc.native.shim.*
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -397,7 +350,7 @@ internal class NativeTransceiver(handle: CPointer<krtc_transceiver>, receiverTra
 /** Result slot for one asynchronous shim call. */
 private class Pending(val continuation: Continuation<String?>)
 
-private val doneCallback = staticCFunction { user: COpaquePointer?, sdp: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>?, error: kotlinx.cinterop.CPointer<kotlinx.cinterop.ByteVar>? ->
+private val doneCallback = staticCFunction { user: COpaquePointer?, sdp: CPointer<kotlinx.cinterop.ByteVar>?, error: CPointer<kotlinx.cinterop.ByteVar>? ->
     val ref = user!!.asStableRef<Pending>()
     val pending = ref.get()
     ref.dispose()
@@ -423,18 +376,18 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     // Replaced by a newer OnTrack for the same mid. Released in close(), not on the signaling thread, which would wait
     // for a caller that holds the old one while waiting for the signaling thread. Guarded by lock.
     private val retired = mutableListOf<NativeTransceiver>()
-    private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
     private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     private var closed = false
     private val channels = mutableListOf<NativeDataChannel>() // guarded by lock
-    private val remoteChannels = MutableSharedFlow<RTCDataChannel>(replay = 16)
 
     init {
         krtc_pc_set_data_channel_handler(handle, remoteDataChannelCallback, self.asCPointer())
     }
 
-    override val ontrack: SharedFlow<RTCTrackEvent> get() = tracks
-    override val ondatachannel: SharedFlow<RTCDataChannel> get() = remoteChannels
+    override val ontrack: SharedFlow<RTCTrackEvent>
+        field = MutableSharedFlow<RTCTrackEvent>(replay = 64)
+    override val ondatachannel: SharedFlow<RTCDataChannel>
+        field = MutableSharedFlow<RTCDataChannel>(replay = 16)
 
     override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
         require(init.maxRetransmits == null || init.maxPacketLifeTime == null) { "maxRetransmits and maxPacketLifeTime are exclusive" }
@@ -449,7 +402,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     fun onDataChannel(channel: CPointer<cnames.structs.krtc_data_channel>) {
         val dc = NativeDataChannel(channel)
         synchronized(lock) { channels += dc }
-        remoteChannels.tryEmit(dc)
+        ondatachannel.tryEmit(dc)
     }
     override val connectionState: StateFlow<RTCPeerConnectionState> = state.asStateFlow()
 
@@ -461,7 +414,7 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
                 val t = NativeTransceiver(transceiver!!, NativeTrack(track!!))
                 val mid = t.mid
                 if (mid != null) synchronized(lock) { transceivers.put(mid, t)?.let { retired += it } }
-                tracks.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
+                ontrack.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
             }
         }
     }

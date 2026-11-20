@@ -13,6 +13,7 @@ def free_port():
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         return listener.getsockname()[1]
+    return None
 
 
 def thread_count(pid):

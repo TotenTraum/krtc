@@ -468,7 +468,7 @@ internal class SctpAssociation(
     private fun onSack(c: Chunk, now: Long) {
         if (state != State.ESTABLISHED || c.len < 12) return
         val cum = unwrapOwn(c.u32(0))
-        if (cum < cumAckTsn || cum >= nextTsn) return // stale or bogus
+        if (cum !in cumAckTsn..<nextTsn) return // stale or bogus
         val rwnd = c.u32(4)
         val gapCount = c.u16(8)
         var bytesAcked = 0
@@ -523,7 +523,7 @@ internal class SctpAssociation(
                 }
             }
         }
-        if (fastRecoveryExit >= 0 && cum >= fastRecoveryExit) fastRecoveryExit = -1
+        if (fastRecoveryExit in 0..cum) fastRecoveryExit = -1
         if (fastRetransmit && fastRecoveryExit < 0) {
             ssthresh = maxOf(cwnd / 2, 4 * MTU)
             cwnd = ssthresh
@@ -554,7 +554,7 @@ internal class SctpAssociation(
     private fun chunkAt(tsn: Long): OutChunk? {
         if (outstanding.isEmpty()) return null
         val i = tsn - outstanding.first().tsn
-        return if (i in 0 until outstanding.size) outstanding[i.toInt()] else null
+        return if (i in outstanding.indices) outstanding[i.toInt()] else null
     }
 
     private fun markForRetransmit(k: OutChunk) {

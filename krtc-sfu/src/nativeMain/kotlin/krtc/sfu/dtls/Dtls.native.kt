@@ -1,56 +1,15 @@
 package krtc.sfu.dtls
 
-import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.CPointerVar
-import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.UByteVar
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.asStableRef
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlinx.cinterop.readBytes
-import kotlinx.cinterop.staticCFunction
-import kotlinx.cinterop.toKString
-import kotlinx.cinterop.value
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.cinterop.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.withTimeoutOrNull
-import krtc.sfu.openssl.BIO
-import krtc.sfu.openssl.BIO_write
-import krtc.sfu.openssl.EVP_PKEY
-import krtc.sfu.openssl.SSL
-import krtc.sfu.openssl.SSL_CTX
-import krtc.sfu.openssl.SSL_ERROR_WANT_READ
-import krtc.sfu.openssl.SSL_ERROR_WANT_WRITE
-import krtc.sfu.openssl.SSL_ERROR_ZERO_RETURN
-import krtc.sfu.openssl.SSL_do_handshake
-import krtc.sfu.openssl.SSL_free
-import krtc.sfu.openssl.SSL_get_error
-import krtc.sfu.openssl.SSL_read
-import krtc.sfu.openssl.SSL_write
-import krtc.sfu.openssl.X509
-import krtc.sfu.openssl.krtc_cert_sha256
-import krtc.sfu.openssl.krtc_dtls_ctx
-import krtc.sfu.openssl.krtc_dtls_handle_timeout
-import krtc.sfu.openssl.krtc_dtls_new
-import krtc.sfu.openssl.krtc_dtls_timeout_ms
-import krtc.sfu.openssl.krtc_ec_p256_key
-import krtc.sfu.openssl.krtc_export_srtp
-import krtc.sfu.openssl.krtc_last_error
-import krtc.sfu.openssl.krtc_peer_sha256
-import krtc.sfu.openssl.krtc_self_signed
-import krtc.sfu.openssl.krtc_srtp_profile_id
+import krtc.sfu.openssl.*
 import krtc.sfu.platform.logger
 import krtc.sfu.platform.withPointer
 import krtc.sfu.srtp.SrtpProfile
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Kotlin/Native: ECDSA P-256 key, self-signed certificate and a shared DTLS server SSL_CTX (OpenSSL 3). */
 internal actual class DtlsIdentity private constructor(
@@ -156,7 +115,7 @@ internal actual class DtlsEndpoint actual constructor(
                 else -> throw IllegalStateException("handshake error $e: ${lastError()}")
             }
             val timeout = krtc_dtls_timeout_ms(ssl).let { if (it < 0) 1000L else it.coerceAtLeast(1) }
-            val record = withTimeoutOrNull(timeout) { inbox.receiveCatching().getOrNull() ?: throw IllegalStateException("closed") }
+            val record = withTimeoutOrNull(timeout.milliseconds) { inbox.receiveCatching().getOrNull() ?: throw IllegalStateException("closed") }
             if (record == null) {
                 if (krtc_dtls_handle_timeout(ssl) < 0) throw IllegalStateException("handshake timeout: ${lastError()}")
             } else {

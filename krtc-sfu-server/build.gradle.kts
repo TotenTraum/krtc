@@ -37,7 +37,7 @@ val generateWeb = tasks.register("generateWeb") {
     inputs.file(input)
     outputs.file(output)
     doLast {
-        val html = input.readText().replace("$", "\${'$'}")
+        val html = input.readText().replace("$", $$"${'$'}")
         output.get().asFile.apply {
             parentFile.mkdirs()
             writeText(
@@ -69,8 +69,8 @@ val jvmStartScripts = tasks.register("jvmStartScripts") {
         val out = dir.get().asFile.apply { mkdirs() }
         out.resolve("krtc-sfu").writeText(
             "#!/bin/sh\n" +
-                "DIR=\"\$(cd \"\$(dirname \"\$0\")/..\" && pwd)\"\n" +
-                "exec java -XX:+UseZGC -cp \"\$DIR/lib/*\" krtc.sfu.server.MainKt \"\$@\"\n",
+                    $$"DIR=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +
+                    $$"exec java -XX:+UseZGC -cp \"$DIR/lib/*\" krtc.sfu.server.MainKt \"$@\"\n",
         )
         out.resolve("krtc-sfu.bat").writeText(
             "@echo off\r\n" +

@@ -3,12 +3,12 @@ package krtc.sfu.room
 import krtc.protocol.rtp.Rtp
 import krtc.protocol.rtp.RtpHeader
 import krtc.protocol.rtp.Vp8
+import krtc.sfu.SfuParticipant
+import krtc.sfu.SignalSink
 import krtc.sfu.platform.PeerAddress
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.platform.secureRandomInt
 import krtc.sfu.platform.secureRandomLong
-import krtc.sfu.SfuParticipant
-import krtc.sfu.SignalSink
 import krtc.sfu.srtp.SrtpSessionKeys
 import kotlin.concurrent.Volatile
 
@@ -17,7 +17,7 @@ import kotlin.concurrent.Volatile
  * continuous stream under an SSRC the SFU chose, even when the publisher restarts its stream.
  * Shard thread only.
  */
-internal class OutboundStream(public val ssrc: Long, private val clockRate: Int) {
+internal class OutboundStream(val ssrc: Long, private val clockRate: Int) {
     private var lastSourceSsrc = -1L
     private var seqOffset = 0
     private var tsOffset = 0L
@@ -69,9 +69,9 @@ internal class PacketCache(private val capacity: Int) {
 }
 
 /** One simulcast layer of a publisher's video uplink. Shard thread only. */
-internal class VideoLayer(public val index: Int) {
-    internal var ssrc: Long = -1; internal set
-    internal var lastPacketMillis: Long = -1; internal set
+internal class VideoLayer(val index: Int) {
+    internal var ssrc: Long = -1
+    internal var lastPacketMillis: Long = -1
     internal val cache = PacketCache(MediaPlan.VIDEO_CACHE_PACKETS)
     internal var lastKeyframeRequest = -1L
 
@@ -195,7 +195,7 @@ internal class VideoFeed(val publisher: Participant, val kind: VideoKind) {
     fun layerOfRtx(rtxSsrc: Long, repairedRid: String?): VideoLayer? {
         if (repairedRid != null) return layers[MediaPlan.layerOf(repairedRid).also { layerByRtxSsrc[rtxSsrc] = it }]
         layerByRtxSsrc[rtxSsrc]?.let { return layers[it] }
-        return layers.filter { it.ssrc >= 0 }.singleOrNull()
+        return layers.singleOrNull { it.ssrc >= 0 }
     }
 
     override fun toString(): String = "VideoFeed($key)"
@@ -220,8 +220,8 @@ internal class DownlinkVideo {
 
     /** The layer cap actually applied: the subscriber's preference and its bandwidth. */
     internal val cap: Int get() = minOf(preferred, allowed)
-    internal var current: Int = -1; internal set
-    internal var target: Int = -1; internal set
+    internal var current: Int = -1
+    internal var target: Int = -1
 
     private var started = false
     private var seqOffset = 0
@@ -306,10 +306,9 @@ internal class Participant(
     override val id: String,
     override val name: String,
     internal val room: Room,
-    sink: SignalSink,
-) : SfuParticipant {
     /** Where its signaling goes; replaced when the client resumes on a new connection. */
-    @Volatile internal var sink: SignalSink = sink
+    @Volatile internal var sink: SignalSink,
+) : SfuParticipant {
 
     /** Secret that lets the client take this session over after its connection dropped (ServerMessage.Welcome.resume). */
     internal val resumeToken: String = randomIceString(24)

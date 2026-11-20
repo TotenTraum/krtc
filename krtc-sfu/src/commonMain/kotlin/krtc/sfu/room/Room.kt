@@ -1,22 +1,15 @@
 package krtc.sfu.room
 
-import kotlin.concurrent.atomics.incrementAndFetch
-import krtc.protocol.rtp.AudioLevel
-import krtc.protocol.rtp.H264
-import krtc.protocol.rtp.Rtcp
-import krtc.protocol.rtp.Rtp
-import krtc.protocol.rtp.RtpHeader
-import krtc.protocol.rtp.RtpStreamId
-import krtc.protocol.rtp.TransportCc
-import krtc.protocol.rtp.Vp8
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import krtc.protocol.rtp.*
 import krtc.sfu.platform.PeerAddress
 import krtc.sfu.platform.Transports
 import krtc.sfu.platform.nowMicros
 import krtc.sfu.platform.nowMillis
 import krtc.sfu.srtp.SrtpSessionKeys
-import kotlinx.atomicfu.locks.SynchronizedObject
-import kotlinx.atomicfu.locks.synchronized
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.incrementAndFetch
 
 /**
  * A room. Membership changes take a lock and publish an immutable snapshot; the media path reads the
@@ -41,7 +34,8 @@ internal class Room(
     private val lock = SynchronizedObject()
     private val lossRandom = kotlin.random.Random(42)
 
-    @Volatile public var members: List<Participant> = emptyList()
+    @Volatile
+    var members: List<Participant> = emptyList()
         private set
 
     // Shard-thread scratch state.
@@ -277,15 +271,18 @@ internal class Room(
         }
         counters.rtcpIn.incrementAndFetch()
         Rtcp.forEach(data, 0, n) { type, fmt, at, size ->
-            when {
-                type == Rtcp.SR -> forwardSenderReport(from, data, at)
-                type == Rtcp.RTPFB && fmt == TransportCc.FMT ->
+            when (type) {
+                Rtcp.SR -> forwardSenderReport(from, data, at)
+                Rtcp.RTPFB if fmt == TransportCc.FMT ->
                     TransportCc.parse(data, at, size)?.let { from.bwe.onFeedback(it, nowMillis()) }
-                type == Rtcp.RTPFB && fmt == Rtcp.FMT_NACK ->
+
+                Rtcp.RTPFB if fmt == Rtcp.FMT_NACK ->
                     publisherOfVideo(Rtcp.mediaSsrc(data, at))?.let { retransmit(it, from, Rtcp.nackSequences(data, at, size)) }
-                type == Rtcp.PSFB && fmt == Rtcp.FMT_PLI ->
+
+                Rtcp.PSFB if fmt == Rtcp.FMT_PLI ->
                     publisherOfVideo(Rtcp.mediaSsrc(data, at))?.let { keyframeForSubscriber(it, from) }
-                type == Rtcp.PSFB && fmt == Rtcp.FMT_FIR ->
+
+                Rtcp.PSFB if fmt == Rtcp.FMT_FIR ->
                     Rtcp.firTargets(data, at, size).forEach { ssrc -> publisherOfVideo(ssrc)?.let { keyframeForSubscriber(it, from) } }
                 // RR, SDES, BYE and subscriber REMB are terminated here.
             }

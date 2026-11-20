@@ -13,7 +13,7 @@ internal expect class DtlsIdentity {
 }
 
 /** Result of a completed DTLS-SRTP handshake: the negotiated profile and RFC 5764 keying material. */
-internal class DtlsSrtpKeys(public val profile: SrtpProfile, public val material: ByteArray)
+internal class DtlsSrtpKeys(val profile: SrtpProfile, val material: ByteArray)
 
 /**
  * Server side of DTLS-SRTP for one participant (RFC 5763/5764). The browser is the DTLS client

@@ -1,6 +1,11 @@
 package krtc.sfu
 
-import io.ktor.util.collections.ConcurrentMap
+import io.ktor.util.collections.*
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import krtc.protocol.PacketKind
 import krtc.protocol.classifyPacket
 import krtc.protocol.sdp.Direction
@@ -8,33 +13,15 @@ import krtc.protocol.sdp.SessionDescription
 import krtc.protocol.stun.StunConstants
 import krtc.protocol.stun.StunMessage
 import krtc.protocol.stun.StunMessageBuilder
+import krtc.sfu.dtls.DtlsEndpoint
+import krtc.sfu.dtls.DtlsIdentity
+import krtc.sfu.platform.*
+import krtc.sfu.room.*
+import krtc.sfu.srtp.SrtpSessionKeys
 import krtc.signaling.ClientMessage
 import krtc.signaling.PeerInfo
 import krtc.signaling.ServerMessage
 import krtc.signaling.SignalingProtocol
-import krtc.sfu.dtls.DtlsEndpoint
-import krtc.sfu.dtls.DtlsIdentity
-import krtc.sfu.platform.PeerAddress
-import krtc.sfu.platform.TcpServer
-import krtc.sfu.platform.Transports
-import krtc.sfu.platform.UdpServer
-import krtc.sfu.platform.logger
-import krtc.sfu.platform.nowMicros
-import krtc.sfu.platform.nowMillis
-import krtc.sfu.platform.secureRandomLong
-import krtc.sfu.room.MediaPlan
-import krtc.sfu.room.OfferBuilder
-import krtc.sfu.room.Participant
-import krtc.sfu.room.Room
-import krtc.sfu.room.Shard
-import krtc.sfu.room.VideoKind
-import krtc.sfu.srtp.SrtpSessionKeys
-import kotlinx.atomicfu.locks.SynchronizedObject
-import kotlinx.atomicfu.locks.synchronized
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
@@ -72,14 +59,13 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
     private val byAddress = ConcurrentMap<PeerAddress, PeerSession>()
     private val ids = AtomicLong(0)
     private val closed = AtomicBoolean(false)
-    private val eventFlow = MutableSharedFlow<SfuEvent>(extraBufferCapacity = config.eventBufferSize, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** The UDP port media actually uses (useful with `udpPort = 0`). */
     public val udpPort: Int get() = udp.localPort
 
     /** Room and participant lifecycle, media and speaking events. Never blocks the SFU. */
-    public val events: SharedFlow<SfuEvent> = eventFlow.asSharedFlow()
-
+    public val events: SharedFlow<SfuEvent>
+        field = MutableSharedFlow(extraBufferCapacity = config.eventBufferSize, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     init {
         for (s in shards) s.every(100) { housekeeping(s) }
         for (s in shards) s.every(MediaPlan.TWCC_FEEDBACK_INTERVAL_MILLIS) { transportFeedback(s) }
@@ -121,13 +107,13 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
             byUfrag[p.iceUfrag] = session
             Triple(p, session, room.add(p))
         }
-        if (opened) eventFlow.tryEmit(SfuEvent.RoomOpened(roomName))
+        if (opened) events.tryEmit(SfuEvent.RoomOpened(roomName))
         sink.send(welcome(p, others))
         val joined = ServerMessage.PeerJoined(p.id, p.name)
         others.forEach { it.sink.send(joined) }
         session.negotiate()
         others.forEach { sessions[it.id]?.negotiate() }
-        eventFlow.tryEmit(SfuEvent.ParticipantJoined(roomName, p.id, p.name))
+        events.tryEmit(SfuEvent.ParticipantJoined(roomName, p.id, p.name))
         log.info("$p joined room $roomName (${others.size + 1} members)")
         return p
     }
@@ -152,7 +138,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         }
         sink.send(welcome(p, others))
         session.resync()
-        eventFlow.tryEmit(SfuEvent.ParticipantResumed(room, p.id))
+        events.tryEmit(SfuEvent.ParticipantResumed(room, p.id))
         log.info("$p resumed its session")
         return p
     }
@@ -170,7 +156,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         if (!resumable || config.resumeTimeoutMillis <= 0) return leave(p, reason)
         if (sessions[p.id]?.participant !== p) return
         p.detachedAtMillis = nowMillis()
-        eventFlow.tryEmit(SfuEvent.ParticipantDisconnected(p.room.name, p.id))
+        events.tryEmit(SfuEvent.ParticipantDisconnected(p.room.name, p.id))
         log.info("$p signaling dropped, waiting ${config.resumeTimeoutMillis} ms for it to resume")
     }
 
@@ -248,8 +234,8 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         }
         val left = ServerMessage.PeerLeft(p.id)
         remaining.forEach { it.sink.send(left); sessions[it.id]?.negotiate() }
-        eventFlow.tryEmit(SfuEvent.ParticipantLeft(p.room.name, p.id, reason))
-        if (roomClosed) eventFlow.tryEmit(SfuEvent.RoomClosed(p.room.name))
+        events.tryEmit(SfuEvent.ParticipantLeft(p.room.name, p.id, reason))
+        if (roomClosed) events.tryEmit(SfuEvent.RoomClosed(p.room.name))
         log.info("$p left room ${p.room.name}: $reason")
     }
 
@@ -310,7 +296,7 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
 
     /** Ends all sessions (`bye` with "server shutdown"), releases the UDP port and worker threads. Idempotent. */
     override fun close() {
-        if (!closed.compareAndSet(false, true)) return
+        if (!closed.compareAndSet(expectedValue = false, newValue = true)) return
         sessions.values.map { it.participant.id }.forEach { kick(it, "server shutdown") }
         udp.close()
         tcp?.close()
@@ -331,13 +317,13 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
         val video = p.announcedVideoMuted
         val msg = ServerMessage.PeerState(p.id, audio, video, p.deafened)
         p.room.members.forEach { it.sink.send(msg) }
-        eventFlow.tryEmit(SfuEvent.MediaStateChanged(p.room.name, p.id, audio, video))
+        events.tryEmit(SfuEvent.MediaStateChanged(p.room.name, p.id, audio, video))
     }
 
     private fun announceSpeaking(p: Participant, speaking: Boolean) {
         val msg = ServerMessage.Speaking(p.id, speaking)
         p.room.members.forEach { it.sink.send(msg) }
-        eventFlow.tryEmit(SfuEvent.SpeakingChanged(p.room.name, p.id, speaking))
+        events.tryEmit(SfuEvent.SpeakingChanged(p.room.name, p.id, speaking))
     }
 
     // ------------------------------------------------------------------ transport (UDP threads)
@@ -534,8 +520,8 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                 // Its video m-lines in everyone else's offer change between sendonly and inactive.
                 participant.room.members.filter { it !== participant }.forEach { sessions[it.id]?.negotiate() }
             }
-            if (cameraChanged) eventFlow.tryEmit(SfuEvent.VideoPublishingChanged(participant.room.name, participant.id, participant.publishesVideo))
-            if (screenChanged) eventFlow.tryEmit(SfuEvent.ScreenShareChanged(participant.room.name, participant.id, participant.screen.publishing))
+            if (cameraChanged) events.tryEmit(SfuEvent.VideoPublishingChanged(participant.room.name, participant.id, participant.publishesVideo))
+            if (screenChanged) events.tryEmit(SfuEvent.ScreenShareChanged(participant.room.name, participant.id, participant.screen.publishing))
         }
 
         private fun startDtls(answer: SessionDescription): Boolean {
@@ -555,12 +541,12 @@ public class Sfu(public val config: SfuConfig = SfuConfig()) : AutoCloseable {
                     if (config.dataChannels && participant.dataNegotiated) room.shard.execute { room.data.attach(participant, endpoint::send) }
                     mediaConnected = true
                     metrics.dtlsConnected.incrementAndFetch()
-                    eventFlow.tryEmit(SfuEvent.MediaConnected(participant.room.name, participant.id, keys.profile.name))
+                    events.tryEmit(SfuEvent.MediaConnected(participant.room.name, participant.id, keys.profile.name))
                     log.info("$participant DTLS connected, ${keys.profile}")
                 },
                 onFailed = { t ->
                     metrics.dtlsFailed.incrementAndFetch()
-                    eventFlow.tryEmit(SfuEvent.MediaFailed(participant.room.name, participant.id, t.toString()))
+                    events.tryEmit(SfuEvent.MediaFailed(participant.room.name, participant.id, t.toString()))
                     log.info("$participant DTLS failed: $t")
                     kick(participant.id, "media connection failed")
                 },

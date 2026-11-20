@@ -1,56 +1,18 @@
 package krtc.client
 
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.webSocketSession
-import io.ktor.http.encodeURLParameter
-import io.ktor.websocket.DefaultWebSocketSession
-import io.ktor.websocket.Frame
-import io.ktor.websocket.WebSocketSession
-import io.ktor.websocket.close
-import io.ktor.websocket.readText
-import krtc.core.Krtc
-import krtc.core.MediaStreamTrack
-import krtc.core.PeerConnectionFactory
-import krtc.core.RTCConfiguration
-import krtc.core.RTCDataChannel
-import krtc.core.RTCDataChannelInit
-import krtc.core.RTCDataChannelMessage
-import krtc.core.RTCDataChannelState
-import krtc.core.RTCPeerConnection
-import krtc.core.RTCPeerConnectionState
-import krtc.core.RTCRtpSendParameters
-import krtc.core.RTCRtpTransceiverDirection
-import krtc.core.RTCSdpType
-import krtc.core.RTCSessionDescription
-import krtc.core.SilentAudioTrackFactory
+import io.ktor.client.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.http.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.*
+import krtc.core.*
 import krtc.signaling.ClientMessage
 import krtc.signaling.DataEnvelope
 import krtc.signaling.ServerMessage
 import krtc.signaling.SignalingProtocol
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Video quality a subscriber asks the SFU for; maps to the simulcast layers `q`, `h`, `f`. */
 public enum class VideoQuality(public val rid: String) { LOW("q"), MEDIUM("h"), HIGH("f") }
@@ -83,7 +45,12 @@ public class RoomData(
 }
 
 /** Another member of the room, as seen by this client. */
-public class RemoteParticipant internal constructor(public val id: String, public val name: String, audioMuted: Boolean = false, videoMuted: Boolean = false) {
+public class RemoteParticipant internal constructor(
+    public val id: String,
+    public val name: String,
+    audioMuted: Boolean = false,
+    videoMuted: Boolean = false
+) {
     internal val audioState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val videoState = MutableStateFlow<MediaStreamTrack?>(null)
     internal val screenState = MutableStateFlow<MediaStreamTrack?>(null)
@@ -136,31 +103,33 @@ public class RoomClient(
     private val reconnectTimeoutMillis: Long = 60_000,
 ) {
     private val scope = CoroutineScope((parentScope?.coroutineContext ?: Dispatchers.Default) + SupervisorJob())
-    private val stateFlow = MutableStateFlow<RoomState>(RoomState.Idle)
-    private val participantsFlow = MutableStateFlow<List<RemoteParticipant>>(emptyList())
-    private val selfSpeakingFlow = MutableStateFlow(false)
-    private val dataFlow = MutableSharedFlow<RoomData>(extraBufferCapacity = 256)
-    private val dataOpenFlow = MutableStateFlow(false)
 
-    public val state: StateFlow<RoomState> = stateFlow.asStateFlow()
-    public val participants: StateFlow<List<RemoteParticipant>> = participantsFlow.asStateFlow()
-    public val selfSpeaking: StateFlow<Boolean> = selfSpeakingFlow.asStateFlow()
-
-    private val selfAudioMutedFlow = MutableStateFlow(false)
-    private val selfVideoMutedFlow = MutableStateFlow(false)
+    public val state: StateFlow<RoomState>
+        field = MutableStateFlow<RoomState>(RoomState.Idle)
+    public val participants: StateFlow<List<RemoteParticipant>>
+        field = MutableStateFlow(emptyList())
+    public val selfSpeaking: StateFlow<Boolean>
+        field = MutableStateFlow(false)
 
     /** How the others see this client's microphone and camera: muted by [setMediaState] or by the server. */
-    public val selfAudioMuted: StateFlow<Boolean> = selfAudioMutedFlow.asStateFlow()
-    public val selfVideoMuted: StateFlow<Boolean> = selfVideoMutedFlow.asStateFlow()
+    public val selfAudioMuted: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
+    public val selfVideoMuted: StateFlow<Boolean>
+        field = MutableStateFlow(false)
 
     /** Messages from other participants and the server ([sendData] on their side, `Sfu.sendData` on the server). */
-    public val data: SharedFlow<RoomData> = dataFlow.asSharedFlow()
+    public val data: SharedFlow<RoomData>
+        field = MutableSharedFlow<RoomData>(extraBufferCapacity = 256)
 
     /** Whether [sendData] can send: the reliable data channel to the SFU is open. */
-    public val dataOpen: StateFlow<Boolean> = dataOpenFlow.asStateFlow()
+    public val dataOpen: StateFlow<Boolean>
+        field = MutableStateFlow(false)
 
     private var session: WebSocketSession? = null
-    @kotlin.concurrent.Volatile private var left = false
+
+    @kotlin.concurrent.Volatile
+    private var left = false
     private var pc: RTCPeerConnection? = null
     private var microphone: MediaStreamTrack? = null
     private var camera: MediaStreamTrack? = null
@@ -174,7 +143,8 @@ public class RoomClient(
      */
     private var placeholder: MediaStreamTrack? = null
     private val screenAudioPlaceholder: MediaStreamTrack?
-        get() = placeholder ?: (factory as? SilentAudioTrackFactory)?.createSilentAudioTrack("screen-audio")?.also { placeholder = it }
+        get() = placeholder ?: (factory as? SilentAudioTrackFactory)?.createSilentAudioTrack("screen-audio")
+            ?.also { placeholder = it }
     private var screenMids: Set<String> = emptySet()
     private var screenParameters: RTCRtpSendParameters? = null
     private var selfId: String? = null
@@ -216,7 +186,7 @@ public class RoomClient(
         this.screen = screen
         this.roomName = roomName
         this.displayName = displayName
-        stateFlow.value = RoomState.Connecting
+        state.value = RoomState.Connecting
         startLink()
         val ws = openSocket() ?: return
         session = ws
@@ -248,10 +218,10 @@ public class RoomClient(
         }
         reliableChannel = null
         lossyChannel = null
-        dataOpenFlow.value = false
+        dataOpen.value = false
         midToPeer = emptyMap()
         screenMids = emptySet()
-        for (p in participantsFlow.value) {
+        for (p in participants.value) {
             p.audioState.value = null
             p.videoState.value = null
             p.screenState.value = null
@@ -266,8 +236,9 @@ public class RoomClient(
      * and the SFU would keep a ghost participant. Closed here instead if the caller left or was cancelled.
      */
     private suspend fun openSocket(): WebSocketSession? {
-        val url = serverUrl.trimEnd('/') + "/ws?room=" + roomName.encodeURLParameter() + "&name=" + displayName.encodeURLParameter() +
-            (resumeToken?.let { "&resume=" + it.encodeURLParameter() } ?: "")
+        val url =
+            serverUrl.trimEnd('/') + "/ws?room=" + roomName.encodeURLParameter() + "&name=" + displayName.encodeURLParameter() +
+                    (resumeToken?.let { "&resume=" + it.encodeURLParameter() } ?: "")
         val ws = withContext(NonCancellable) { http.webSocketSession(url) }
         if (left || !currentCoroutineContext().isActive) {
             withContext(NonCancellable) { closeGracefully(ws) }
@@ -284,7 +255,7 @@ public class RoomClient(
             ws.flush()
             ws.close()
         }
-        (ws as? DefaultWebSocketSession)?.let { withTimeoutOrNull(CLOSE_TIMEOUT_MILLIS) { runCatching { it.closeReason.await() } } }
+        (ws as? DefaultWebSocketSession)?.let { withTimeoutOrNull(CLOSE_TIMEOUT_MILLIS.milliseconds) { runCatching { it.closeReason.await() } } }
     }
 
     /** Reads signaling until the client leaves, the server ends the session, or reconnecting gives up. */
@@ -299,7 +270,7 @@ public class RoomClient(
             } catch (t: Throwable) {
                 t.message ?: t.toString()
             }
-            if (left || stateFlow.value is RoomState.Disconnected) return // left, or the server said bye
+            if (left || state.value is RoomState.Disconnected) return // left, or the server said bye
             ws = reconnect(reason) ?: return
             session = ws
         }
@@ -307,17 +278,18 @@ public class RoomClient(
 
     /** Opens a new socket, retrying with backoff for [reconnectTimeoutMillis]; null (and Disconnected) if it never does. */
     private suspend fun reconnect(reason: String): WebSocketSession? {
-        val giveUpAt = kotlin.time.TimeSource.Monotonic.markNow() + kotlin.time.Duration.parse("${reconnectTimeoutMillis}ms")
+        val giveUpAt =
+            kotlin.time.TimeSource.Monotonic.markNow() + kotlin.time.Duration.parse("${reconnectTimeoutMillis}ms")
         var attempt = 0
         while (!left && reconnectTimeoutMillis > 0 && giveUpAt.hasNotPassedNow()) {
             attempt++
-            stateFlow.value = RoomState.Reconnecting(attempt, reason)
+            state.value = RoomState.Reconnecting(attempt, reason)
             val ws = runCatching { openSocket() }.getOrElse { null }
             if (ws != null) return ws
             if (left) return null
-            delay(minOf(RECONNECT_MAX_DELAY_MILLIS, RECONNECT_FIRST_DELAY_MILLIS shl minOf(attempt - 1, 4)))
+            delay(minOf(RECONNECT_MAX_DELAY_MILLIS, RECONNECT_FIRST_DELAY_MILLIS shl minOf(attempt - 1, 4)).milliseconds)
         }
-        if (!left) stateFlow.value = RoomState.Disconnected(reason)
+        if (!left) state.value = RoomState.Disconnected(reason)
         return null
     }
 
@@ -330,8 +302,8 @@ public class RoomClient(
                 selfId = message.id
                 resumeToken = message.resume
                 // Participants that are still there keep their objects (and, when resumed, their tracks).
-                val known = participantsFlow.value.associateBy { it.id }
-                participantsFlow.value = message.peers.map { info ->
+                val known = participants.value.associateBy { it.id }
+                participants.value = message.peers.map { info ->
                     (known[info.id] ?: RemoteParticipant(info.id, info.name)).also {
                         it.audioMutedState.value = info.audioMuted
                         it.videoMutedState.value = info.videoMuted
@@ -339,34 +311,44 @@ public class RoomClient(
                         it.speakingState.value = false
                     }
                 }
-                selfSpeakingFlow.value = false
-                stateFlow.value = RoomState.Connected(message.room, message.id)
+                selfSpeaking.value = false
+                state.value = RoomState.Connected(message.room, message.id)
                 val newSession = !resumed
                 val stillThere = message.peers.map { it.id }.toSet()
                 unsubscribedScreens.retainAll(stillThere)
                 scope.launch {
                     if (mediaState.audioMuted || mediaState.videoMuted || mediaState.deafened) send(mediaState)
-                    if (newSession && previous != null) for (id in unsubscribedScreens) send(ClientMessage.Subscribe(id, ClientMessage.Subscribe.FEED_SCREEN, false))
+                    if (newSession && previous != null) for (id in unsubscribedScreens) send(
+                        ClientMessage.Subscribe(
+                            id,
+                            ClientMessage.Subscribe.FEED_SCREEN,
+                            false
+                        )
+                    )
                 }
             }
-            is ServerMessage.PeerJoined -> participantsFlow.update { list ->
+
+            is ServerMessage.PeerJoined -> participants.update { list ->
                 if (list.any { it.id == message.id }) list else list + RemoteParticipant(message.id, message.name)
             }
-            is ServerMessage.PeerLeft -> participantsFlow.update { list -> list.filterNot { it.id == message.id } }
+
+            is ServerMessage.PeerLeft -> participants.update { list -> list.filterNot { it.id == message.id } }
             is ServerMessage.PeerState ->
                 if (message.id == selfId) {
-                    selfAudioMutedFlow.value = message.audioMuted
-                    selfVideoMutedFlow.value = message.videoMuted
+                    selfAudioMuted.value = message.audioMuted
+                    selfVideoMuted.value = message.videoMuted
                 } else participant(message.id)?.let {
                     it.audioMutedState.value = message.audioMuted
                     it.videoMutedState.value = message.videoMuted
                     it.deafenedState.value = message.deafened
                 }
+
             is ServerMessage.Speaking ->
-                if (message.id == selfId) selfSpeakingFlow.value = message.speaking
+                if (message.id == selfId) selfSpeaking.value = message.speaking
                 else participant(message.id)?.speakingState?.value = message.speaking
+
             is ServerMessage.Offer -> link?.offers?.trySend(message)
-            is ServerMessage.Bye -> stateFlow.value = RoomState.Disconnected(message.reason)
+            is ServerMessage.Bye -> state.value = RoomState.Disconnected(message.reason)
         }
     }
 
@@ -385,7 +367,10 @@ public class RoomClient(
         }
         // The screen uplinks send only while there is a track (the screen audio: or its silent placeholder); the SFU
         // forwards screen audio only while the screen is shared.
-        for ((mid, track) in listOf(UPLINK_SCREEN_MID to screen, UPLINK_SCREEN_AUDIO_MID to (screenAudio ?: screenAudioPlaceholder))) {
+        for ((mid, track) in listOf(
+            UPLINK_SCREEN_MID to screen,
+            UPLINK_SCREEN_AUDIO_MID to (screenAudio ?: screenAudioPlaceholder)
+        )) {
             val t = peerConnection.getTransceivers().firstOrNull { it.mid == mid } ?: continue
             if (track != null) {
                 t.direction = RTCRtpTransceiverDirection.SENDONLY
@@ -396,7 +381,7 @@ public class RoomClient(
             }
         }
         // m-lines the SFU marked inactive (someone left, or sends no video) lose their tracks.
-        for (p in participantsFlow.value) {
+        for (p in participants.value) {
             val mids = midToPeer.filterValues { it == p.id }.keys
             if (mids.isEmpty()) {
                 p.audioState.value = null
@@ -416,7 +401,9 @@ public class RoomClient(
     /** The screen uplink's encoding limits and degradation preference ([setScreen]), once it sends. */
     private suspend fun applyScreenParameters(peerConnection: RTCPeerConnection) {
         val wanted = screenParameters ?: return
-        val sender = peerConnection.getTransceivers().firstOrNull { it.mid == UPLINK_SCREEN_MID && it.direction == RTCRtpTransceiverDirection.SENDONLY }?.sender ?: return
+        val sender = peerConnection.getTransceivers()
+            .firstOrNull { it.mid == UPLINK_SCREEN_MID && it.direction == RTCRtpTransceiverDirection.SENDONLY }?.sender
+            ?: return
         runCatching {
             val current = sender.getParameters()
             sender.setParameters(
@@ -434,15 +421,25 @@ public class RoomClient(
      */
     private fun openDataChannels(peerConnection: RTCPeerConnection) {
         val reliable = peerConnection.createDataChannel(DataEnvelope.RELIABLE_LABEL)
-        val lossy = peerConnection.createDataChannel(DataEnvelope.LOSSY_LABEL, RTCDataChannelInit(ordered = false, maxRetransmits = 0))
+        val lossy = peerConnection.createDataChannel(
+            DataEnvelope.LOSSY_LABEL,
+            RTCDataChannelInit(ordered = false, maxRetransmits = 0)
+        )
         reliableChannel = reliable
         lossyChannel = lossy
-        scope.launch { reliable.readyState.collect { dataOpenFlow.value = it == RTCDataChannelState.OPEN } }
+        scope.launch { reliable.readyState.collect { dataOpen.value = it == RTCDataChannelState.OPEN } }
         for (ch in listOf(reliable, lossy)) scope.launch {
             ch.onmessage.collect { m ->
                 if (m !is RTCDataChannelMessage.Binary) return@collect
                 val envelope = DataEnvelope.decode(m.data) ?: return@collect
-                dataFlow.emit(RoomData(envelope.ids.firstOrNull(), envelope.topic, envelope.payload, reliable = ch === reliable))
+                data.emit(
+                    RoomData(
+                        envelope.ids.firstOrNull(),
+                        envelope.topic,
+                        envelope.payload,
+                        reliable = ch === reliable
+                    )
+                )
             }
         }
     }
@@ -454,7 +451,12 @@ public class RoomClient(
      * [topic] (up to 255 bytes) lets receivers tell message kinds apart. Payloads up to about 64 KB.
      * Returns false if the data channel is not open yet (see [dataOpen]).
      */
-    public fun sendData(payload: ByteArray, topic: String = "", to: List<String> = emptyList(), reliable: Boolean = true): Boolean {
+    public fun sendData(
+        payload: ByteArray,
+        topic: String = "",
+        to: List<String> = emptyList(),
+        reliable: Boolean = true
+    ): Boolean {
         val ch = (if (reliable) reliableChannel else lossyChannel) ?: return false
         if (ch.readyState.value != RTCDataChannelState.OPEN) return false
         val message = DataEnvelope.encode(to, topic, payload)
@@ -473,7 +475,7 @@ public class RoomClient(
         }
     }
 
-    private fun participant(id: String): RemoteParticipant? = participantsFlow.value.firstOrNull { it.id == id }
+    private fun participant(id: String): RemoteParticipant? = participants.value.firstOrNull { it.id == id }
 
     /**
      * Recovers from lost connectivity (network change, NAT rebinding): when the peer connection fails, or stays
@@ -483,13 +485,16 @@ public class RoomClient(
     private suspend fun restartIceWhenStuck(peerConnection: RTCPeerConnection) {
         // Also re-evaluated when signaling comes back: a network change usually breaks both, and the restart can only
         // be asked for once the socket is up again.
-        combine(peerConnection.connectionState, stateFlow) { s, room -> s to (room is RoomState.Connected) }.collectLatest { (s, signaling) ->
+        combine(
+            peerConnection.connectionState,
+            state
+        ) { s, room -> s to (room is RoomState.Connected) }.collectLatest { (s, signaling) ->
             if (!signaling) return@collectLatest
             if (s != RTCPeerConnectionState.DISCONNECTED && s != RTCPeerConnectionState.FAILED) return@collectLatest
-            if (s == RTCPeerConnectionState.DISCONNECTED) delay(ICE_RESTART_GRACE_MILLIS)
-            while (stateFlow.value is RoomState.Connected) {
+            if (s == RTCPeerConnectionState.DISCONNECTED) delay(ICE_RESTART_GRACE_MILLIS.milliseconds)
+            while (state.value is RoomState.Connected) {
                 restartIce()
-                delay(ICE_RESTART_RETRY_MILLIS)
+                delay(ICE_RESTART_RETRY_MILLIS.milliseconds)
             }
         }
     }
@@ -524,12 +529,19 @@ public class RoomClient(
      * [parameters]: limits for the screen's encoding (bitrate, frame rate) and what to give up when bandwidth runs
      * short ([RTCRtpSendParameters.degradationPreference]); null leaves the backend's defaults.
      */
-    public suspend fun setScreen(track: MediaStreamTrack?, audio: MediaStreamTrack? = null, parameters: RTCRtpSendParameters? = null) {
+    public suspend fun setScreen(
+        track: MediaStreamTrack?,
+        audio: MediaStreamTrack? = null,
+        parameters: RTCRtpSendParameters? = null
+    ) {
         screen = track
         screenAudio = audio?.takeIf { track != null }
         screenParameters = parameters.takeIf { track != null }
         var renegotiate = false
-        for ((mid, t) in listOf(UPLINK_SCREEN_MID to screen, UPLINK_SCREEN_AUDIO_MID to (screenAudio ?: screenAudioPlaceholder))) {
+        for ((mid, t) in listOf(
+            UPLINK_SCREEN_MID to screen,
+            UPLINK_SCREEN_AUDIO_MID to (screenAudio ?: screenAudioPlaceholder)
+        )) {
             val transceiver = pc?.getTransceivers()?.firstOrNull { it.mid == mid } ?: continue
             val sending = transceiver.direction == RTCRtpTransceiverDirection.SENDONLY
             when {
@@ -553,7 +565,7 @@ public class RoomClient(
      */
     public suspend fun setMediaState(audioMuted: Boolean, videoMuted: Boolean, deafened: Boolean = false) {
         mediaState = ClientMessage.MediaState(audioMuted, videoMuted, deafened)
-        if (stateFlow.value is RoomState.Connected) send(mediaState)
+        if (state.value is RoomState.Connected) send(mediaState)
     }
 
     /**
@@ -596,14 +608,14 @@ public class RoomClient(
         session = null
         reliableChannel = null
         lossyChannel = null
-        dataOpenFlow.value = false
+        dataOpen.value = false
         // Release media and publish the final state before the socket closes, so observers of
         // `state` never see Disconnected while the peer connection is still open.
         peer?.close()
         placeholder?.stop()
         placeholder = null
-        participantsFlow.value = emptyList()
-        stateFlow.value = RoomState.Disconnected("left")
+        participants.value = emptyList()
+        state.value = RoomState.Disconnected("left")
         // Saying so lets the server remove this client at once; a socket that merely closes could be a dropped
         // connection, which the server keeps for a while in case the client resumes.
         // Cancelling the scope stops the read loop, and Ktor may then drop the connection with the frames still queued:

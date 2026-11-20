@@ -1,13 +1,12 @@
 package krtc.meet.log
 
-import krtc.meet.appendLog
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import krtc.meet.appendLog
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 /**
  * The app's log: every entry goes to the local log ([appendLog]) and waits here for [LogUploader] to send it to the
@@ -37,7 +36,6 @@ object ClientLog {
     fun w(tag: String, message: String) = log(Level.WARN, tag, message)
     fun e(tag: String, message: String) = log(Level.ERROR, tag, message)
 
-    @OptIn(ExperimentalTime::class)
     fun log(level: Level, tag: String, message: String) {
         val text = if (message.length > MAX_MESSAGE_CHARS) message.take(MAX_MESSAGE_CHARS) + "… (cut)" else message
         runCatching { appendLog("${level.letter} [$tag] $text") }
@@ -53,7 +51,6 @@ object ClientLog {
     }
 
     /** Takes up to [max] of the oldest entries to send, with a note first if some were dropped meanwhile. */
-    @OptIn(ExperimentalTime::class)
     internal fun take(max: Int): List<Entry> = synchronized(lock) {
         val out = ArrayList<Entry>(minOf(max, pending.size) + 1)
         if (dropped > 0) {

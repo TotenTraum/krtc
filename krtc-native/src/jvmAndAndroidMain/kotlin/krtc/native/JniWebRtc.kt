@@ -1,29 +1,8 @@
 package krtc.native
 
-import krtc.core.MediaStreamTrack
-import krtc.core.PeerConnectionFactory
-import krtc.core.RTCConfiguration
-import krtc.core.RTCDataChannel
-import krtc.core.RTCDataChannelInit
-import krtc.core.RTCPeerConnection
-import krtc.core.RTCPeerConnectionState
-import krtc.core.RTCDegradationPreference
-import krtc.core.RTCRtpEncodingParameters
-import krtc.core.RTCRtpReceiver
-import krtc.core.RTCRtpSendParameters
-import krtc.core.RTCRtpSender
-import krtc.core.RTCRtpTransceiver
-import krtc.core.RTCRtpTransceiverDirection
-import krtc.core.RTCSdpType
-import krtc.core.RTCSessionDescription
-import krtc.core.RTCStats
-import krtc.core.RTCTrackEvent
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.suspendCancellableCoroutine
+import krtc.core.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -282,7 +261,7 @@ private class NativeSender(private val transceiver: NativeTransceiver) : RTCRtpS
 
 private class NativeReceiver(override val track: MediaStreamTrack) : RTCRtpReceiver
 
-internal class NativeTransceiver(internal val handle: Long, receiverTrack: NativeTrack) : RTCRtpTransceiver {
+internal class NativeTransceiver(handle: Long, receiverTrack: NativeTrack) : RTCRtpTransceiver {
     internal val guard = Guarded(handle)
     override val mid: String? get() = guard.useOr(null) { Jni.transceiverMid(it) }
     override var direction: RTCRtpTransceiverDirection
@@ -306,16 +285,15 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
     // Replaced by a newer OnTrack for the same mid. Released in close(), not on the signaling thread, which would wait
     // for a caller that holds the old one while waiting for the signaling thread. Guarded by lock.
     private val retired = mutableListOf<NativeTransceiver>()
-    private val tracks = MutableSharedFlow<RTCTrackEvent>(replay = 64)
     private val state = MutableStateFlow(RTCPeerConnectionState.NEW)
     private var closed = false
     private val guard = Guarded(Jni.pcCreate(factory.handle, ::onEvent).also { check(it != 0L) { "peer connection creation failed" } })
 
     private val channels = mutableListOf<NativeDataChannel>() // guarded by lock
-    private val remoteChannels = MutableSharedFlow<RTCDataChannel>(replay = 16)
-
-    override val ontrack: SharedFlow<RTCTrackEvent> get() = tracks
-    override val ondatachannel: SharedFlow<RTCDataChannel> get() = remoteChannels
+    override val ontrack: SharedFlow<RTCTrackEvent>
+        field = MutableSharedFlow<RTCTrackEvent>(replay = 64)
+    override val ondatachannel: SharedFlow<RTCDataChannel>
+        field = MutableSharedFlow<RTCDataChannel>(replay = 16)
     override val connectionState: StateFlow<RTCPeerConnectionState> = state.asStateFlow()
 
     override fun createDataChannel(label: String, init: RTCDataChannelInit): RTCDataChannel {
@@ -333,14 +311,14 @@ internal class NativePeerConnection(private val factory: NativePeerConnectionFac
             Jni.EVENT_DATA_CHANNEL -> {
                 val dc = NativeDataChannel(transceiver)
                 synchronized(lock) { channels += dc }
-                remoteChannels.tryEmit(dc)
+                ondatachannel.tryEmit(dc)
             }
             EVENT_CONNECTION_STATE -> state.value = RTCPeerConnectionState.entries.getOrElse(value) { RTCPeerConnectionState.FAILED }
             EVENT_TRACK -> {
                 val t = NativeTransceiver(transceiver, NativeTrack(track))
                 val mid = t.mid
                 if (mid != null) synchronized(lock) { transceivers.put(mid, t)?.let { retired += it } }
-                tracks.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
+                ontrack.tryEmit(RTCTrackEvent(t.receiver, t.receiver.track, t))
             }
         }
     }

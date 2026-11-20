@@ -1,24 +1,7 @@
 package krtc.sfu.platform
 
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.UByteVar
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.toKString
-import kotlinx.cinterop.usePinned
-import krtc.sfu.openssl.EVP_CIPHER_CTX
-import krtc.sfu.openssl.EVP_CIPHER_CTX_free
-import krtc.sfu.openssl.EVP_MAC_CTX
-import krtc.sfu.openssl.EVP_MAC_CTX_free
-import krtc.sfu.openssl.RAND_bytes
-import krtc.sfu.openssl.krtc_aes_ctr
-import krtc.sfu.openssl.krtc_aes_ctr_new
-import krtc.sfu.openssl.krtc_aes_gcm_decrypt
-import krtc.sfu.openssl.krtc_aes_gcm_encrypt
-import krtc.sfu.openssl.krtc_aes_gcm_new
-import krtc.sfu.openssl.krtc_hmac_final
-import krtc.sfu.openssl.krtc_hmac_sha1_new
-import krtc.sfu.openssl.krtc_hmac_update
+import kotlinx.cinterop.*
+import krtc.sfu.openssl.*
 import platform.posix._SC_NPROCESSORS_ONLN
 import platform.posix.getenv
 import platform.posix.sysconf
@@ -29,7 +12,7 @@ import kotlin.native.ref.createCleaner
 
 /** Pins [this] and passes a pointer to element [offset] (valid even for an empty array). */
 internal inline fun <R> ByteArray.withPointer(offset: Int = 0, block: (CPointer<UByteVar>) -> R): R =
-    if (size == 0) ByteArray(1).usePinned { block(it.addressOf(0).reinterpret()) }
+    if (isEmpty()) ByteArray(1).usePinned { block(it.addressOf(0).reinterpret()) }
     else usePinned { block(it.addressOf(offset.coerceAtMost(size - 1)).reinterpret()) }
 
 @OptIn(ExperimentalNativeApi::class)

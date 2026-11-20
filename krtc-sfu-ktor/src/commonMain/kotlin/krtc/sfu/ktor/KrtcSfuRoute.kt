@@ -1,24 +1,21 @@
 package krtc.sfu.ktor
 
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.routing.Route
-import io.ktor.server.websocket.DefaultWebSocketServerSession
-import io.ktor.server.websocket.webSocket
-import io.ktor.websocket.CloseReason
-import io.ktor.websocket.Frame
-import io.ktor.websocket.close
-import io.ktor.websocket.readText
-import krtc.signaling.ServerMessage
-import krtc.signaling.SignalingProtocol
-import krtc.sfu.JoinDeniedException
-import krtc.sfu.JoinRequest
-import krtc.sfu.SignalSink
-import krtc.sfu.Sfu
-import kotlinx.coroutines.channels.Channel
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import krtc.sfu.JoinDeniedException
+import krtc.sfu.JoinRequest
+import krtc.sfu.Sfu
+import krtc.sfu.SignalSink
+import krtc.signaling.ServerMessage
+import krtc.signaling.SignalingProtocol
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Builds the [JoinRequest] for an incoming WebSocket. The default reads `room` and `name` query
@@ -97,7 +94,7 @@ public suspend fun DefaultWebSocketServerSession.serve(sfu: Sfu, request: JoinRe
     } finally {
         // A client that closes the socket properly is leaving. One that just vanished (no close frame: network lost,
         // app killed) may come back and resume. When the server ended it (kick, bye), it is gone.
-        val clientClose = withContext(NonCancellable) { withTimeoutOrNull(500) { runCatching { closeReason.await() }.getOrNull() } }
+        val clientClose = withContext(NonCancellable) { withTimeoutOrNull(500.milliseconds) { runCatching { closeReason.await() }.getOrNull() } }
         val clientLeft = clientClose != null && clientClose.code != CLOSED_ABNORMALLY
         sfu.disconnected(participant, sink, serverReason ?: if (clientLeft) "left" else "disconnected", resumable = serverReason == null && !clientLeft)
         outbox.close()

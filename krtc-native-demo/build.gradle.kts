@@ -61,8 +61,8 @@ val jvmDemoStartScript = tasks.register("jvmDemoStartScript") {
         out.resolve("krtc-native-demo").writeText(
             "#!/bin/sh\n" +
                 "# Needs Java 21+.\n" +
-                "DIR=\"\$(cd \"\$(dirname \"\$0\")/..\" && pwd)\"\n" +
-                "exec java --enable-native-access=ALL-UNNAMED -cp \"\$DIR/lib/*\" krtc.native.demo.MainKt \"\$@\"\n",
+                    $$"DIR=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n" +
+                    $$"exec java --enable-native-access=ALL-UNNAMED -cp \"$DIR/lib/*\" krtc.native.demo.MainKt \"$@\"\n",
         )
     }
 }

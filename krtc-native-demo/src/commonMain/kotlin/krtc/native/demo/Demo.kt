@@ -1,21 +1,12 @@
 package krtc.native.demo
 
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import krtc.client.RoomClient
 import krtc.client.RoomState
-import krtc.native.AudioDevice
-import krtc.native.NativeAudioSource
-import krtc.native.NativePeerConnectionFactory
-import krtc.native.NativeTrack
-import krtc.native.NativeVideoSource
-import krtc.native.nativeCameras
-import krtc.native.nativeScreenSources
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import krtc.native.*
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Demo: a client built on krtc-client + krtc-core + libwebrtc joins a krtc-sfu room, publishes a test tone and
@@ -69,7 +60,7 @@ public suspend fun runDemo(
     }
     val client = RoomClient(url, factory)
     client.join(room, name, microphone = mic, camera = camera)
-    val connected = withTimeout(10_000) { client.state.first { it is RoomState.Connected } } as RoomState.Connected
+    val connected = withTimeout(10_000.milliseconds) { client.state.first { it is RoomState.Connected } } as RoomState.Connected
     println("joined ${connected.room} as ${connected.selfId}")
     var screenSource: NativeVideoSource? = null
     var screenTrack: NativeTrack? = null
@@ -90,7 +81,7 @@ public suspend fun runDemo(
     val restartIceAt = if ("restart-ice" in flags) 5 else -1
     val rendered = RenderSummary()
     repeat(seconds) { second ->
-        delay(1000)
+        delay(1000.milliseconds)
         if (second + 1 == restartIceAt) {
             println("requesting an ICE restart")
             client.restartIce()
@@ -156,7 +147,7 @@ private suspend fun pushTestFrames(source: NativeVideoSource) = coroutineScope {
         for (y in 0 until h) for (x in x0 until minOf(x0 + 24, w)) frame[y * w + x] = -1
         source.pushArgb(w, h, frame)
         n++
-        delay(66)
+        delay(66.milliseconds)
     }
 }
 

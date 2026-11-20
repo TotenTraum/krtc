@@ -29,7 +29,7 @@ enum class Linkage {
 }
 
 /** One libwebrtc platform: `.deps/<name>/<name>-release` and the shim built into `.deps/build/<name>`. */
-class WebRtcPlatform(val name: String, val shimCommand: List<String>, val linkage: Linkage) {
+class WebRtcPlatform(name: String, val shimCommand: List<String>, val linkage: Linkage) {
     val webrtcDir = layout.projectDirectory.dir(".deps/$name/$name-release")
     val shimOut = layout.projectDirectory.dir(".deps/build/$name")
     val libraries: List<Pair<String, String>>

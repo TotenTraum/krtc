@@ -43,3 +43,11 @@ subprojects {
         }
     }
 }
+
+allprojects {
+    apply(plugin = "idea")
+
+    extensions.configure<org.gradle.plugins.ide.idea.model.IdeaModel> {
+        module.excludeDirs.add(file(".deps"))
+    }
+}

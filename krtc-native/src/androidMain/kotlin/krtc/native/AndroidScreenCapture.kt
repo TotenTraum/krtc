@@ -1,10 +1,6 @@
 package krtc.native
 
-import android.app.Activity
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -20,6 +16,7 @@ import android.os.HandlerThread
 import android.os.IBinder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Android screen capture with MediaProjection into a screencast [NativeVideoSource]
@@ -66,7 +63,7 @@ public class AndroidScreenCapture(
             val started = CompletableDeferred<Unit>()
             ScreenCaptureService.started = started
             context.startForegroundService(Intent(context, ScreenCaptureService::class.java))
-            withTimeout(5_000) { started.await() } // the projection may only be created once the service is foreground
+            withTimeout(5_000.milliseconds) { started.await() } // the projection may only be created once the service is foreground
         }
         val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val p = manager.getMediaProjection(resultCode, resultData) ?: error("no media projection (consent denied?)")

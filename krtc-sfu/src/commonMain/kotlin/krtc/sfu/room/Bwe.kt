@@ -50,7 +50,7 @@ internal class TwccReceiver {
 
     /** Feedback for everything since the last call, or null if nothing arrived. */
     internal fun feedback(senderSsrc: Long): ByteArray? {
-        if (nextBase < 0 || highest < nextBase) return null
+        if (nextBase !in 0..highest) return null
         val count = highest - nextBase + 1
         val times = LongArray(count) { k ->
             val s = nextBase + k

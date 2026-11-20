@@ -1,26 +1,21 @@
 package krtc.client
 
-import io.ktor.server.engine.EmbeddedServer
-import krtc.sfu.Sfu
-import krtc.sfu.SfuConfig
-import io.ktor.server.application.install
-import io.ktor.server.cio.CIO
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.routing.routing
-import io.ktor.server.websocket.WebSockets
-import krtc.sfu.ktor.krtcSfu
+import io.ktor.server.application.*
+import io.ktor.server.cio.*
+import io.ktor.server.engine.*
+import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import krtc.sfu.Sfu
+import krtc.sfu.SfuConfig
+import krtc.sfu.ktor.krtcSfu
 import kotlin.concurrent.thread
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlin.test.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * krtc-client against a real krtc-sfu (signaling and negotiation; media is a fake backend).
@@ -58,7 +53,8 @@ class RoomClientSfuTest {
         val port: Int = server.localPort
 
         /** While set, new connections are reset at once: the network is down. */
-        @Volatile var down = false
+        @Volatile
+        var down = false
 
         init {
             thread(isDaemon = true) {
@@ -97,7 +93,7 @@ class RoomClientSfuTest {
     fun reconnectsAndResumesAfterSignalingDrops(): Unit = runBlocking {
         val port = server.engine.resolvedConnectors().first().port
         Relay(port).use { relay ->
-            withTimeout(30_000) {
+            withTimeout(30_000.milliseconds) {
                 val alice = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
                 val bob = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
                 alice.join("resume", "Alice", microphone = FakeTrack("audio"))
@@ -109,7 +105,11 @@ class RoomClientSfuTest {
                 alice.state.first { it is RoomState.Reconnecting }
                 assertEquals(aliceId, (alice.state.first { it is RoomState.Connected } as RoomState.Connected).selfId)
                 bob.state.first { it is RoomState.Connected }
-                assertTrue(bob.participants.value.single() === aliceAtBob, "the participant object (and its tracks) survive")
+                assertSame(
+                    bob.participants.value.single(),
+                    aliceAtBob,
+                    "the participant object (and its tracks) survive"
+                )
                 assertEquals(2, sfu.room("resume")!!.participants.size)
                 // Signaling works again: a mute reaches the other side.
                 alice.setMediaState(audioMuted = true, videoMuted = false)
@@ -133,7 +133,7 @@ class RoomClientSfuTest {
         }.also { it.start(wait = false) }
         val relay = Relay(s2.engine.resolvedConnectors().first().port)
         try {
-            withTimeout(30_000) {
+            withTimeout(30_000.milliseconds) {
                 val alice = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
                 val bob = RoomClient("ws://127.0.0.1:${relay.port}", FakeFactory())
                 alice.join("gone", "Alice", microphone = FakeTrack("audio"))
@@ -144,11 +144,13 @@ class RoomClientSfuTest {
                 // Keep the relay down until the server has dropped both, then let them back in.
                 relay.down = true
                 relay.cut()
-                while (shortSfu.room("gone") != null) delay(50)
+                while (shortSfu.room("gone") != null) delay(50.milliseconds)
                 relay.down = false
-                val again = withTimeout(10_000) { alice.state.first { it is RoomState.Connected && it.selfId != firstId } }
+                val again =
+                    withTimeout(10_000.milliseconds) { alice.state.first { it is RoomState.Connected && it.selfId != firstId } }
                 bob.state.first { it is RoomState.Connected }
-                bob.participants.first { list -> list.any { it.id == (again as RoomState.Connected).selfId } }.single().audio.first { it != null }
+                bob.participants.first { list -> list.any { it.id == (again as RoomState.Connected).selfId } }
+                    .single().audio.first { it != null }
                 assertEquals(2, shortSfu.room("gone")!!.participants.size)
                 alice.leave()
                 bob.leave()
@@ -162,7 +164,7 @@ class RoomClientSfuTest {
 
     @Test
     fun mutedStateIsSeenByOthers(): Unit = runBlocking {
-        withTimeout(15_000) {
+        withTimeout(15_000.milliseconds) {
             val alice = RoomClient(url, FakeFactory())
             val bob = RoomClient(url, FakeFactory())
             alice.setMediaState(audioMuted = true, videoMuted = false) // before joining: sent once connected
@@ -187,7 +189,7 @@ class RoomClientSfuTest {
 
     @Test
     fun twoClientsSeeEachOthersMedia(): Unit = runBlocking {
-        withTimeout(15_000) {
+        withTimeout(15_000.milliseconds) {
             val alice = RoomClient(url, FakeFactory())
             val bob = RoomClient(url, FakeFactory())
             val aliceCam = FakeTrack("video")
@@ -225,7 +227,7 @@ class RoomClientSfuTest {
 
     @Test
     fun joinMarksConnectionAndUsesUplinkMids(): Unit = runBlocking {
-        withTimeout(10_000) {
+        withTimeout(10_000.milliseconds) {
             val factory = FakeFactory()
             val client = RoomClient(url, factory)
             val mic = FakeTrack("audio")
@@ -235,11 +237,15 @@ class RoomClientSfuTest {
             assertEquals("solo", connected.room)
             // Wait until the first offer has been answered, then check the uplink transceivers.
             val pc = factory.created.single()
-            while (pc.localDescription == null) kotlinx.coroutines.delay(20)
+            while (pc.localDescription == null) delay(20.milliseconds)
             val byMid = pc.getTransceivers().associateBy { it.mid }
             assertEquals(mic, byMid["0"]!!.sender.track)
             assertEquals(cam, byMid["1"]!!.sender.track)
-            assertTrue(pc.localDescription!!.sdp.contains("a=mid:1\r\na=ice-ufrag:fake") && pc.localDescription!!.sdp.contains("a=sendonly"))
+            assertTrue(
+                pc.localDescription!!.sdp.contains("a=mid:1\r\na=ice-ufrag:fake") && pc.localDescription!!.sdp.contains(
+                    "a=sendonly"
+                )
+            )
             client.leave()
             client.state.first { it is RoomState.Disconnected }
             assertTrue(pc.closed)
@@ -248,13 +254,16 @@ class RoomClientSfuTest {
 
     @Test
     fun dataChannelsFollowTheOfferAndCarryTheEnvelope(): Unit = runBlocking {
-        withTimeout(10_000) {
+        withTimeout(10_000.milliseconds) {
             val factory = FakeFactory()
             val client = RoomClient(url, factory)
             client.join("data", "Dana")
-            val pc = factory.created.let { while (it.isEmpty()) kotlinx.coroutines.delay(10); it.single() }
-            while (pc.localDescription == null) kotlinx.coroutines.delay(20)
-            assertTrue(pc.localDescription!!.sdp.contains("m=application 9 UDP/DTLS/SCTP webrtc-datachannel"), "the answer accepts the SCTP m-line")
+            val pc = factory.created.let { while (it.isEmpty()) delay(10.milliseconds); it.single() }
+            while (pc.localDescription == null) delay(20.milliseconds)
+            assertTrue(
+                pc.localDescription!!.sdp.contains("m=application 9 UDP/DTLS/SCTP webrtc-datachannel"),
+                "the answer accepts the SCTP m-line"
+            )
             val (reliable, lossy) = pc.dataChannels
             assertEquals(krtc.signaling.DataEnvelope.RELIABLE_LABEL, reliable.label)
             assertEquals(krtc.signaling.DataEnvelope.LOSSY_LABEL, lossy.label)
@@ -267,7 +276,8 @@ class RoomClientSfuTest {
             client.dataOpen.first { it }
             assertTrue(client.sendData("hi".encodeToByteArray(), topic = "chat", to = listOf("7")))
             assertTrue(client.sendData(byteArrayOf(1), topic = "cursor", reliable = false))
-            val sent = krtc.signaling.DataEnvelope.decode((reliable.sent.single() as krtc.core.RTCDataChannelMessage.Binary).data)!!
+            val sent =
+                krtc.signaling.DataEnvelope.decode((reliable.sent.single() as krtc.core.RTCDataChannelMessage.Binary).data)!!
             assertEquals(listOf("7"), sent.ids)
             assertEquals("chat", sent.topic)
             assertEquals("hi", sent.payload.decodeToString())
@@ -275,8 +285,16 @@ class RoomClientSfuTest {
 
             val received = async { client.data.first() }
             kotlinx.coroutines.yield()
-            while (reliable.incoming.subscriptionCount.value == 0) kotlinx.coroutines.delay(10)
-            reliable.incoming.emit(krtc.core.RTCDataChannelMessage.Binary(krtc.signaling.DataEnvelope.encode(listOf("3"), "chat", "yo".encodeToByteArray())))
+            while (reliable.incoming.subscriptionCount.value == 0) delay(10.milliseconds)
+            reliable.incoming.emit(
+                krtc.core.RTCDataChannelMessage.Binary(
+                    krtc.signaling.DataEnvelope.encode(
+                        listOf("3"),
+                        "chat",
+                        "yo".encodeToByteArray()
+                    )
+                )
+            )
             val m = received.await()
             assertEquals("3", m.from)
             assertEquals("yo", m.payload.decodeToString())
@@ -287,7 +305,7 @@ class RoomClientSfuTest {
 
     @Test
     fun screenShareReachesTheOthersAndStops(): Unit = runBlocking {
-        withTimeout(10_000) {
+        withTimeout(10_000.milliseconds) {
             val alice = RoomClient(url, FakeFactory())
             val bobFactory = FakeFactory()
             val bob = RoomClient(url, bobFactory)
@@ -307,8 +325,13 @@ class RoomClientSfuTest {
             assertTrue(bobOnAlice.audio.value !== screenSound, "the screen's sound is not mistaken for the microphone")
             assertNull(bobOnAlice.video.value, "the screen is not mistaken for a camera")
             val bobPc = bobFactory.created.single()
-            while (bobPc.getTransceivers().firstOrNull { it.mid == "s" }?.sender?.track !== display) kotlinx.coroutines.delay(20)
-            assertEquals(krtc.core.RTCRtpTransceiverDirection.SENDONLY, bobPc.getTransceivers().single { it.mid == "s" }.direction)
+            while (bobPc.getTransceivers()
+                    .firstOrNull { it.mid == "s" }?.sender?.track !== display
+            ) delay(20.milliseconds)
+            assertEquals(
+                krtc.core.RTCRtpTransceiverDirection.SENDONLY,
+                bobPc.getTransceivers().single { it.mid == "s" }.direction
+            )
 
             bob.setScreen(null)
             bobOnAlice.screen.first { it == null }
@@ -320,7 +343,7 @@ class RoomClientSfuTest {
 
     @Test
     fun failedConnectionTriggersIceRestartWithFreshCredentials(): Unit = runBlocking {
-        withTimeout(15_000) {
+        withTimeout(15_000.milliseconds) {
             val factory = FakeFactory()
             val client = RoomClient(url, factory)
             client.join("ice", "Carol", microphone = FakeTrack("audio"))
@@ -338,9 +361,10 @@ class RoomClientSfuTest {
 
     private suspend fun waitForUfrag(pc: FakePeerConnection, accept: (String) -> Boolean): String {
         while (true) {
-            val ufrag = pc.remoteDescription?.sdp?.lineSequence()?.firstOrNull { it.startsWith("a=ice-ufrag:") }?.removePrefix("a=ice-ufrag:")
+            val ufrag = pc.remoteDescription?.sdp?.lineSequence()?.firstOrNull { it.startsWith("a=ice-ufrag:") }
+                ?.removePrefix("a=ice-ufrag:")
             if (ufrag != null && accept(ufrag)) return ufrag
-            kotlinx.coroutines.delay(20)
+            delay(20.milliseconds)
         }
     }
 }

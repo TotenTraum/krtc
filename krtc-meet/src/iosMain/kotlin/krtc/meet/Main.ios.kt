@@ -3,30 +3,16 @@ package krtc.meet
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.window.ComposeUIViewController
-import kotlinx.cinterop.BetaInteropApi
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ObjCObjectBase
-import kotlinx.cinterop.autoreleasepool
-import kotlinx.cinterop.cstr
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.toCValues
+import kotlinx.cinterop.*
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSStringFromClass
-import platform.UIKit.UIApplication
-import platform.UIKit.UIApplicationDelegateProtocol
-import platform.UIKit.UIApplicationDelegateProtocolMeta
-import platform.UIKit.UIApplicationMain
-import platform.UIKit.UIResponder
-import platform.UIKit.UIResponderMeta
-import platform.UIKit.UIScreen
-import platform.UIKit.UIViewController
-import platform.UIKit.UIWindow
+import platform.UIKit.*
 
 /**
  * The app's screen, for an iOS host (an Xcode project's SwiftUI or UIKit code can show it). Defaults come from the
  * environment like on desktop (KRTC_MEET_*; with simctl: SIMCTL_CHILD_KRTC_MEET_*).
  */
-fun MainViewController(): UIViewController = ComposeUIViewController {
+fun mainViewController(): UIViewController = ComposeUIViewController {
     val env = NSProcessInfo.processInfo.environment
     fun get(name: String): String? = env[name] as String?
     val defaults = JoinSettings(
@@ -48,7 +34,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     App(session, remembered)
 }
 
-/** Standalone app entry (no Xcode project): UIKit with [MainViewController] as the root. */
+/** Standalone app entry (no Xcode project): UIKit with [mainViewController] as the root. */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 fun main(args: Array<String>) {
     memScoped {
@@ -63,14 +49,14 @@ fun main(args: Array<String>) {
 class AppDelegate : UIResponder, UIApplicationDelegateProtocol {
     companion object : UIResponderMeta(), UIApplicationDelegateProtocolMeta
 
-    @kotlinx.cinterop.ObjCObjectBase.OverrideInit
+    @OverrideInit
     constructor() : super()
 
     private var appWindow: UIWindow? = null
 
     override fun application(application: UIApplication, didFinishLaunchingWithOptions: Map<Any?, *>?): Boolean {
         appWindow = UIWindow(frame = UIScreen.mainScreen.bounds).apply {
-            rootViewController = MainViewController()
+            rootViewController = mainViewController()
             makeKeyAndVisible()
         }
         return true

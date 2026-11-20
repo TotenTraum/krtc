@@ -1,7 +1,6 @@
 package krtc.sfu.platform
 
-import io.ktor.util.logging.KtorSimpleLogger
-import io.ktor.util.logging.Logger
+import io.ktor.util.logging.*
 import kotlin.time.TimeSource
 
 // Platform seams of the SFU. Everything else is common code.
@@ -63,7 +62,7 @@ internal fun logger(name: String): Logger = KtorSimpleLogger(name)
  * [via] says which of the server's local addresses the peer talks to, so replies leave from that address;
  * it is not part of the identity.
  */
-internal class PeerAddress(public val ip: ByteArray, public val port: Int, public val tcp: Boolean = false) {
+internal class PeerAddress(val ip: ByteArray, val port: Int, val tcp: Boolean = false) {
     private val hash = (ip.contentHashCode() * 31 + port) * 2 + (if (tcp) 1 else 0)
 
     /** Index of the [UdpServer] socket group (local address) that received this peer's packet. */
