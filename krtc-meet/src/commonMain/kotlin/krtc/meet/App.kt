@@ -48,6 +48,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import krtc.client.RemoteParticipant
 import krtc.core.MediaStreamTrack
+import krtc.meet.log.ClientLog
 import krtc.native.NativeTrack
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
@@ -739,11 +740,37 @@ private fun SettingsDialog(session: MeetSession, onClose: () -> Unit) {
                     SettingsSection("Прочее")
                     val cues by session.cues.collectAsState()
                     SwitchRow("Звуки входа, выхода и микрофона", cues, onChange = session::setCues)
+                    val logLevel by session.logLevel.collectAsState()
+                    LogLevelPicker(logLevel, session::setLogLevel)
+                    Text("Автоотчёты сохраняются отдельно от журнала", style = MaterialTheme.typography.bodySmall, color = MeetColors.TextMuted)
                     val upload by session.logUpload.collectAsState()
                     SwitchRow("Отправлять журнал на сервер", upload, "Помогает разобрать проблемы со связью", session::setLogUpload)
                     val updates by session.updateCheck.collectAsState()
                     SwitchRow("Проверять обновления при запуске", updates, onChange = session::setUpdateCheck)
                     Text("Версия ${BuildInfo.VERSION}", style = MaterialTheme.typography.labelSmall, color = MeetColors.TextMuted, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LogLevelPicker(selected: ClientLog.Level, onSelect: (ClientLog.Level) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val labels = mapOf(
+        ClientLog.Level.DEBUG to "DEBUG — подробный",
+        ClientLog.Level.INFO to "INFO — обычный",
+        ClientLog.Level.WARN to "WARN — предупреждения",
+        ClientLog.Level.ERROR to "ERROR — ошибки",
+        ClientLog.Level.OFF to "Выключено",
+    )
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Уровень журнала", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Box {
+            TextButton(onClick = { expanded = true }) { Text(labels.getValue(selected)) }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                for ((level, label) in labels) {
+                    DropdownMenuItem(text = { Text(label) }, onClick = { onSelect(level); expanded = false })
                 }
             }
         }

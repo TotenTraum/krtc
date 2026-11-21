@@ -172,7 +172,7 @@ internal class ScreenDiagnostics(
         fun stats(report: Map<String, RTCStats>, rtp: RTCStats?): Map<String, Any?> {
             if (rtp == null) return mapOf("rtpPresent" to false)
             val result = linkedMapOf<String, Any?>("rtpPresent" to true, "rtpId" to rtp.id)
-            val fields = "mid ssrc kind frameWidth frameHeight framesPerSecond framesEncoded framesSent framesReceived framesDecoded framesDropped bytesSent bytesReceived packetsSent packetsReceived packetsLost nackCount pliCount retransmittedBytesSent totalEncodeTime totalDecodeTime totalPacketSendDelay qualityLimitationReason qualityLimitationDurations qualityLimitationResolutionChanges targetBitrate encoderImplementation decoderImplementation powerEfficientEncoder powerEfficientDecoder freezeCount totalFreezesDuration jitter jitterBufferDelay jitterBufferEmittedCount".split(' ')
+            val fields = "mid ssrc kind frameWidth frameHeight framesPerSecond framesEncoded framesSent framesReceived framesDecoded framesDropped bytesSent bytesReceived packetsSent packetsReceived packetsLost nackCount pliCount retransmittedBytesSent totalEncodeTime totalDecodeTime totalPacketSendDelay qualityLimitationReason qualityLimitationDurations qualityLimitationResolutionChanges targetBitrate qpSum encoderImplementation decoderImplementation powerEfficientEncoder powerEfficientDecoder freezeCount totalFreezesDuration jitter jitterBufferDelay jitterBufferEmittedCount".split(' ')
             fields.forEach { if (it in rtp.members) result[it] = rtp.members[it] }
             fun related(id: String, prefix: String, keys: String) {
                 val item = (rtp.members[id] as? String)?.let { report[it] } ?: return

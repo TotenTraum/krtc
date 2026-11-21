@@ -672,6 +672,40 @@ class MeetSessionTest {
         }
     }
 
+    /** Real sender feedback must reach the pushed source, including with a local preview/statistics sink. */
+    @Test
+    fun motionShareScalesDownAtLowBitrate(): Unit = runBlocking(main) {
+        val a = MeetSession(scope, TestPlatform(noise = true))
+        val b = MeetSession(scope, TestPlatform())
+        try {
+            a.join(JoinSettings(url, "scaling", "alice", CameraChoice.None, testAudio = true))
+            b.join(JoinSettings(url, "scaling", "bob", CameraChoice.None, testAudio = true))
+            waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
+            a.setScreenFps(30)
+            a.setScreenHeight(720)
+            a.startScreen(a.screens().single(), withAudio = false)
+            // Startup bandwidth can already trigger adaptation before the first statistics sample.
+            waitUntil("share above the minimum adaptive size", 30_000) { (a.screenSend.value?.width ?: 0) >= 480 }
+            val initialWidth = a.screenSend.value!!.width
+            val sender = a.roomClient!!.peerConnection!!.getTransceivers().single { it.mid == "s" }.sender
+            val parameters = sender.getParameters()
+            sender.setParameters(parameters.copy(encodings = parameters.encodings.map { it.copy(maxBitrate = 100_000L) }))
+            var smallest: StreamSendInfo? = null
+            withTimeout(45_000) {
+                while (true) {
+                    delay(1_000)
+                    val sent = a.screenSend.value ?: continue
+                    println("low bitrate share: $sent")
+                    if (sent.width > 0 && sent.width < initialWidth && sent.fps > 0) { smallest = sent; break }
+                }
+            }
+            assertTrue(smallest!!.width < initialWidth, "quality adaptation reduces width from $initialWidth: $smallest")
+        } finally {
+            a.close()
+            b.close()
+        }
+    }
+
     @Test
     fun failedScreenStartSavesAndUploadsDiagnosticReport(): Unit = runBlocking(main) {
         val a = MeetSession(scope, TestPlatform(captureFails = true))
@@ -687,6 +721,8 @@ class MeetSessionTest {
             waitUntil("standalone report saved") {
                 dir.listFiles()?.any { it.readText().contains("failed-capture") && it.readText().contains("call_ended") } == true
             }
+            assertTrue("phase=" in serverLog(), "automatic incident summary reaches the server at INFO")
+            assertTrue("part=" !in serverLog(), "full JSON is kept out of the ordinary server journal")
             val file = dir.listFiles()!!.first { it.readText().contains("failed-capture") && it.readText().contains("call_ended") }
             val report = kotlinx.serialization.json.Json.parseToJsonElement(file.readText())
             assertTrue(report.toString().contains("clientRevision"))
@@ -784,7 +820,7 @@ class MeetSessionTest {
     /** The session's log, with @Traced calls (woven by kaop), reaches the server's log receiver; chat text does not. */
     @Test
     fun logReachesTheServer(): Unit = runBlocking(main) {
-        val a = MeetSession(scope, TestPlatform())
+        val a = MeetSession(scope, TestPlatform(settings = MemorySettings().apply { this["log.level"] = "DEBUG" }))
         a.join(JoinSettings(url, "logs", "Alice Smith", CameraChoice.None, testAudio = true))
         waitUntil("alice in the call") { a.phase.value is CallPhase.InCall }
         a.toggleMic()
@@ -864,6 +900,20 @@ class MeetSessionTest {
             assertEquals((0 until 40).toList(), ids, "all oversized-batch entries arrive once and in order")
             assertTrue(bodies.size > 1)
         } finally { up.stop(); receiver.stop(100, 500) }
+    }
+
+    @Test
+    fun logLevelIsRememberedAndDefaultReportsStayCompact(): Unit = runBlocking(main) {
+        val store = MemorySettings()
+        val a = MeetSession(scope, TestPlatform(settings = store))
+        try {
+            assertEquals(krtc.meet.log.ClientLog.Level.INFO, a.logLevel.value)
+            a.setLogLevel(krtc.meet.log.ClientLog.Level.ERROR)
+            assertEquals("ERROR", store["log.level"])
+        } finally { a.close() }
+        val restored = MeetSession(scope, TestPlatform(settings = store))
+        try { assertEquals(krtc.meet.log.ClientLog.Level.ERROR, restored.logLevel.value) }
+        finally { restored.close(); krtc.meet.log.ClientLog.setMinimumLevel(krtc.meet.log.ClientLog.Level.INFO) }
     }
 
     /** Existing toggle combinations migrate to one mode; a later explicit choice wins over legacy values. */

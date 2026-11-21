@@ -624,7 +624,7 @@ KRTC_API int krtc_screen_thumbnail(int64_t id, int window, int max_width, int ma
     FirstFrame first;
     VideoTrackSourceInterface *video = source.get(); // the sink methods are public on the interface
     video->AddOrUpdateSink(&first, VideoSinkWants());
-    std::function<void()> stop = krtc::StartScreen(id, window != 0, 10, max_width, max_height, source.get());
+    std::function<void()> stop = krtc::StartScreen(id, window != 0, 10, max_width, max_height, source.get(), false);
     std::optional<VideoFrame> frame = stop ? first.Wait(std::chrono::milliseconds(2000)) : std::nullopt;
     if (stop) stop();
     video->RemoveSink(&first);

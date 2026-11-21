@@ -26,7 +26,22 @@ class PushVideoSource : public webrtc::AdaptedVideoTrackSource {
 public:
     /** [screencast]: screen content, so encoders keep resolution and sharpness over frame rate. */
     explicit PushVideoSource(bool screencast = false) : screencast_(screencast) {}
-    void Push(const webrtc::VideoFrame &frame) { OnFrame(frame); }
+    void Push(const webrtc::VideoFrame &frame) {
+        int width, height, cropWidth, cropHeight, cropX, cropY;
+        if (!AdaptFrame(frame.width(), frame.height(), frame.timestamp_us(),
+                        &width, &height, &cropWidth, &cropHeight, &cropX, &cropY)) return;
+        if (width == frame.width() && height == frame.height() &&
+            cropWidth == frame.width() && cropHeight == frame.height()) {
+            OnFrame(frame);
+            return;
+        }
+        auto buffer = frame.video_frame_buffer()->CropAndScale(cropX, cropY, cropWidth, cropHeight, width, height);
+        if (!buffer) { OnFrameDropped(); return; }
+        auto adapted = frame;
+        adapted.set_video_frame_buffer(buffer);
+        adapted.clear_update_rect();
+        OnFrame(adapted);
+    }
     SourceState state() const override { return kLive; }
     bool remote() const override { return false; }
     bool is_screencast() const override { return screencast_; }
@@ -115,7 +130,7 @@ int ScreenThumbnail(int64_t id, bool window, int maxWidth, int maxHeight, uint32
  * Starts capturing [id] (a display, or a window if [window]) at up to [fps] into [source], scaled down to at most
  * [maxWidth] × [maxHeight]. Returns a function that stops it, or nullptr if capture is unavailable or not permitted.
  */
-std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source);
+std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source, bool diagnostics = true);
 
 /** Pushes a 32-bit frame with libyuv byte order [argb] = B,G,R,A in memory, scaled to fit the limits. */
 void PushBgra(PushVideoSource *source, const uint8_t *bgra, int stride, int width, int height, int maxWidth, int maxHeight, int64_t timestampUs);

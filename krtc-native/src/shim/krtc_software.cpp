@@ -28,6 +28,8 @@
 #if defined(_WIN32)
 #include "krtc_windows_encoder.h"
 #include <audioclient.h>
+#include <dwmapi.h>
+#include "modules/desktop_capture/desktop_capture_types.h"
 #include <mmdeviceapi.h>
 #include <audioclientactivationparams.h>
 #include "modules/desktop_capture/desktop_capture_options.h"
@@ -181,12 +183,31 @@ std::function<void()> Every(int fps, std::function<void()> setup, std::function<
         setup();
         const auto period = std::chrono::microseconds(1000000 / std::max(1, fps));
         auto next = std::chrono::steady_clock::now();
+#if defined(_WIN32)
+        // A per-thread high-resolution wait avoids the coarse Windows sleep granularity at 30/60 FPS.
+        HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                              TIMER_MODIFY_STATE | SYNCHRONIZE);
+        if (!timer) timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+#endif
         while (running->load()) {
             capture();
             next += period;
+#if defined(_WIN32)
+            const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(next - std::chrono::steady_clock::now()).count();
+            if (remaining > 0) {
+                LARGE_INTEGER due;
+                due.QuadPart = -std::max<int64_t>(1, remaining / 100);
+                if (timer && SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) WaitForSingleObject(timer, INFINITE);
+                else std::this_thread::sleep_until(next);
+            }
+#else
             std::this_thread::sleep_until(next);
+#endif
             if (std::chrono::steady_clock::now() > next + period) next = std::chrono::steady_clock::now(); // fell behind
         }
+#if defined(_WIN32)
+        if (timer) CloseHandle(timer);
+#endif
         teardown();
     });
     return [running, thread] {
@@ -221,17 +242,75 @@ std::unique_ptr<webrtc::DesktopCapturer> CreateCapturer(bool window) {
     return window ? webrtc::DesktopCapturer::CreateWindowCapturer(ScreenOptions()) : webrtc::DesktopCapturer::CreateScreenCapturer(ScreenOptions());
 }
 
+const char* CaptureBackend(uint32_t id) {
+    switch (id) {
+        case webrtc::DesktopCapturerId::kWgcCapturerWin: return "WGC";
+        case webrtc::DesktopCapturerId::kScreenCapturerWinDirectx: return "DXGI";
+        case webrtc::DesktopCapturerId::kScreenCapturerWinGdi: return "GDI-screen";
+        case webrtc::DesktopCapturerId::kWindowCapturerWinGdi: return "GDI-window";
+        default: return "unknown";
+    }
+}
+
 class FrameSink : public webrtc::DesktopCapturer::Callback {
 public:
-    FrameSink(PushVideoSource *source, int maxWidth, int maxHeight) : source_(source), maxWidth_(maxWidth), maxHeight_(maxHeight) {}
+    FrameSink(PushVideoSource *source, int maxWidth, int maxHeight, int64_t id, bool window, int fps, bool diagnostics)
+        : source_(source), maxWidth_(maxWidth), maxHeight_(maxHeight), id_(id), window_(window),
+          fps_(fps), diagnostics_(diagnostics) {}
+
     void OnCaptureResult(webrtc::DesktopCapturer::Result result, std::unique_ptr<webrtc::DesktopFrame> frame) override {
-        if (result != webrtc::DesktopCapturer::Result::SUCCESS || !frame) return;
+        if (result != webrtc::DesktopCapturer::Result::SUCCESS || !frame) {
+            ++errors_;
+            return;
+        }
+        ++frames_;
+        backendMs_ += frame->capture_time_ms();
+        if (frame->capturer_id() != backend_) {
+            backend_ = frame->capturer_id();
+            if (diagnostics_) WindowsCaptureDiagnostic("source=" + std::to_string(id_) + " backend=" + CaptureBackend(backend_));
+        }
+        const auto start = std::chrono::steady_clock::now();
         PushBgra(source_.get(), frame->data(), frame->stride(), frame->size().width(), frame->size().height(), maxWidth_, maxHeight_, 0);
+        processingMs_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    }
+
+    void Capture(webrtc::DesktopCapturer* capturer) {
+        const auto start = std::chrono::steady_clock::now();
+        capturer->CaptureFrame();
+        captureMs_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        ++calls_;
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - sampledAt_).count();
+        if (elapsed < 10) return;
+        const double rawFps = frames_ / elapsed;
+        if (diagnostics_ && (rawFps < fps_ * 0.8 || errors_ > 0)) {
+            BOOL cloaked = FALSE;
+            const HWND window = reinterpret_cast<HWND>(static_cast<intptr_t>(id_));
+            if (window_) DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+            WindowsCaptureDiagnostic("slow source=" + std::to_string(id_) + " backend=" + CaptureBackend(backend_) +
+                " requestedFps=" + std::to_string(fps_) + " rawFps=" + std::to_string(rawFps) +
+                " calls=" + std::to_string(calls_) + " errors=" + std::to_string(errors_) +
+                " captureCallMs=" + std::to_string(captureMs_ / calls_) +
+                " backendMs=" + std::to_string(frames_ ? backendMs_ / frames_ : 0) +
+                " conversionAndDeliveryMs=" + std::to_string(frames_ ? processingMs_ / frames_ : 0) +
+                " window=" + std::to_string(window_) + " exists=" + std::to_string(!window_ || IsWindow(window)) +
+                " minimized=" + std::to_string(window_ && IsIconic(window)) + " cloaked=" + std::to_string(cloaked));
+        }
+        sampledAt_ = std::chrono::steady_clock::now();
+        frames_ = calls_ = errors_ = 0;
+        captureMs_ = processingMs_ = backendMs_ = 0;
     }
 
 private:
     webrtc::scoped_refptr<PushVideoSource> source_;
     int maxWidth_, maxHeight_;
+    int64_t id_;
+    bool window_;
+    int fps_;
+    bool diagnostics_;
+    uint32_t backend_ = webrtc::DesktopCapturerId::kUnknown;
+    int frames_ = 0, calls_ = 0, errors_ = 0;
+    double captureMs_ = 0, processingMs_ = 0, backendMs_ = 0;
+    std::chrono::steady_clock::time_point sampledAt_ = std::chrono::steady_clock::now();
 };
 }  // namespace
 
@@ -253,7 +332,7 @@ std::vector<ScreenSource> ScreenSources() {
     return out;
 }
 
-std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source, bool diagnostics) {
     // Check on the caller's thread that the source can be selected, then capture on a thread of its own.
     {
         bool ok = false;
@@ -264,18 +343,20 @@ std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth
         }).join();
         if (!ok) return nullptr;
     }
-    auto sink = std::make_shared<FrameSink>(source, maxWidth, maxHeight);
+    auto sink = std::make_shared<FrameSink>(source, maxWidth, maxHeight, id, window, fps, diagnostics);
     auto capturer = std::make_shared<std::unique_ptr<webrtc::DesktopCapturer>>();
     auto com = std::make_shared<std::unique_ptr<ComScope>>();
     return Every(
         fps,
         [=] {
             *com = std::make_unique<ComScope>();
+            // Keep the capture scheduler responsive under CPU-heavy games without real-time priority.
+            if (diagnostics) SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
             *capturer = CreateCapturer(window);
             if (*capturer && (*capturer)->SelectSource(static_cast<webrtc::DesktopCapturer::SourceId>(id))) (*capturer)->Start(sink.get());
             else capturer->reset();
         },
-        [=] { if (*capturer) (*capturer)->CaptureFrame(); },
+        [=] { if (*capturer) sink->Capture(capturer->get()); },
         [=] {
             capturer->reset();
             com->reset();
@@ -493,7 +574,7 @@ std::vector<ScreenSource> ScreenSources() {
     return {{-1, false, "X11 display " + std::string(name ? name : "") + " " + std::to_string(a.width) + "x" + std::to_string(a.height)}};
 }
 
-std::function<void()> StartScreen(int64_t, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+std::function<void()> StartScreen(int64_t, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source, bool) {
     const XFunctions &x = X();
     if (window || !x.ok) return nullptr;
     Display *display = x.open(nullptr);
@@ -577,7 +658,7 @@ std::function<void()> StartWindowAudio(PushAudioSource *, int64_t) { return null
 // Android: the application captures with MediaProjection (AndroidScreenCapture) into a screencast source, and the
 // sound with AudioPlaybackCapture into a pushed audio source.
 std::vector<ScreenSource> ScreenSources() { return {}; }
-std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource *) { return nullptr; }
+std::function<void()> StartScreen(int64_t, bool, int, int, int, PushVideoSource *, bool) { return nullptr; }
 std::function<void()> StartSystemAudio(PushAudioSource *) { return nullptr; }
 std::function<void()> StartWindowAudio(PushAudioSource *, int64_t) { return nullptr; }
 #endif

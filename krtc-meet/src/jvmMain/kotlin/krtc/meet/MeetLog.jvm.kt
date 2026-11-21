@@ -8,10 +8,7 @@ import kotlin.concurrent.thread
 /** ~/.krtc-meet, or the directory in the system property krtc.meet.logDir (tests). */
 private val logFile: File by lazy {
     (System.getProperty("krtc.meet.logDir")?.let(::File) ?: File(System.getProperty("user.home"), ".krtc-meet"))
-        .apply { mkdirs() }.resolve("krtc-meet.log").also { f ->
-        // One previous log is kept, so a restart after a problem does not wipe it.
-        if (f.length() > MAX_LOG_BYTES) f.renameTo(File(f.parentFile, "krtc-meet.previous.log"))
-    }
+        .apply { mkdirs() }.resolve("krtc-meet.log")
 }
 private const val MAX_LOG_BYTES = 5L * 1024 * 1024
 private val time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
@@ -19,7 +16,21 @@ private val lock = Any()
 
 actual fun appendLog(line: String) {
     val text = "${LocalDateTime.now().format(time)} [${Thread.currentThread().name}] $line\n"
-    synchronized(lock) { runCatching { logFile.appendText(text) } }
+    synchronized(lock) {
+        runCatching {
+            appendRotatingLog(logFile, text, MAX_LOG_BYTES)
+        }
+    }
+}
+
+/** The caller serializes writes. Rotation replaces the previous file on Windows as well. */
+internal fun appendRotatingLog(file: File, text: String, maxBytes: Long) {
+    val bytes = text.toByteArray(Charsets.UTF_8)
+    if (file.exists() && file.length() + bytes.size > maxBytes) {
+        java.nio.file.Files.move(file.toPath(), File(file.parentFile, "krtc-meet.previous.log").toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+    file.appendBytes(bytes)
 }
 
 actual fun logLocation(): String? = logFile.absolutePath

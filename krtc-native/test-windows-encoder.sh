@@ -12,7 +12,7 @@ DEFINES=$(grep -m1 '^defines = ' "$WEBRTC/webrtc.ninja" | sed 's/^defines = //')
 eval "set -- $DEFINES"
 for source in "$DIR/src/shim/krtc_windows_encoder.cpp" "$DIR/src/shim/tests/windows_encoder_test.cpp"; do
     object="$OUT/$(basename "$source" .cpp).obj"
-    $CXX $TARGET_FLAGS /c /std:c++20 /O2 /MT /GR- /EHs-c- -Wno-deprecated-declarations -Wno-nullability-completeness "$@" /UNDEBUG \
+    $CXX $TARGET_FLAGS /c /std:c++20 /O2 /MT /GR- /EHs-c- -Wno-deprecated-declarations -Wno-nullability-completeness "$@" \
         -I"$INC" -I"$INC/third_party/abseil-cpp" -I"$INC/third_party/libyuv/include" -I"$DIR/src/shim" "$source" /Fo"$object"
 done
 lld-link /nologo /machine:x64 /winsysroot:"${WINSYSROOT:-/xwin}" /out:"$OUT/windows-encoder-test.exe" /opt:ref /opt:icf \

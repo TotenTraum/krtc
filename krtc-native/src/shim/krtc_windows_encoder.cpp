@@ -1,6 +1,7 @@
 // Media Foundation hardware H.264. All COM/MFT calls stay on a dedicated MTA thread.
 #include "krtc_windows_encoder.h"
 #include "krtc_h264_bitstream.h"
+#include "common_video/h264/h264_bitstream_parser.h"
 #include "api/video_codecs/h264_profile_level_id.h"
 #include "api/video_codecs/video_encoder_software_fallback_wrapper.h"
 #include "modules/video_coding/include/video_codec_interface.h"
@@ -9,6 +10,7 @@
 #include "rtc_base/time_utils.h"
 #include "libyuv/convert_from.h"
 #include <windows.h>
+#include <dxgi1_2.h>
 #include <mfapi.h>
 #include <mferror.h>
 #include <mfidl.h>
@@ -46,6 +48,15 @@ bool Check(HRESULT hr, const char* operation) {
     Diagnostic(std::string(operation) + " failed hr=" + code);
     return false;
 }
+std::string Utf8(const WCHAR* value, int length = -1) {
+    const int size = WideCharToMultiByte(CP_UTF8, 0, value, length, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return {};
+    std::string result(size, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value, length, result.data(), size, nullptr, nullptr);
+    if (length == -1) result.resize(size - 1);
+    return result;
+}
+
 std::string JsonString(const std::string& value) {
     std::string out = "\"";
     for (unsigned char c : value) {
@@ -196,7 +207,7 @@ public:
             paused_ = rates.bitrate.get_sum_bps() == 0;
             if (!paused_ && codecApi_ && bitrate_ != rates.bitrate.get_sum_bps()) {
                 bitrate_ = rates.bitrate.get_sum_bps();
-                if (!SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_)) failed_ = true;
+                if (!SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_, "CODECAPI_AVEncCommonMeanBitRate")) failed_ = true;
             }
         });
     }
@@ -207,6 +218,9 @@ public:
         info.supports_native_handle = false;
         info.requested_resolution_alignment = 2;
         info.has_trusted_rate_controller = false;
+        // Match WebRTC's OpenH264 quality scaler. QP is parsed from the actual encoded slices below.
+        info.scaling_settings = ScalingSettings(24, 37);
+        info.is_qp_trusted = true;
         return info;
     }
 
@@ -216,14 +230,45 @@ private:
             auto* candidate = candidates_->items[nextCandidate_++];
             WCHAR* name = nullptr;
             if (SUCCEEDED(candidate->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &name, nullptr))) {
-                const int size = WideCharToMultiByte(CP_UTF8, 0, name, -1, nullptr, 0, nullptr, nullptr);
-                std::string utf8(size > 0 ? size : 1, '\0');
-                if (size > 0) WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8.data(), size, nullptr, nullptr);
+                const std::string nameUtf8 = Utf8(name);
                 CoTaskMemFree(name);
-                utf8.resize(utf8.size() - 1);
-                Diagnostic("trying MFT=" + utf8);
+                Diagnostic("trying MFT=" + nameUtf8);
             }
-            if (Check(candidate->ActivateObject(IID_PPV_ARGS(&transform_)), "ActivateObject") && Configure()) {
+            GUID clsid;
+            if (SUCCEEDED(candidate->GetGUID(MFT_TRANSFORM_CLSID_Attribute, &clsid))) {
+                WCHAR text[40];
+                if (StringFromGUID2(clsid, text, 40) > 0) Diagnostic("MFT CLSID=" + Utf8(text));
+            }
+            LUID luid{};
+            UINT32 luidBytes = 0;
+            if (SUCCEEDED(candidate->GetBlob(MFT_ENUM_ADAPTER_LUID, reinterpret_cast<UINT8*>(&luid), sizeof(luid), &luidBytes)) && luidBytes == sizeof(luid)) {
+                Diagnostic("MFT adapter LUID=" + std::to_string(luid.HighPart) + ":" + std::to_string(luid.LowPart));
+                ComPtr<IDXGIFactory1> factory;
+                if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+                    ComPtr<IDXGIAdapter1> adapter;
+                    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) == S_OK; ++i) {
+                        DXGI_ADAPTER_DESC1 description{};
+                        if (SUCCEEDED(adapter->GetDesc1(&description)) && description.AdapterLuid.HighPart == luid.HighPart && description.AdapterLuid.LowPart == luid.LowPart)
+                            Diagnostic("MFT adapter=" + Utf8(description.Description) + " vendorId=" + std::to_string(description.VendorId));
+                        adapter.Reset();
+                    }
+                }
+            } else Diagnostic("MFT adapter LUID unavailable");
+            const auto activationStart = TimeMillis();
+            SetErrorInfo(0, nullptr); // Do not mistake a stale error from attribute/DXGI queries for an activation error.
+            const HRESULT activationResult = candidate->ActivateObject(IID_PPV_ARGS(&transform_));
+            if (FAILED(activationResult)) {
+                ComPtr<IErrorInfo> error;
+                if (GetErrorInfo(0, &error) == S_OK && error) {
+                    BSTR description = nullptr;
+                    if (SUCCEEDED(error->GetDescription(&description)) && description) {
+                        Diagnostic("ActivateObject COM description=" + Utf8(description, SysStringLen(description)));
+                        SysFreeString(description);
+                    }
+                } else Diagnostic("ActivateObject has no extended COM error information");
+                Diagnostic("ActivateObject elapsedMs=" + std::to_string(TimeMillis() - activationStart));
+            }
+            if (Check(activationResult, "ActivateObject") && Configure()) {
                 active_ = candidate;
                 Diagnostic("hardware init successful");
                 return true;
@@ -248,6 +293,7 @@ private:
         time_ = 0;
         failed_ = false;
         headers_.clear();
+        qpParser_ = std::make_unique<H264BitstreamParser>();
     }
 
     void Reset() {
@@ -257,11 +303,11 @@ private:
         nextCandidate_ = 0;
         paused_ = false;
     }
-    bool SetUInt(const GUID& key, ULONG value) {
+    bool SetUInt(const GUID& key, ULONG value, const char* name) {
         VARIANT v{};
         v.vt = VT_UI4;
         v.ulVal = value;
-        return codecApi_ && Check(codecApi_->SetValue(&key, &v), "codecApi_->SetValue");
+        return codecApi_ && Check(codecApi_->SetValue(&key, &v), name);
     }
     bool Configure() {
         ComPtr<IMFAttributes> attrs;
@@ -277,10 +323,10 @@ private:
         VARIANT lowLatency{};
         lowLatency.vt = VT_BOOL;
         lowLatency.boolVal = VARIANT_TRUE;
-        if (!Check(codecApi_->SetValue(&CODECAPI_AVLowLatencyMode, &lowLatency), "codecApi_->SetValue")) return false;
-        SetUInt(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR);
-        SetUInt(CODECAPI_AVEncMPVDefaultBPictureCount, 0);
-        SetUInt(CODECAPI_AVEncMPVGOPSize, fps_ * 2);
+        if (!Check(codecApi_->SetValue(&CODECAPI_AVLowLatencyMode, &lowLatency), "CODECAPI_AVLowLatencyMode")) return false;
+        SetUInt(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR, "CODECAPI_AVEncCommonRateControlMode");
+        SetUInt(CODECAPI_AVEncMPVDefaultBPictureCount, 0, "CODECAPI_AVEncMPVDefaultBPictureCount");
+        SetUInt(CODECAPI_AVEncMPVGOPSize, fps_ * 2, "CODECAPI_AVEncMPVGOPSize");
 
         ComPtr<IMFMediaType> output, input;
         if (!MediaType(&output, MFVideoFormat_H264) ||
@@ -290,7 +336,7 @@ private:
             !Check(input->SetUINT32(MF_MT_DEFAULT_STRIDE, width_), "NV12 stride") ||
             !Check(transform_->SetInputType(inputId_, input.Get(), 0), "transform_->SetInputType") ||
             !Check(transform_->GetInputStreamInfo(inputId_, &inputInfo_), "GetInputStreamInfo")) return false;
-        SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_);
+        SetUInt(CODECAPI_AVEncCommonMeanBitRate, bitrate_, "CODECAPI_AVEncCommonMeanBitRate");
         return Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0), "transform_->ProcessMessage") &&
                Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0), "transform_->ProcessMessage");
     }
@@ -329,7 +375,7 @@ private:
         stage_ = "convert / wait input";
         auto i420 = frame.video_frame_buffer()->ToI420();
         if (!i420 || !Wait(METransformNeedInput)) return std::nullopt;
-        if (key && !SetUInt(CODECAPI_AVEncVideoForceKeyFrame, TRUE)) return std::nullopt;
+        if (key && !SetUInt(CODECAPI_AVEncVideoForceKeyFrame, TRUE, "CODECAPI_AVEncVideoForceKeyFrame")) return std::nullopt;
         ComPtr<IMFSample> input;
         ComPtr<IMFMediaBuffer> pixels;
         const DWORD size = width_ * height_ * 3 / 2;
@@ -381,7 +427,9 @@ private:
             Diagnostic("H264 output rejected: keyframe/profile/SPS/PPS requirements; requestedKey=" + std::to_string(key) + " idr=" + std::to_string(idr));
             return std::nullopt;
         }
+        qpParser_->ParseBitstream(bytes);
         EncodedImage image;
+        image.qp_ = qpParser_->GetLastSliceQp().value_or(-1);
         image.SetEncodedData(EncodedImageBuffer::Create(bytes.data(), bytes.size()));
         image.SetRtpTimestamp(frame.rtp_timestamp());
         image._encodedWidth = width_;
@@ -434,6 +482,7 @@ private:
         return {};
     }
 
+    std::unique_ptr<H264BitstreamParser> qpParser_ = std::make_unique<H264BitstreamParser>();
     std::unique_ptr<Thread> thread_;
     bool running_ = false;
     EncodedImageCallback* callback_ = nullptr;
@@ -478,6 +527,8 @@ private:
     std::unique_ptr<VideoEncoderFactory> software_;
 };
 }
+
+void WindowsCaptureDiagnostic(const std::string& message) { Diagnostic("capture " + message); }
 
 std::string WindowsEncoderDiagnosticsJson() {
     std::lock_guard<std::mutex> lock(diagnosticMutex);

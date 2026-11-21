@@ -16,6 +16,8 @@ import androidx.compose.ui.window.rememberWindowState
 fun main() = application {
     val env = System.getenv()
     remember {
+        val level = sharedDefaultSettings["log.level"]?.let { saved -> krtc.meet.log.ClientLog.Level.entries.firstOrNull { it.name == saved } }
+        krtc.meet.log.ClientLog.setMinimumLevel(level ?: krtc.meet.log.ClientLog.Level.INFO)
         krtc.meet.log.ClientLog.i("app", "krtc-meet started: ${platformName()}")
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->

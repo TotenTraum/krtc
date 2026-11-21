@@ -1,6 +1,7 @@
 // Runs on Windows; Wine can verify the software paths without a GPU.
 #include "krtc_windows_encoder.h"
 #include "krtc_h264_bitstream.h"
+#include "krtc_platform.h"
 #include "api/environment/environment_factory.h"
 #include "api/video/i420_buffer.h"
 #include "api/video_codecs/video_encoder_factory_template.h"
@@ -11,6 +12,14 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+
+// Keep checks active while matching the release libwebrtc ABI (NDEBUG).
+#undef assert
+#define assert(condition) do { if (!(condition)) { \
+    std::fprintf(stderr, "Check failed: %s at %s:%d\n", #condition, __FILE__, __LINE__); \
+    std::abort(); \
+} } while (false)
 
 using namespace webrtc;
 
@@ -21,6 +30,7 @@ public:
         std::vector<uint8_t> bytes;
         assert(krtc::H264AnnexB(image.data(), image.size(), bytes));
         assert(info && info->codecType == kVideoCodecH264);
+        assert(image.qp_ >= 0 && image.qp_ <= 51);
         if (frames == 0) {
             assert(image._frameType == VideoFrameType::kVideoFrameKey);
             assert(krtc::H264HasNal(bytes, 5) && krtc::H264HasNal(bytes, 7) && krtc::H264HasNal(bytes, 8));
@@ -81,6 +91,8 @@ void EncodeFrames(VideoEncoder& encoder, bool requireSoftware, bool requireHardw
         assert(encoder.Encode(frame, &types) == 0);
     }
     assert(sink.frames == 10);
+    const auto scaling = encoder.GetEncoderInfo().scaling_settings;
+    assert(scaling.thresholds && scaling.thresholds->low == 24 && scaling.thresholds->high == 37);
     const auto info = encoder.GetEncoderInfo();
     std::printf("encoder=%s hardware=%d frames=%d\n", info.implementation_name.c_str(), info.is_hardware_accelerated, sink.frames);
     if (requireSoftware) assert(!info.is_hardware_accelerated);
@@ -88,7 +100,48 @@ void EncodeFrames(VideoEncoder& encoder, bool requireSoftware, bool requireHardw
     assert(encoder.Release() == 0);
 }
 
+class AdaptedSink final : public VideoSinkInterface<VideoFrame> {
+public:
+    int width = 0, height = 0, count = 0;
+    void OnFrame(const VideoFrame& frame) override { width = frame.width(); height = frame.height(); ++count; }
+};
+
+void CheckSourceAdaptation() {
+    auto source = make_ref_counted<krtc::PushVideoSource>(true);
+    VideoTrackSourceInterface* video = source.get();
+    AdaptedSink sink, preview, counter;
+    // Passive local consumers must not cancel the encoder's restrictions.
+    video->AddOrUpdateSink(&preview, VideoSinkWants());
+    video->AddOrUpdateSink(&counter, VideoSinkWants());
+    VideoSinkWants wants;
+    wants.is_active = true;
+    wants.max_pixel_count = 320 * 180;
+    wants.target_pixel_count = 320 * 180;
+    wants.resolution_alignment = 2;
+    video->AddOrUpdateSink(&sink, wants);
+    const auto buffer = I420Buffer::Create(1280, 720);
+    I420Buffer::SetBlack(buffer.get());
+    source->Push(VideoFrame::Builder().set_video_frame_buffer(buffer).set_timestamp_us(1000000).build());
+    assert(sink.count == 1 && sink.width * sink.height <= 320 * 180);
+    wants.max_pixel_count = 1280 * 720;
+    wants.target_pixel_count = 1280 * 720;
+    video->AddOrUpdateSink(&sink, wants);
+    source->Push(VideoFrame::Builder().set_video_frame_buffer(buffer).set_timestamp_us(1033333).build());
+    assert(sink.count == 2 && sink.width == 1280 && sink.height == 720);
+    // Framerate restrictions must be honored too, while normal 30/60 FPS shares retain their requested rate.
+    wants.max_framerate_fps = 5;
+    video->AddOrUpdateSink(&sink, wants);
+    for (int i = 0; i < 30; ++i)
+        source->Push(VideoFrame::Builder().set_video_frame_buffer(buffer).set_timestamp_us(2000000 + i * 33333).build());
+    assert(sink.count > 2 && sink.count <= 8);
+    video->RemoveSink(&sink);
+    video->RemoveSink(&preview);
+    video->RemoveSink(&counter);
+    std::puts("Source downscale, recovery and FPS restriction checks passed");
+}
+
 int main(int argc, char** argv) {
+    CheckSourceAdaptation();
     const bool requireSoftware = argc > 1 && std::strcmp(argv[1], "--require-software") == 0;
     const bool requireHardware = argc > 1 && std::strcmp(argv[1], "--require-hardware") == 0;
     auto env = CreateEnvironment();

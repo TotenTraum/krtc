@@ -554,6 +554,15 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     /** Whether the log goes to the call's server too (krtc-sfu-server `--client-logs`), not only to the local file. */
     val logUpload: StateFlow<Boolean> = logUploadFlow.asStateFlow()
 
+    /** Persisted minimum level for the local log and server uploads. */
+    val logLevel: StateFlow<ClientLog.Level> = ClientLog.minimumLevel
+
+    fun setLogLevel(level: ClientLog.Level) {
+        store["log.level"] = level.name
+        ClientLog.setMinimumLevel(level)
+        ClientLog.i("log", "minimum level=$level")
+    }
+
     @Traced
     fun setLogUpload(enabled: Boolean) {
         logUploadFlow.value = enabled
@@ -579,6 +588,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         val last = HashMap<String, Long>()
         while (true) {
             kotlinx.coroutines.delay(FRAME_LOG_MILLIS.milliseconds)
+            if (!ClientLog.isEnabled(ClientLog.Level.DEBUG)) continue
             val parts = ArrayList<String>()
             for (p in participantsFlow.value) {
                 for ((kind, track) in listOf("camera" to p.video.value, "screen" to p.screen.value)) {
@@ -591,7 +601,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             }
             connectionFlow.value?.let { parts += "link ${it.quality} rtt=${it.rttMillis} loss=${it.lossPercent.toInt()}%" }
             if (inputFlowSettings.value.mode != InputMode.OPEN || !transmittingFlow.value) parts += "mic transmitting=${transmittingFlow.value} level=${inputLevelFlow.value}"
-            if (parts.isNotEmpty()) log("frames: " + parts.joinToString(", "))
+            if (parts.isNotEmpty()) ClientLog.d("call") { "frames: " + parts.joinToString(", ") }
         }
     }
 
@@ -715,11 +725,13 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
     private val screenDiagnostics = ScreenDiagnostics { id, report ->
         val phase = report["completion"].toString()
         ClientLog.w("screen-report", "id=$id phase=$phase reason=${report["reason"]} stream=${report["stream"]}")
-        val text = report.toString()
-        val chunks = text.chunked(6000)
-        chunks.forEachIndexed { i, chunk -> ClientLog.w("screen-report", "id=$id phase=$phase part=${i + 1}/${chunks.size} json=$chunk") }
+        // Full payloads are opt-in. Keep the ordinary journal compact, including during repeated incidents.
+        val detailed = if (ClientLog.isEnabled(ClientLog.Level.DEBUG)) report.toString().also { text ->
+            val chunks = text.chunked(6000)
+            chunks.forEachIndexed { i, chunk -> ClientLog.d("screen-report", "id=$id phase=$phase part=${i + 1}/${chunks.size} json=$chunk") }
+        } else null
         teardownScope.launch {
-            val path = saveDiagnosticReport(id, text)
+            val path = saveDiagnosticReport(id, detailed ?: report.toString())
             ClientLog.i("screen-report", "id=$id saved=${path ?: "log_only_or_save_failed"}")
         }
     }
@@ -750,11 +762,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                     val opened = runCatching { platform.openScreen(f, choice, withAudio, fps, height * 16 / 9, height) }.onFailure {
                         if (it is kotlinx.coroutines.CancellationException) throw it
                         screenDiagnostics.event("capture_exception", mapOf("stream" to diagnosticKey, "error" to it.toString()))
-                        log("screen capture failed: request=$request ${it.stackTraceToString()}")
+                        ClientLog.e("call", "screen capture failed: request=$request ${it.stackTraceToString()}")
                     }.getOrNull()
                     if (opened == null) {
                         screenDiagnostics.failure(diagnosticKey, "capture_open_failed")
-                        log("screen capture unavailable: request=$request source=${choice.label}")
+                        ClientLog.w("call", "screen capture unavailable: request=$request source=${choice.label}")
                         noticeFlow.value = "Не удалось начать показ экрана: нет разрешения или источник недоступен"
                         return@launch
                     }
@@ -780,7 +792,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                     runCatching { withContext(native) { c.setScreen(video, audio, parameters) } }.onFailure {
                         teardown { video.release(); audio?.release(); opened.close() }
                         screenDiagnostics.failure(diagnosticKey, "track_attach_failed", it.toString())
-                        log("screen attach failed: request=$request ${it.stackTraceToString()}")
+                        ClientLog.e("call", "screen attach failed: request=$request ${it.stackTraceToString()}")
                         noticeFlow.value = "Не удалось начать показ экрана: ${it.message}"
                         return@launch
                     }
@@ -797,7 +809,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 throw t
             } catch (t: Throwable) {
                 screenDiagnostics.failure(diagnosticKey, "screen_start_exception", t.toString())
-                log("screen start exception: request=$request ${t.stackTraceToString()}")
+                ClientLog.e("call", "screen start exception: request=$request ${t.stackTraceToString()}")
                 noticeFlow.value = "Не удалось начать показ экрана: ${t.message}"
             }
         }
@@ -823,7 +835,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             screenMutex.withLock {
                 if (client !== c) return@launch
                 runCatching { withContext(native) { c?.setScreen(null) } }.onFailure {
-                    log("screen detach failed: ${it.stackTraceToString()}")
+                    ClientLog.w("call", "screen detach failed: ${it.stackTraceToString()}")
                 }
                 releaseScreen()
                 log("screen stopped: request=$request")
@@ -933,11 +945,14 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
             if (gapMs > STATS_INTERVAL_MILLIS * 2) screenDiagnostics.event("sampling_delay_or_sleep", mapOf("gapMs" to gapMs.toString()))
             screenDiagnostics.tick()
             val pc = c.peerConnection ?: continue
-            val report = runCatching { pc.getStats() }.onFailure { log("stats failed: ${it.message}"); screenDiagnostics.event("stats_failed", mapOf("error" to it.toString())) }.getOrNull() ?: continue
+            val report = runCatching { pc.getStats() }.onFailure { ClientLog.w("call", "stats failed: ${it.message}"); screenDiagnostics.event("stats_failed", mapOf("error" to it.toString())) }.getOrNull() ?: continue
             report.values.filter { it.type == "krtc-encoder-diagnostic" }.forEach {
                 if (nativeDiagnosticIds.add(it.id)) {
-                    log("native encoder: ${it.members["message"]}")
-                    screenDiagnostics.event("native_encoder", mapOf("message" to it.members["message"].toString()))
+                    val message = it.members["message"].toString()
+                    val level = if ("failed" in message || "rejected" in message || "fallback=software" in message || "capture slow" in message)
+                        ClientLog.Level.WARN else ClientLog.Level.INFO
+                    ClientLog.log(level, "call", "native encoder: $message")
+                    screenDiagnostics.event("native_encoder", mapOf("message" to message))
                 }
             }
             codecs.sample(report, pc.remoteDescription?.sdp, pc.localDescription?.sdp).forEach {
@@ -1004,7 +1019,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 )
                 sentBytes = bytes
                 screenSendFlow.value = info
-                log("screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} codec=${CodecDiagnostics.selected(report, out)} encoder=${info.encoder} ${info.bitrateKbps}kbps")
+                ClientLog.d("call") { "screen out: ${info.width}x${info.height} ${info.fps}fps capture=${info.captureFps}fps limit=${info.limitation} codec=${CodecDiagnostics.selected(report, out)} encoder=${info.encoder} ${info.bitrateKbps}kbps" }
                 val old = previousScreen?.takeIf { it.id == out.id }
                 fun delta(key: String): Double? = out.members[key].num()?.let { value -> old?.members?.get(key).num()?.let { value - it } }?.takeIf { it >= 0 }
                 val encoded = delta("framesEncoded")
@@ -1014,7 +1029,7 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 val feedback = (out.members["remoteId"] as? String)?.let { report[it] }
                 val local = (pair?.members?.get("localCandidateId") as? String)?.let { report[it] }
                 val remote = (pair?.members?.get("remoteCandidateId") as? String)?.let { report[it] }
-                log("screen diagnostics: targetBps=${out.members["targetBitrate"]} availableBps=${pair?.members?.get("availableOutgoingBitrate")} encodeMs=$encodeMs encodedDelta=$encoded sentDelta=${delta("framesSent")} sourceFrames=${source?.members?.get("frames")} remoteLost=${feedback?.members?.get("packetsLost")} remoteFractionLost=${feedback?.members?.get("fractionLost")} nackDelta=${delta("nackCount")} pliDelta=${delta("pliCount")} retransmitBytesDelta=${delta("retransmittedBytesSent")} sendDelayDelta=${delta("totalPacketSendDelay")} limitationDurations=${out.members["qualityLimitationDurations"]} resolutionChanges=${out.members["qualityLimitationResolutionChanges"]} transport=${local?.members?.get("protocol")} localType=${local?.members?.get("candidateType")} remoteType=${remote?.members?.get("candidateType")} rtt=${pair?.members?.get("currentRoundTripTime")}")
+                ClientLog.d("call") { "screen diagnostics: targetBps=${out.members["targetBitrate"]} availableBps=${pair?.members?.get("availableOutgoingBitrate")} encodeMs=$encodeMs encodedDelta=$encoded sentDelta=${delta("framesSent")} sourceFrames=${source?.members?.get("frames")} remoteLost=${feedback?.members?.get("packetsLost")} remoteFractionLost=${feedback?.members?.get("fractionLost")} nackDelta=${delta("nackCount")} pliDelta=${delta("pliCount")} retransmitBytesDelta=${delta("retransmittedBytesSent")} sendDelayDelta=${delta("totalPacketSendDelay")} limitationDurations=${out.members["qualityLimitationDurations"]} resolutionChanges=${out.members["qualityLimitationResolutionChanges"]} transport=${local?.members?.get("protocol")} localType=${local?.members?.get("candidateType")} remoteType=${remote?.members?.get("candidateType")} rtt=${pair?.members?.get("currentRoundTripTime")}" }
                 previousScreen = out
             }
             // Screen shares coming in: what arrives, the decoder, frames dropped before showing.
@@ -1025,11 +1040,11 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
                 val drops = s.members["framesDropped"].num()?.toLong() ?: 0L
                 val newDrops = drops - (dropped[s.id] ?: 0L)
                 dropped[s.id] = drops
-                log(
+                ClientLog.d("call") {
                     "screen in ${c.participantOfMid(mid)}: ${s.members["frameWidth"].num()?.toInt()}x${s.members["frameHeight"].num()?.toInt()} " +
                         "${s.members["framesPerSecond"].num()?.roundToInt()}fps codec=${CodecDiagnostics.selected(report, s)} decoder=${s.members["decoderImplementation"]} dropped=+$newDrops " +
-                        "freezes=${s.members["freezeCount"].num()?.toInt()} lost=${s.members["packetsLost"].num()?.toInt()}",
-                )
+                        "freezes=${s.members["freezeCount"].num()?.toInt()} lost=${s.members["packetsLost"].num()?.toInt()}"
+                }
             }
             val rtt = report.values.firstOrNull { it.type == "candidate-pair" && it.members["nominated"] == true && it.members["state"] == "succeeded" }
                 ?.members?.get("currentRoundTripTime")?.let { (it as? Number)?.toDouble() }?.let { (it * 1000).toInt() }
@@ -1165,6 +1180,8 @@ class MeetSession(uiScope: CoroutineScope, private val platform: MediaPlatform =
         )
         bool("cues")?.let { cuesFlow.value = it }
         bool("log.upload")?.let { logUploadFlow.value = it }
+        val savedLogLevel = store["log.level"]?.let { saved -> ClientLog.Level.entries.firstOrNull { it.name == saved } }
+        ClientLog.setMinimumLevel(savedLogLevel ?: ClientLog.Level.INFO)
         bool("updates.check")?.let { updateCheckFlow.value = it }
         int("screen.fps")?.takeIf { it in SCREEN_FPS_CHOICES }?.let { screenFpsFlow.value = it }
         int("screen.height")?.takeIf { it in SCREEN_HEIGHT_CHOICES }?.let { screenHeightFlow.value = it }

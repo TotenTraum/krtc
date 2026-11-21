@@ -636,7 +636,7 @@ int ScreenThumbnail(int64_t id, bool window, int maxWidth, int maxHeight, uint32
     return -2;
 }
 
-std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source) {
+std::function<void()> StartScreen(int64_t id, bool window, int fps, int maxWidth, int maxHeight, PushVideoSource *source, bool) {
     if (!ScreenAuthorized()) return nullptr;
     // ScreenCaptureKit: scaled on the GPU, any frame rate the display gives; windows otherwise come through
     // CGWindowListCreateImage, a few frames a second for a large window.
@@ -675,7 +675,7 @@ std::vector<ScreenSource> ScreenSources() {
     return {{0, false, "This app"}};
 }
 
-std::function<void()> StartScreen(int64_t, bool, int fps, int, int, PushVideoSource *source) {
+std::function<void()> StartScreen(int64_t, bool, int fps, int, int, PushVideoSource *source, bool) {
     RPScreenRecorder *recorder = RPScreenRecorder.sharedRecorder;
     if (!recorder.available) return nullptr;
     webrtc::scoped_refptr<PushVideoSource> target(source);
